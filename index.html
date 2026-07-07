@@ -6286,6 +6286,22 @@ updateBadges();
 updateReminderBtnLabel();
 if (remindersEnabled) checkTaskReminders();
 
+(async function initLeadsLoad() {
+  try {
+    let session = window.__currentSession;
+    if (!session) {
+      const { data } = await supabaseClient.auth.getSession();
+      session = data.session;
+      window.__currentSession = session;
+    }
+    if (session) {
+      await loadContactsFromSupabase();
+    }
+  } catch (err) {
+    console.error('Could not initialize leads:', err);
+  }
+})();
+
 // ===== ACCOUNT: user menu, logout, delete account =====
 (async function loadUserMenuInfo() {
   try {

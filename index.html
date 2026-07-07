@@ -697,6 +697,9 @@
     }
     window.__currentSession = session;
     document.documentElement.style.visibility = 'visible';
+    if (typeof loadContactsFromSupabase === 'function') {
+      loadContactsFromSupabase();
+    }
   })();
 </script>
 
@@ -2291,25 +2294,25 @@ Leadnovaai</textarea>
     </div>
 
     <div style="font-size:13.5px;line-height:1.7;color:var(--text)">
-      <p style="margin-bottom:10px">This guide lets you send up to <strong>500 free emails per day</strong> from your own Gmail account — directly from NovaAICRM, with no paid tool required. Setup time: 10-15 minutes (one-time only).</p>
+      <p style="margin-bottom:10px">Is guide se aap apne Gmail account se <strong>free mein roazana 500 emails tak</strong> bhej sakte hain — seedha NovaAICRM se, bina kisi paid tool ke. Waqt lagega: 10-15 minutes (sirf ek dafa karna hai).</p>
 
-      <h4 style="margin:16px 0 6px">Step 1: Create a Google Sheet</h4>
+      <h4 style="margin:16px 0 6px">Step 1: Google Sheet Banao</h4>
       <p>
-        Go to <a href="https://sheets.google.com" target="_blank">sheets.google.com</a> and create a <strong>Blank Spreadsheet</strong>, name it <code>NovaAICRM Campaigns</code>.
-        In the first row, add these column headers (A through G): <code>Email, Subject, Body, Status, SentAt, OpenedAt, RowID</code>.
-        Copy your <strong>Spreadsheet ID</strong> from the URL (the part between <code>/d/</code> and <code>/edit</code>).
+        <a href="https://sheets.google.com" target="_blank">sheets.google.com</a> par jayein aur <strong>Blank Spreadsheet</strong> banayein, naam rakhein <code>NovaAICRM Campaigns</code>.
+        Pehli row mein ye headers likhein (A se G tak): <code>Email, Subject, Body, Status, SentAt, OpenedAt, RowID</code>.
+        URL se apni <strong>Spreadsheet ID</strong> copy kar lein (<code>/d/</code> aur <code>/edit</code> ke darmiyan wala hissa).
       </p>
 
-      <h4 style="margin:16px 0 6px">Step 2: Open the Apps Script Editor</h4>
-      <p>Inside the Google Sheet: <strong>Extensions → Apps Script</strong>. Delete any default code shown.</p>
+      <h4 style="margin:16px 0 6px">Step 2: Apps Script Editor Kholein</h4>
+      <p>Google Sheet ke andar: <strong>Extensions → Apps Script</strong>. Default code delete kar dein.</p>
 
-      <h4 style="margin:16px 0 6px">Step 3: Paste This Code</h4>
+      <h4 style="margin:16px 0 6px">Step 3: Ye Code Paste Karein</h4>
       <div style="position:relative;margin-bottom:10px">
         <button class="btn btn-outline btn-sm" style="position:absolute;top:8px;right:8px;z-index:2" onclick="copyScriptCode()">📋 Copy Code</button>
         <pre id="scriptGuideCode" style="background:#0F172A;color:#E2E8F0;padding:16px;border-radius:8px;overflow-x:auto;font-size:11.5px;line-height:1.6;white-space:pre;max-height:340px;overflow-y:auto;">// ===== NovaAICRM Email Campaign Script =====
 
-// STEP A: Paste your Spreadsheet ID here
-const SHEET_ID = 'PASTE_YOUR_SPREADSHEET_ID_HERE';
+// STEP A: Yahan apni Spreadsheet ID paste karein
+const SHEET_ID = 'YAHAN_APNI_SPREADSHEET_ID_PASTE_KAREIN';
 const SHEET_NAME = 'Sheet1';
 
 function saveDeploymentUrl() {
@@ -2397,30 +2400,30 @@ function createTimeTrigger() {
   Logger.log('Trigger created successfully!');
 }</pre>
       </div>
-      <p style="font-size:12px;color:var(--text-light);margin-bottom:14px">Don't forget to replace <code>PASTE_YOUR_SPREADSHEET_ID_HERE</code> in the code with your actual Spreadsheet ID from Step 1.</p>
+      <p style="font-size:12px;color:var(--text-light);margin-bottom:14px">Code mein <code>YAHAN_APNI_SPREADSHEET_ID_PASTE_KAREIN</code> ki jagah apni asal Spreadsheet ID (Step 1 se) paste karna na bhoolein.</p>
 
-      <h4 style="margin:16px 0 6px">Step 4: Deploy as a Web App</h4>
+      <h4 style="margin:16px 0 6px">Step 4: Deploy Karein (Web App)</h4>
       <p>
-        <strong>Deploy → New deployment</strong> → click the gear icon (⚙️) → select <strong>Web app</strong>.<br>
+        <strong>Deploy → New deployment</strong> → gear icon (⚙️) → <strong>Web app</strong> select karein.<br>
         Execute as: <strong>Me</strong> &nbsp;|&nbsp; Who has access: <strong>Anyone</strong><br>
-        Click <strong>Deploy</strong>, authorize access (click "Advanced" → "Go to project (unsafe)" — this is normal since it's your own script), then copy the resulting <strong>Web app URL</strong>.
+        <strong>Deploy</strong> dabayein, permission allow karein ("Advanced" → "Go to project (unsafe)" pe click karke), aur mila hua <strong>Web app URL</strong> copy kar lein.
       </p>
 
-      <h4 style="margin:16px 0 6px">Step 5 &amp; 6: Save the URL and Start the Trigger</h4>
+      <h4 style="margin:16px 0 6px">Step 5 &amp; 6: URL Save Karein aur Trigger Chalayein</h4>
       <p>
-        In the function dropdown, select <code>saveDeploymentUrl</code> and click <strong>Run ▶️</strong>.<br>
-        Then select <code>createTimeTrigger</code> and click <strong>Run ▶️</strong> again — the script will now automatically check for pending emails and send them every 10 minutes.
+        Function dropdown se <code>saveDeploymentUrl</code> select karke <strong>Run ▶️</strong> karein.<br>
+        Phir <code>createTimeTrigger</code> select karke dobara <strong>Run ▶️</strong> karein — ab script har 10 minute mein khud pending emails check kar ke bhejega.
       </p>
 
-      <h4 style="margin:16px 0 6px">Step 7: Connect It to the CRM</h4>
-      <p>Paste your <strong>Web App URL</strong> into the "Sender Setup" section above and click Save Settings. That's it — you can now send campaigns from here.</p>
+      <h4 style="margin:16px 0 6px">Step 7: CRM Mein Connect Karein</h4>
+      <p>Upar "Sender Setup" mein apna <strong>Web App URL</strong> paste karein aur Save Settings dabayein. Bas, ab yahan se campaigns bhej sakte hain.</p>
 
       <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:10px">
         <strong style="font-size:12.5px">⚠️ Important:</strong>
         <ul style="margin:8px 0 0 18px;font-size:12.5px;color:var(--text-light);line-height:1.6">
           <li>Free Gmail limit: 500 emails/day.</li>
-          <li>This script only works through your own Gmail account — it never asks for anyone else's email or password.</li>
-          <li>For a higher limit, use a Google Workspace account (1,500/day).</li>
+          <li>Ye script sirf aapke apne Gmail account se kaam karta hai — kisi ka bhi email/password nahi maanga jata.</li>
+          <li>Zyada limit ke liye Google Workspace account use karein (1500/day).</li>
         </ul>
       </div>
     </div>
@@ -2490,7 +2493,7 @@ function createTimeTrigger() {
 
 <script>
 // DATA
-let contacts = JSON.parse(localStorage.getItem('crm_contacts') || '[]');
+let contacts = [];
 let companies = JSON.parse(localStorage.getItem('crm_companies') || '[]');
 let deals = JSON.parse(localStorage.getItem('crm_deals') || '[]');
 let tasks = JSON.parse(localStorage.getItem('crm_tasks') || '[]');
@@ -2676,7 +2679,87 @@ function populateOwnerDropdown(selected) {
   sel.value = selected && names.includes(selected) ? selected : 'Nadir Hussain';
 }
 
-function saveContact() {
+function mapLeadFromDb(row) {
+  return {
+    id: row.id,
+    fname: row.fname || '',
+    lname: row.lname || '',
+    name: (row.fname || '') + (row.lname ? ' ' + row.lname : ''),
+    email: row.email || '',
+    phone: row.phone || '',
+    company: row.company || '',
+    companySize: row.company_size || '',
+    country: row.country || '',
+    title: row.title || '',
+    status: row.status || 'New',
+    source: row.source || '',
+    icp: row.icp || '',
+    leadScore: row.lead_score || '',
+    owner: row.owner || '',
+    category: row.category || '',
+    website: row.website || '',
+    linkedin: row.linkedin || '',
+    painPoint: row.pain_point || '',
+    lastContacted: row.last_contacted || '',
+    nextFollowup: row.next_followup || '',
+    decisionMaker: row.decision_maker || '',
+    budget: row.budget || '',
+    priority: row.priority || '',
+    notes: row.notes || '',
+    date: row.created_at ? new Date(row.created_at).toLocaleDateString() : ''
+  };
+}
+
+function mapLeadToDb(data, userId) {
+  return {
+    fname: data.fname || null,
+    lname: data.lname || null,
+    email: data.email || null,
+    phone: data.phone || null,
+    company: data.company || null,
+    company_size: data.companySize || null,
+    country: data.country || null,
+    title: data.title || null,
+    status: data.status || null,
+    source: data.source || null,
+    icp: data.icp || null,
+    lead_score: data.leadScore || null,
+    owner: data.owner || null,
+    category: data.category || null,
+    website: data.website || null,
+    linkedin: data.linkedin || null,
+    pain_point: data.painPoint || null,
+    last_contacted: data.lastContacted || null,
+    next_followup: data.nextFollowup || null,
+    decision_maker: data.decisionMaker || null,
+    budget: data.budget || null,
+    priority: data.priority || null,
+    notes: data.notes || null,
+    user_id: userId
+  };
+}
+
+async function loadContactsFromSupabase() {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const userId = session.user.id;
+    const { data, error } = await supabaseClient
+      .from('leads')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    if (error) { console.error('Could not load leads:', error); return; }
+    contacts = (data || []).map(mapLeadFromDb);
+    renderContacts();
+    renderDashboard();
+    updateBadges();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function saveContact() {
   const fn = document.getElementById('c-fname').value.trim();
   if (!fn) { alert('First name required!'); return; }
   const editId = document.getElementById('c-edit-id').value;
@@ -2684,7 +2767,6 @@ function saveContact() {
   const data = {
     fname: fn,
     lname: lnameVal,
-    name: fn + (lnameVal ? ' ' + lnameVal : ''),
     email: document.getElementById('c-email').value.trim(),
     phone: document.getElementById('c-phone').value.trim(),
     company: document.getElementById('c-company').value.trim(),
@@ -2707,14 +2789,28 @@ function saveContact() {
     priority: document.getElementById('c-priority').value,
     notes: document.getElementById('c-notes').value.trim()
   };
-  if (editId) {
-    const c = contacts.find(c => c.id == editId);
-    if (c) Object.assign(c, data);
-  } else {
-    contacts.push(Object.assign({ id: Date.now(), date: new Date().toLocaleDateString() }, data));
+
+  try {
+    const session = window.__currentSession;
+    if (!session) { alert('Session expired. Please log in again.'); return; }
+    const userId = session.user.id;
+    const dbRow = mapLeadToDb(data, userId);
+
+    if (editId) {
+      const { error } = await supabaseClient.from('leads').update(dbRow).eq('id', editId);
+      if (error) { alert('Could not update lead: ' + error.message); return; }
+    } else {
+      const { error } = await supabaseClient.from('leads').insert(dbRow);
+      if (error) { alert('Could not save lead: ' + error.message); return; }
+    }
+
+    closeModal('contactModal');
+    clearContactForm();
+    await loadContactsFromSupabase();
+  } catch (err) {
+    alert('Something went wrong while saving the lead.');
+    console.error(err);
   }
-  save(); closeModal('contactModal'); clearContactForm();
-  renderContacts(); renderDashboard(); updateBadges();
 }
 
 function clearContactForm() {
@@ -3385,7 +3481,17 @@ function importContactsCSV(event) {
 }
 
 function filterContacts() { renderContacts(); }
-function deleteContact(id) { if(confirm('Delete this contact?')) { contacts = contacts.filter(c=>c.id!==id); save(); renderContacts(); renderDashboard(); updateBadges(); } }
+async function deleteContact(id) {
+  if (!confirm('Delete this contact?')) return;
+  try {
+    const { error } = await supabaseClient.from('leads').delete().eq('id', id);
+    if (error) { alert('Could not delete lead: ' + error.message); return; }
+    await loadContactsFromSupabase();
+  } catch (err) {
+    alert('Something went wrong while deleting the lead.');
+    console.error(err);
+  }
+}
 
 // COMPANIES
 function getOpportunityScore(c) {

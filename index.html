@@ -3042,16 +3042,25 @@ function renderRightCol(c) {
 }
 
 function renderWidgetCompany(c, co) {
+  const linkableCompanies = companies.filter(co2 => !co || co2.id !== co.id);
+  const picker = linkableCompanies.length
+    ? `<div style="margin-top:10px;display:flex;gap:6px">
+         <select id="link-company-select-${c.id}" class="form-control" style="flex:1;font-size:12px">
+           ${linkableCompanies.map(co2 => `<option value="${co2.id}">${co2.name}</option>`).join('')}
+         </select>
+         <button class="btn btn-outline btn-sm" onclick="linkExistingCompany(${c.id}, document.getElementById('link-company-select-${c.id}').value)">🔗 Link</button>
+       </div>` : '';
   if (co) {
     return `
       <div style="font-weight:700;font-size:13px">${co.name}</div>
       <div style="font-size:12px;color:var(--text-light);margin-top:3px">${co.industry || ''}${co.size ? ' · ' + co.size + ' employees' : ''}</div>
       <div style="font-size:12px;color:var(--text-light)">${co.website || ''}${co.location ? ' · ' + co.location : ''}</div>
-      <button class="btn btn-outline btn-sm" style="margin-top:8px;width:100%" onclick="closeModal('contactProfileModal');editCompany(${co.id})">✏️ Edit Company</button>`;
+      <button class="btn btn-outline btn-sm" style="margin-top:8px;width:100%" onclick="closeModal('contactProfileModal');editCompany(${co.id})">✏️ Edit Company</button>
+      ${picker}`;
   } else if (c.company) {
-    return `<div style="font-size:12px;color:var(--text-light)">"${c.company}" is not yet added as a Company record.</div>`;
+    return `<div style="font-size:12px;color:var(--text-light)">"${c.company}" is not yet added as a Company record.</div>${picker}`;
   }
-  return `<div style="font-size:12px;color:var(--text-light)">No company associated with this record.</div>`;
+  return `<div style="font-size:12px;color:var(--text-light)">No company associated with this record.</div>${picker}`;
 }
 
 function renderProfileActivitiesTab(c) {

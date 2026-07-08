@@ -2494,7 +2494,7 @@ function createTimeTrigger() {
 <script>
 // DATA
 let contacts = [];
-let companies = JSON.parse(localStorage.getItem('crm_companies') || '[]');
+let companies = [];
 let deals = JSON.parse(localStorage.getItem('crm_deals') || '[]');
 let tasks = JSON.parse(localStorage.getItem('crm_tasks') || '[]');
 let tickets = JSON.parse(localStorage.getItem('crm_tickets') || '[]');
@@ -3503,7 +3503,45 @@ function getOpportunityScore(c) {
   return { label: 'Warm', icon: '🟡', cls: 'badge-medium' };
 }
 
-function saveCompany() {
+function mapCompanyFromDb(row) {
+  return {
+    id: row.id,
+    name: row.name || '',
+    industry: row.industry || '',
+    size: row.size || '',
+    website: row.website || '',
+    location: row.location || '',
+    country: row.country || '',
+    employees: row.employees || '',
+    revenue: row.revenue || '',
+    crm: row.crm || '',
+    techstack: row.techstack || '',
+    automation: row.automation || '',
+    category: row.category || '',
+    notes: row.notes || ''
+  };
+}
+
+async function loadCompaniesFromSupabase() {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const userId = session.user.id;
+    const { data, error } = await supabaseClient
+      .from('companies')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    if (error) { console.error('Could not load companies:', error); return; }
+    companies = (data || []).map(mapCompanyFromDb);
+    renderCompanies();
+    updateBadges();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function saveCompany() {
   const name = document.getElementById('co-name').value.trim();
   if (!name) { alert('Company name required!'); return; }
   const editId = document.getElementById('co-edit-id').value;
@@ -3522,15 +3560,28 @@ function saveCompany() {
     category: document.getElementById('co-category').value,
     notes: document.getElementById('co-notes').value.trim()
   };
-  if (editId) {
-    const c = companies.find(c => c.id == editId);
-    if (c) Object.assign(c, data);
-  } else {
-    companies.push(Object.assign({ id: Date.now() }, data));
+
+  try {
+    const session = window.__currentSession;
+    if (!session) { alert('Session expired. Please log in again.'); return; }
+    const userId = session.user.id;
+    const dbRow = Object.assign({}, data, { user_id: userId });
+
+    if (editId) {
+      const { error } = await supabaseClient.from('companies').update(dbRow).eq('id', editId);
+      if (error) { alert('Could not update company: ' + error.message); return; }
+    } else {
+      const { error } = await supabaseClient.from('companies').insert(dbRow);
+      if (error) { alert('Could not save company: ' + error.message); return; }
+    }
+
+    closeModal('companyModal');
+    clearCompanyForm();
+    await loadCompaniesFromSupabase();
+  } catch (err) {
+    alert('Something went wrong while saving the company.');
+    console.error(err);
   }
-  save(); closeModal('companyModal');
-  clearCompanyForm();
-  renderCompanies(); updateBadges();
 }
 
 function clearCompanyForm() {
@@ -3591,7 +3642,17 @@ function renderCompanies() {
   }).join('');
 }
 
-function deleteCompany(id) { if(confirm('Delete?')) { companies = companies.filter(c=>c.id!==id); save(); renderCompanies(); updateBadges(); } }
+async function deleteCompany(id) {
+  if (!confirm('Delete?')) return;
+  try {
+    const { error } = await supabaseClient.from('companies').delete().eq('id', id);
+    if (error) { alert('Could not delete company: ' + error.message); return; }
+    await loadCompaniesFromSupabase();
+  } catch (err) {
+    alert('Something went wrong while deleting the company.');
+    console.error(err);
+  }
+}
 
 // NOTES TIMELINE (for contacts & companies)
 let timelineCtx = { type: null, id: null };
@@ -6296,6 +6357,7 @@ if (remindersEnabled) checkTaskReminders();
     }
     if (session) {
       await loadContactsFromSupabase();
+      await loadCompaniesFromSupabase();
     }
   } catch (err) {
     console.error('Could not initialize leads:', err);

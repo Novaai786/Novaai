@@ -1658,7 +1658,7 @@ Leadnovaai</textarea>
     <div class="form-group">
       <label class="form-label">Contact Owner</label>
       <select class="form-control" id="c-owner">
-        <option>Nadir Hussain</option>
+        <option>Me</option>
       </select>
     </div>
     <div class="form-group">
@@ -2674,9 +2674,10 @@ function badge(status) {
 // CONTACTS
 function populateOwnerDropdown(selected) {
   const sel = document.getElementById('c-owner');
-  const names = ['Nadir Hussain', ...team.map(m => m.name).filter(n => n && n !== 'Nadir Hussain')];
+  const myName = window.__currentUserName || 'Me';
+  const names = [myName, ...team.map(m => m.name).filter(n => n && n !== myName)];
   sel.innerHTML = names.map(n => `<option>${n}</option>`).join('');
-  sel.value = selected && names.includes(selected) ? selected : 'Nadir Hussain';
+  sel.value = selected && names.includes(selected) ? selected : myName;
 }
 
 function mapLeadFromDb(row) {
@@ -2975,7 +2976,7 @@ function renderLeftCol(c) {
 
     <div class="cp-keyinfo">
       <div class="cp-keyinfo-title">Key Information</div>
-      <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Contact owner</div><div class="cp-keyinfo-val">${c.owner || 'Nadir Hussain'}</div></div>
+      <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Contact owner</div><div class="cp-keyinfo-val">${c.owner || window.__currentUserName || 'Unassigned'}</div></div>
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Service Category</div><div class="cp-keyinfo-val">${(categories.find(cat => cat.id == c.category) || {}).name || 'Unassigned'}</div></div>
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Phone Number</div><div class="cp-keyinfo-val">${c.phone || '--'}</div></div>
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Country</div><div class="cp-keyinfo-val">${c.country || '--'}</div></div>
@@ -3152,6 +3153,14 @@ function renderProfileDashboard(c) {
 
 function renderProfileOverview(c) {
   const co = companies.find(co => (co.name || '').toLowerCase() === (c.company || '').toLowerCase() && c.company);
+  const linkableCompanies = companies.filter(co2 => !co || co2.id !== co.id);
+  const existingCompanyPicker = linkableCompanies.length
+    ? `<div style="margin-top:10px;display:flex;gap:6px">
+         <select id="link-company-select-${c.id}" class="form-control" style="flex:1">
+           ${linkableCompanies.map(co2 => `<option value="${co2.id}">${co2.name}</option>`).join('')}
+         </select>
+         <button class="btn btn-outline btn-sm" onclick="linkExistingCompany(${c.id}, document.getElementById('link-company-select-${c.id}').value)">🔗 Link Existing</button>
+       </div>` : '';
   let companyBlock;
   if (co) {
     companyBlock = `
@@ -3160,18 +3169,21 @@ function renderProfileOverview(c) {
         <div style="font-size:12px;color:var(--text-light);margin-top:4px">${co.industry || ''}${co.size ? ' · ' + co.size + ' employees' : ''}</div>
         <div style="font-size:12px;color:var(--text-light)">${co.website || ''}${co.location ? ' · ' + co.location : ''}</div>
         <button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="closeModal('contactProfileModal');editCompany(${co.id})">✏️ Edit Company</button>
-      </div>`;
+      </div>
+      ${existingCompanyPicker}`;
   } else if (c.company) {
     companyBlock = `
       <div style="border:1.5px dashed var(--border);border-radius:10px;padding:14px;text-align:center">
         <div style="font-size:13px;margin-bottom:8px">"${c.company}" is not yet added as a Company.</div>
         <button class="btn btn-primary btn-sm" onclick="quickAddCompanyFromContact(${c.id})">+ Add as Company</button>
+        ${existingCompanyPicker}
       </div>`;
   } else {
     companyBlock = `
       <div style="border:1.5px dashed var(--border);border-radius:10px;padding:14px;text-align:center">
         <div style="font-size:13px;margin-bottom:8px;color:var(--text-light)">No company set for this contact.</div>
         <button class="btn btn-outline btn-sm" onclick="quickAddCompanyFromContact(${c.id})">+ Create Company</button>
+        ${existingCompanyPicker}
       </div>`;
   }
   return `
@@ -3202,12 +3214,36 @@ function quickAddCompanyFromContact(contactId) {
   openModal('companyModal');
 }
 
+async function linkExistingCompany(contactId, companyId) {
+  const c = contacts.find(c => c.id === contactId);
+  const co = companies.find(co => String(co.id) === String(companyId));
+  if (!c || !co) return;
+  c.company = co.name;
+  try {
+    const { error } = await supabaseClient.from('leads').update({ company: co.name }).eq('id', contactId);
+    if (error) { alert('Could not link company: ' + error.message); return; }
+  } catch (err) {
+    console.error(err);
+  }
+  renderContactProfileBody();
+  renderContacts();
+}
+
 function renderProfileDeals(c) {
-  const list = c.company ? deals.filter(d => (d.company || '').toLowerCase() === c.company.toLowerCase()) : [];
+  const list = deals.filter(d => d.contactId === c.id || (c.company && (d.company || '').toLowerCase() === c.company.toLowerCase()));
+  const linkable = deals.filter(d => !list.some(x => x.id === d.id));
+  const linkPicker = linkable.length
+    ? `<div style="margin-bottom:10px;display:flex;gap:6px">
+         <select id="link-deal-select-${c.id}" class="form-control" style="flex:1">
+           ${linkable.map(d => `<option value="${d.id}">${d.name}</option>`).join('')}
+         </select>
+         <button class="btn btn-outline btn-sm" onclick="linkExistingDeal(${c.id}, document.getElementById('link-deal-select-${c.id}').value)">🔗 Link Existing</button>
+       </div>` : '';
   return `
     <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
       <button class="btn btn-primary btn-sm" onclick="quickAddDeal(${c.id})">+ Add Deal</button>
     </div>
+    ${linkPicker}
     ${list.length ? list.map(d => `
       <div style="border:1.5px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
         <div>
@@ -3216,6 +3252,17 @@ function renderProfileDeals(c) {
         </div>
         <button class="btn btn-outline btn-sm" onclick="closeModal('contactProfileModal');editDeal(${d.id})">View / Edit</button>
       </div>`).join('') : `<div style="text-align:center;color:var(--text-light);font-size:13px;padding:20px">No deals yet for this contact.</div>`}`;
+}
+
+function linkExistingDeal(contactId, dealId) {
+  const c = contacts.find(c => c.id === contactId);
+  const d = deals.find(d => String(d.id) === String(dealId));
+  if (!c || !d) return;
+  d.contactId = c.id;
+  if (c.company) d.company = c.company;
+  save();
+  renderContactProfileBody();
+  renderDeals();
 }
 
 function quickAddDeal(contactId) {
@@ -3229,11 +3276,20 @@ function quickAddDeal(contactId) {
 }
 
 function renderProfileTasks(c) {
-  const list = c.name ? tasks.filter(t => (t.contact || '').toLowerCase() === c.name.toLowerCase()) : [];
+  const list = tasks.filter(t => t.contactId === c.id || (c.name && (t.contact || '').toLowerCase() === c.name.toLowerCase()));
+  const linkable = tasks.filter(t => !list.some(x => x.id === t.id));
+  const linkPicker = linkable.length
+    ? `<div style="margin-bottom:10px;display:flex;gap:6px">
+         <select id="link-task-select-${c.id}" class="form-control" style="flex:1">
+           ${linkable.map(t => `<option value="${t.id}">${t.title}</option>`).join('')}
+         </select>
+         <button class="btn btn-outline btn-sm" onclick="linkExistingTask(${c.id}, document.getElementById('link-task-select-${c.id}').value)">🔗 Link Existing</button>
+       </div>` : '';
   return `
     <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
       <button class="btn btn-primary btn-sm" onclick="quickAddTask(${c.id})">+ Add Task</button>
     </div>
+    ${linkPicker}
     ${list.length ? list.map(t => `
       <div style="border:1.5px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
         <div>
@@ -3242,6 +3298,17 @@ function renderProfileTasks(c) {
         </div>
         <button class="btn btn-outline btn-sm" onclick="toggleTask(${t.id});renderContactProfileBody()">${t.done ? '↺ Undo' : '✓ Done'}</button>
       </div>`).join('') : `<div style="text-align:center;color:var(--text-light);font-size:13px;padding:20px">No tasks yet for this contact.</div>`}`;
+}
+
+function linkExistingTask(contactId, taskId) {
+  const c = contacts.find(c => c.id === contactId);
+  const t = tasks.find(t => String(t.id) === String(taskId));
+  if (!c || !t) return;
+  t.contactId = c.id;
+  t.contact = c.name;
+  save();
+  renderContactProfileBody();
+  renderTasks();
 }
 
 function quickAddTask(contactId) {
@@ -6380,6 +6447,8 @@ if (remindersEnabled) checkTaskReminders();
 
     document.getElementById('userMenuName').textContent =
       (profile && profile.full_name) ? profile.full_name : 'My Account';
+    window.__currentUserName = (profile && profile.full_name) ? profile.full_name : (user.email || 'Me');
+    if (typeof populateOwnerDropdown === 'function') populateOwnerDropdown();
   } catch (err) {
     console.error('Could not load user menu info:', err);
   }

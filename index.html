@@ -2685,7 +2685,7 @@ function showSection(id, el) {
   };
   document.getElementById('pageTitle').textContent = titles[id] || id;
   const btnLabels = {
-    dashboard:null, contacts:'+ Create Contact', companies:'+ Create Company', deals:'+ Create Deal',
+    dashboard:null, contacts:'+ Create Contact', companies:'+ Create Company', deals:null,
     categories:'+ Add Category', tasks:'+ Create Task', email:'+ Create Email Log', products:'+ Create Product',
     automation:null, reports:null, importexport:null, team:'+ Add Team Member'
   };
@@ -6802,6 +6802,90 @@ function showImportMsg(el, type, msg) {
   setTimeout(() => { el.style.display = 'none'; }, 5000);
 }
 
+// ===== CATEGORIES (PIPELINE STAGES) - SUPABASE =====
+async function loadCategoriesFromSupabase() {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+
+    const { data, error } = await supabaseClient
+      .from('categories')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+
+    window.serviceCategories = (data || []).map(cat => ({
+      id: cat.id,
+      name: cat.name,
+      stages: cat.stages || []
+    }));
+    
+    console.log('✅ Categories loaded from Supabase:', window.serviceCategories.length);
+  } catch (err) {
+    console.error('❌ Error loading categories:', err);
+  }
+}
+
+async function saveCategoryToSupabase(category) {
+  try {
+    const session = window.__currentSession;
+    if (!session) {
+      alert('Session not found!');
+      return;
+    }
+
+    const { data, error } = await supabaseClient
+      .from('categories')
+      .insert([{
+        name: category.name,
+        stages: category.stages || [],
+        user_id: session.user.id
+      }])
+      .select();
+
+    if (error) throw error;
+    console.log('✅ Category saved:', data[0]);
+    return data[0];
+  } catch (err) {
+    console.error('❌ Error saving category:', err);
+    alert('Error saving category: ' + err.message);
+  }
+}
+
+async function updateCategoryInSupabase(categoryId, updates) {
+  try {
+    const { data, error } = await supabaseClient
+      .from('categories')
+      .update(updates)
+      .eq('id', categoryId)
+      .select();
+
+    if (error) throw error;
+    console.log('✅ Category updated:', data[0]);
+    return data[0];
+  } catch (err) {
+    console.error('❌ Error updating category:', err);
+    alert('Error updating category: ' + err.message);
+  }
+}
+
+async function deleteCategoryFromSupabase(categoryId) {
+  try {
+    const { error } = await supabaseClient
+      .from('categories')
+      .delete()
+      .eq('id', categoryId);
+
+    if (error) throw error;
+    console.log('✅ Category deleted');
+  } catch (err) {
+    console.error('❌ Error deleting category:', err);
+    alert('Error deleting category: ' + err.message);
+  }
+}
+
 // INIT
 renderDashboard();
 populateCategoryDropdowns();
@@ -6819,10 +6903,16 @@ if (remindersEnabled) checkTaskReminders();
       window.__currentSession = session;
     }
     if (session) {
+      // 🆕 Load Categories FIRST (Deals depend karta hai!)
+      await loadCategoriesFromSupabase();
+      
+      // Load other data
       await loadContactsFromSupabase();
       await loadCompaniesFromSupabase();
       await loadDealsFromSupabase();
       await loadTasksFromSupabase();
+      
+      console.log('✅ All Supabase data loaded successfully!');
     }
   } catch (err) {
     console.error('Could not initialize leads:', err);

@@ -2546,8 +2546,8 @@ let contacts = [];
 let companies = [];
 let paymentMethods = JSON.parse(localStorage.getItem('crm_paymentMethods') || '[]');
 let invoices = JSON.parse(localStorage.getItem('crm_invoices') || '[]');
-let deals = JSON.parse(localStorage.getItem('crm_deals') || '[]');
-let tasks = JSON.parse(localStorage.getItem('crm_tasks') || '[]');
+let deals = [];
+let tasks = [];
 let tickets = JSON.parse(localStorage.getItem('crm_tickets') || '[]');
 let currentProfileContactId = null;
 let currentProfileTab = 'overview';
@@ -2628,18 +2628,29 @@ function addDays(dateStr, days) {
 }
 
 // Auto-create a follow-up task whenever a brand-new deal is added
-function autoCreateTaskForDeal(deal) {
+async function autoCreateTaskForDeal(deal) {
   const linkedContact = deal.company ? contacts.find(c => (c.company || '').toLowerCase() === deal.company.toLowerCase()) : null;
-  tasks.push({
-    id: Date.now() + 1,
+  const newTask = {
     title: `Follow up on deal: ${deal.name}`,
     date: addDays(null, 2),
     priority: 'High',
     contact: linkedContact ? linkedContact.name : '',
+    contactId: linkedContact ? linkedContact.id : null,
     notes: `Auto-created when deal "${deal.name}"${deal.company ? ' (' + deal.company + ')' : ''} was added to the pipeline.`,
     done: false,
     autoCreated: true
-  });
+  };
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const userId = session.user.id;
+    const dbRow = mapTaskToDb(newTask, userId);
+    const { error } = await supabaseClient.from('tasks').insert(dbRow);
+    if (error) console.error('Could not auto-create follow-up task:', error);
+    await loadTasksFromSupabase();
+  } catch (err) {
+    console.error(err);
+  }
 }
 
 function save() {
@@ -3320,15 +3331,20 @@ function renderProfileDeals(c) {
       </div>`).join('') : `<div style="text-align:center;color:var(--text-light);font-size:13px;padding:20px">No deals yet for this contact.</div>`}`;
 }
 
-function linkExistingDeal(contactId, dealId) {
+async function linkExistingDeal(contactId, dealId) {
   const c = contacts.find(c => c.id === contactId);
   const d = deals.find(d => String(d.id) === String(dealId));
   if (!c || !d) return;
   d.contactId = c.id;
   if (c.company) d.company = c.company;
-  save();
   renderContactProfileBody();
   renderDeals();
+  try {
+    const { error } = await supabaseClient.from('deals').update({ contactid: d.contactId, company: d.company }).eq('id', d.id);
+    if (error) console.error('Could not link deal:', error);
+  } catch (err) {
+    console.error(err);
+  }
 }
 
 function quickAddDeal(contactId) {
@@ -3366,15 +3382,20 @@ function renderProfileTasks(c) {
       </div>`).join('') : `<div style="text-align:center;color:var(--text-light);font-size:13px;padding:20px">No tasks yet for this contact.</div>`}`;
 }
 
-function linkExistingTask(contactId, taskId) {
+async function linkExistingTask(contactId, taskId) {
   const c = contacts.find(c => c.id === contactId);
   const t = tasks.find(t => String(t.id) === String(taskId));
   if (!c || !t) return;
   t.contactId = c.id;
   t.contact = c.name;
-  save();
   renderContactProfileBody();
   renderTasks();
+  try {
+    const { error } = await supabaseClient.from('tasks').update({ contactid: t.contactId, contact: t.contact }).eq('id', t.id);
+    if (error) console.error('Could not link task:', error);
+  } catch (err) {
+    console.error(err);
+  }
 }
 
 function quickAddTask(contactId) {
@@ -4155,7 +4176,63 @@ function populateDealStageOptions(selectedStage) {
   autoFillProbability();
 }
 
-function saveDeal() {
+function mapDealFromDb(row) {
+  return {
+    id: row.id,
+    name: row.name || '',
+    company: row.company || '',
+    value: row.value || '',
+    category: row.category || '',
+    owner: row.owner || '',
+    date: row.date || '',
+    probability: row.probability || '',
+    lostReason: row.lostreason || '',
+    notes: row.notes || '',
+    stage: row.stage || 'New Lead',
+    contactId: row.contactid || null,
+    pipelineHistory: row.pipelinehistory || []
+  };
+}
+
+function mapDealToDb(data, userId) {
+  return {
+    name: data.name || null,
+    company: data.company || null,
+    value: data.value || null,
+    category: data.category || null,
+    owner: data.owner || null,
+    date: data.date || null,
+    probability: data.probability || null,
+    lostreason: data.lostReason || null,
+    notes: data.notes || null,
+    stage: data.stage || null,
+    contactid: data.contactId || null,
+    pipelinehistory: data.pipelineHistory || [],
+    user_id: userId
+  };
+}
+
+async function loadDealsFromSupabase() {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const userId = session.user.id;
+    const { data, error } = await supabaseClient
+      .from('deals')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    if (error) { console.error('Could not load deals:', error); return; }
+    deals = (data || []).map(mapDealFromDb);
+    renderDeals();
+    renderDashboard();
+    updateBadges();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function saveDeal() {
   const name = document.getElementById('d-name').value.trim();
   if (!name) { alert('Deal name required!'); return; }
   const editId = document.getElementById('d-edit-id').value;
@@ -4171,21 +4248,39 @@ function saveDeal() {
     lostReason: document.getElementById('d-lostreason').value,
     notes: document.getElementById('d-notes').value.trim()
   };
-  if (editId) {
-    const d = deals.find(d => d.id == editId);
-    if (d) { Object.assign(d, data); recordStageChange(d, newStage); }
-  } else {
-    const newDeal = Object.assign({
-      id: Date.now(),
-      stage: newStage,
-      pipelineHistory: [{ stage: newStage, date: new Date().toISOString() }]
-    }, data);
-    deals.push(newDeal);
-    autoCreateTaskForDeal(newDeal);
-    showToast(`✅ Deal added — follow-up task auto-created for 2 days from now`);
+
+  try {
+    const session = window.__currentSession;
+    if (!session) { alert('Session expired. Please log in again.'); return; }
+    const userId = session.user.id;
+
+    if (editId) {
+      const d = deals.find(d => d.id == editId);
+      if (d) {
+        Object.assign(d, data);
+        recordStageChange(d, newStage);
+        const dbRow = mapDealToDb(d, userId);
+        const { error } = await supabaseClient.from('deals').update(dbRow).eq('id', editId);
+        if (error) { alert('Could not update deal: ' + error.message); return; }
+      }
+    } else {
+      const newDeal = Object.assign({
+        stage: newStage,
+        pipelineHistory: [{ stage: newStage, date: new Date().toISOString() }]
+      }, data);
+      const dbRow = mapDealToDb(newDeal, userId);
+      const { error } = await supabaseClient.from('deals').insert(dbRow);
+      if (error) { alert('Could not save deal: ' + error.message); return; }
+      await autoCreateTaskForDeal(newDeal);
+      showToast(`✅ Deal added — follow-up task auto-created for 2 days from now`);
+    }
+
+    closeModal('dealModal'); clearDealForm();
+    await loadDealsFromSupabase();
+  } catch (err) {
+    alert('Something went wrong while saving the deal.');
+    console.error(err);
   }
-  save(); closeModal('dealModal'); clearDealForm();
-  renderDeals(); renderDashboard(); renderTasks(); updateBadges();
 }
 
 function clearDealForm() {
@@ -4216,21 +4311,37 @@ function editDeal(id) {
   openModal('dealModal');
 }
 
-function deleteDeal(id) {
-  if (confirm('Delete this deal?')) { deals = deals.filter(d => d.id !== id); save(); renderDeals(); renderDashboard(); }
+async function deleteDeal(id) {
+  if (!confirm('Delete this deal?')) return;
+  try {
+    const { error } = await supabaseClient.from('deals').delete().eq('id', id);
+    if (error) { alert('Could not delete deal: ' + error.message); return; }
+    await loadDealsFromSupabase();
+  } catch (err) {
+    alert('Something went wrong while deleting the deal.');
+    console.error(err);
+  }
 }
 
-function moveDeal(id, newStage) {
+async function moveDeal(id, newStage) {
   const d = deals.find(d => d.id === id);
   if (!d) return;
   recordStageChange(d, newStage);
-  // auto-update probability to match new stage unless manually overridden differently before
   d.probability = getStageProbability(newStage, d.category);
   if (newStage === 'Lost' && !d.lostReason) {
     const reason = prompt('Why was this deal lost?\n(Too Expensive / No Need / Competitor / No Response / Bad Timing / Other)', 'Too Expensive');
     if (reason) d.lostReason = reason;
   }
-  save(); renderDeals(); renderDashboard();
+  renderDeals(); renderDashboard();
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const dbRow = mapDealToDb(d, session.user.id);
+    const { error } = await supabaseClient.from('deals').update(dbRow).eq('id', id);
+    if (error) console.error('Could not save stage change:', error);
+  } catch (err) {
+    console.error(err);
+  }
 }
 
 function parseValueRange(v) {
@@ -4517,28 +4628,104 @@ function kanbanDrop(e, stageName) {
 }
 
 // TASKS
-function saveTask() {
+function mapTaskFromDb(row) {
+  return {
+    id: row.id,
+    title: row.title || '',
+    date: row.date || '',
+    priority: row.priority || '',
+    contact: row.contact || '',
+    contactId: row.contactid || null,
+    notes: row.notes || '',
+    done: !!row.done,
+    autoCreated: !!row.autocreated
+  };
+}
+
+function mapTaskToDb(data, userId) {
+  return {
+    title: data.title || null,
+    date: data.date || null,
+    priority: data.priority || null,
+    contact: data.contact || null,
+    contactid: data.contactId || null,
+    notes: data.notes || null,
+    done: !!data.done,
+    autocreated: !!data.autoCreated,
+    user_id: userId
+  };
+}
+
+async function loadTasksFromSupabase() {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const userId = session.user.id;
+    const { data, error } = await supabaseClient
+      .from('tasks')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    if (error) { console.error('Could not load tasks:', error); return; }
+    tasks = (data || []).map(mapTaskFromDb);
+    renderTasks();
+    renderDashboard();
+    updateBadges();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function saveTask() {
   const title = document.getElementById('t-title').value.trim();
   if (!title) { alert('Task title required!'); return; }
-  tasks.push({
-    id: Date.now(), title,
+  const data = {
+    title,
     date: document.getElementById('t-date').value,
     priority: document.getElementById('t-priority').value,
     contact: document.getElementById('t-contact').value.trim(),
     notes: document.getElementById('t-notes').value.trim(),
     done: false
-  });
-  save(); closeModal('taskModal');
-  ['t-title','t-date','t-contact','t-notes'].forEach(id => document.getElementById(id).value = '');
+  };
+  try {
+    const session = window.__currentSession;
+    if (!session) { alert('Session expired. Please log in again.'); return; }
+    const dbRow = mapTaskToDb(data, session.user.id);
+    const { error } = await supabaseClient.from('tasks').insert(dbRow);
+    if (error) { alert('Could not save task: ' + error.message); return; }
+    closeModal('taskModal');
+    ['t-title','t-date','t-contact','t-notes'].forEach(id => document.getElementById(id).value = '');
+    await loadTasksFromSupabase();
+  } catch (err) {
+    alert('Something went wrong while saving the task.');
+    console.error(err);
+  }
+}
+
+async function toggleTask(id) {
+  const t = tasks.find(t => t.id === id);
+  if (!t) return;
+  t.done = !t.done;
   renderTasks(); renderDashboard(); updateBadges();
+  try {
+    const { error } = await supabaseClient.from('tasks').update({ done: t.done }).eq('id', id);
+    if (error) console.error('Could not update task:', error);
+  } catch (err) {
+    console.error(err);
+  }
 }
 
-function toggleTask(id) {
-  const t = tasks.find(t=>t.id===id);
-  if (t) { t.done = !t.done; save(); renderTasks(); renderDashboard(); updateBadges(); }
+async function deleteTask(id) {
+  if (!confirm('Delete?')) return;
+  try {
+    const { error } = await supabaseClient.from('tasks').delete().eq('id', id);
+    if (error) { alert('Could not delete task: ' + error.message); return; }
+    await loadTasksFromSupabase();
+  } catch (err) {
+    alert('Something went wrong while deleting the task.');
+    console.error(err);
+  }
 }
-
-function deleteTask(id) { if(confirm('Delete?')) { tasks = tasks.filter(t=>t.id!==id); save(); renderTasks(); renderDashboard(); updateBadges(); } }
 
 // ---- TASK ALERT SYSTEM ----
 function todayStr() {
@@ -6634,6 +6821,8 @@ if (remindersEnabled) checkTaskReminders();
     if (session) {
       await loadContactsFromSupabase();
       await loadCompaniesFromSupabase();
+      await loadDealsFromSupabase();
+      await loadTasksFromSupabase();
     }
   } catch (err) {
     console.error('Could not initialize leads:', err);

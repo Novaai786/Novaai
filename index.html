@@ -3871,7 +3871,7 @@ function importContactsCSV(event) {
   const file = event.target.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = function(e) {
+  reader.onload = async function(e) {
     try {
       const text = e.target.result;
       const lines = text.split(/\r?\n/).filter(l => l.trim().length);
@@ -3893,7 +3893,12 @@ function importContactsCSV(event) {
       const scoreIdx = idx(['lead score','leadscore']);
       const websiteIdx = idx(['company website','website']);
       const linkedinIdx = idx(['linkedin','linkedin url']);
-      let added = 0;
+
+      const session = window.__currentSession;
+      if (!session) { alert('Session expired. Please log in again.'); return; }
+      const userId = session.user.id;
+
+      const rows = [];
       for (let i = 1; i < lines.length; i++) {
         const cols = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g,''));
         if (!cols.length || cols.every(v => !v)) continue;
@@ -3908,12 +3913,8 @@ function importContactsCSV(event) {
           fname = p[0] || ''; lname = p.slice(1).join(' ') || '';
         }
         if (!fullName) continue;
-        contacts.push({
-          id: Date.now() + i,
-          date: new Date().toLocaleDateString(),
-          fname: fname,
-          lname: lname,
-          name: fullName,
+        rows.push(mapLeadToDb({
+          fname, lname,
           email: emailIdx!==undefined?cols[emailIdx]||'':'',
           phone: phoneIdx!==undefined?cols[phoneIdx]||'':'',
           company: companyIdx!==undefined?cols[companyIdx]||'':'',
@@ -3927,11 +3928,15 @@ function importContactsCSV(event) {
           website: websiteIdx!==undefined?cols[websiteIdx]||'':'',
           linkedin: linkedinIdx!==undefined?cols[linkedinIdx]||'':'',
           notes: ''
-        });
-        added++;
+        }, userId));
       }
-      save(); renderContacts(); renderDashboard(); updateBadges();
-      alert(added + ' contact(s) imported successfully!');
+
+      if (!rows.length) { alert('No valid contacts found in CSV.'); event.target.value = ''; return; }
+      const { error } = await supabaseClient.from('leads').insert(rows);
+      if (error) { alert('Import failed: ' + error.message); event.target.value = ''; return; }
+      await loadContactsFromSupabase();
+      renderDashboard(); updateBadges();
+      alert(rows.length + ' contact(s) imported successfully!');
     } catch (err) {
       alert('Import failed. Please check your CSV format.');
     }
@@ -7332,27 +7337,65 @@ function exportFullBackup() {
   showImportMsg(msgEl, 'success', '✅ Backup downloaded successfully!');
 }
 
-function importFullBackup(event) {
+async function importFullBackup(event) {
   const file = event.target.files[0];
   if (!file) return;
   const msgEl = document.getElementById('fullBackupMsg');
   const reader = new FileReader();
-  reader.onload = function(e) {
+  reader.onload = async function(e) {
     try {
       const data = JSON.parse(e.target.result);
-      if (!confirm('Yeh aapka current CRM data OVERWRITE kar dega backup file ke data se. Continue karein?')) return;
-      contacts = data.contacts || [];
-      companies = data.companies || [];
-      deals = data.deals || [];
-      tasks = data.tasks || [];
-      emails = data.emails || [];
-      products = data.products || [];
-      team = data.team || [];
+      if (!confirm('Yeh aapka current CRM database OVERWRITE kar dega backup file ke data se. Continue karein?')) return;
+
+      const session = window.__currentSession;
+      if (!session) { alert('Session expired. Please log in again.'); return; }
+      const userId = session.user.id;
+
+      showImportMsg(msgEl, 'success', '⏳ Restoring backup to database... please wait.');
+
+      const mapCompany = (d, u) => ({
+        name: d.name || null, industry: d.industry || null, size: d.size || null, website: d.website || null,
+        location: d.location || null, country: d.country || null, employees: d.employees || null,
+        revenue: d.revenue || null, crm: d.crm || null, techstack: d.techstack || null,
+        automation: d.automation || null, category: d.category || null, notes: d.notes || null, user_id: u
+      });
+
+      const tables = [
+        { key: 'contacts', table: 'leads', mapFn: mapLeadToDb },
+        { key: 'companies', table: 'companies', mapFn: mapCompany },
+        { key: 'deals', table: 'deals', mapFn: mapDealToDb },
+        { key: 'tasks', table: 'tasks', mapFn: mapTaskToDb },
+        { key: 'emails', table: 'emails', mapFn: mapEmailToDb },
+        { key: 'products', table: 'products', mapFn: mapProductToDb },
+        { key: 'team', table: 'team', mapFn: mapTeamToDb }
+      ];
+
+      for (const t of tables) {
+        const rows = data[t.key];
+        if (!Array.isArray(rows)) continue;
+        const { error: delErr } = await supabaseClient.from(t.table).delete().eq('user_id', userId);
+        if (delErr) { console.error(`Could not clear ${t.table}:`, delErr); continue; }
+        if (rows.length) {
+          const dbRows = rows.map(r => t.mapFn(r, userId));
+          const { error: insErr } = await supabaseClient.from(t.table).insert(dbRows);
+          if (insErr) console.error(`Could not restore ${t.table}:`, insErr);
+        }
+      }
+
+      if (data.campaignSettings) {
+        await supabaseClient.from('campaign_settings').upsert({
+          web_app_url: data.campaignSettings.webAppUrl || null,
+          from_name: data.campaignSettings.fromName || null,
+          campaign_goal: data.campaignSettings.campaignGoal || null,
+          user_id: userId
+        }, { onConflict: 'user_id' });
+      }
+
+      // Campaign Logs mirror Google Sheets/Apps Script data — restored locally only, not Supabase-backed
       campaignLogs = data.campaignLogs || [];
-      campaignSettings = data.campaignSettings || {};
-      localStorage.setItem('crm_campaign_settings', JSON.stringify(campaignSettings));
-      save();
-      showImportMsg(msgEl, 'success', '✅ Backup restored successfully! Reloading...');
+      localStorage.setItem('crm_campaign_logs', JSON.stringify(campaignLogs));
+
+      showImportMsg(msgEl, 'success', '✅ Backup restored to database successfully! Reloading...');
       setTimeout(() => location.reload(), 1200);
     } catch (err) {
       showImportMsg(msgEl, 'error', '❌ Invalid backup file: ' + err.message);
@@ -7380,37 +7423,48 @@ function exportCSV(type) {
   URL.revokeObjectURL(a.href);
 }
 
-function importCSV(type, input) {
+async function importCSV(type, input) {
   const file = input.files[0];
   if (!file) return;
   const msgEl = document.getElementById('import' + (type === 'contacts' ? 'Contacts' : 'Companies') + 'Msg');
   const reader = new FileReader();
-  reader.onload = function(e) {
+  reader.onload = async function(e) {
     try {
       const lines = e.target.result.split('\n').map(l => l.trim()).filter(l => l);
       if (lines.length < 2) { showImportMsg(msgEl, 'error', 'CSV must have a header row and at least one data row.'); return; }
-      const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().trim());
-      let imported = 0;
+      parseCSVLine(lines[0]); // header row not needed further; columns are positional below
+
+      const session = window.__currentSession;
+      if (!session) { showImportMsg(msgEl, 'error', 'Session expired. Please log in again.'); return; }
+      const userId = session.user.id;
+
+      const rows = [];
       for (let i = 1; i < lines.length; i++) {
         const vals = parseCSVLine(lines[i]);
         if (!vals[0]) continue;
         if (type === 'contacts') {
-          contacts.push({
-            id: Date.now() + i, name: vals[0]||'', email: vals[1]||'', company: vals[2]||'',
-            phone: vals[3]||'', status: vals[4]||'New', source: vals[5]||'', icp: vals[6]||'', leadScore: vals[7]||'',
-            title:'', linkedin:'', notes:'', date: new Date().toLocaleDateString()
-          });
+          const nameParts = (vals[0]||'').split(' ');
+          rows.push(mapLeadToDb({
+            fname: nameParts[0] || '', lname: nameParts.slice(1).join(' ') || '',
+            email: vals[1]||'', company: vals[2]||'', phone: vals[3]||'',
+            status: vals[4]||'New', source: vals[5]||'', icp: vals[6]||'', leadScore: vals[7]||''
+          }, userId));
         } else {
-          companies.push({
-            id: Date.now() + i, name: vals[0]||'', industry: vals[1]||'Other', website: vals[2]||'',
-            crm: vals[3]||'Unknown', size: vals[4]||'1-10', location: vals[5]||'', notes:''
+          rows.push({
+            name: vals[0]||'', industry: vals[1]||'Other', website: vals[2]||'',
+            crm: vals[3]||'Unknown', size: vals[4]||'1-10', location: vals[5]||'', notes: '',
+            user_id: userId
           });
         }
-        imported++;
       }
-      save();
-      type === 'contacts' ? (renderContacts(), updateBadges()) : (renderCompanies(), updateBadges());
-      showImportMsg(msgEl, 'success', `✅ ${imported} ${type} imported successfully!`);
+      if (!rows.length) { showImportMsg(msgEl, 'error', 'No valid rows found in CSV.'); return; }
+
+      const table = type === 'contacts' ? 'leads' : 'companies';
+      const { error } = await supabaseClient.from(table).insert(rows);
+      if (error) { showImportMsg(msgEl, 'error', 'Could not import: ' + error.message); return; }
+
+      if (type === 'contacts') await loadContactsFromSupabase(); else await loadCompaniesFromSupabase();
+      showImportMsg(msgEl, 'success', `✅ ${rows.length} ${type} imported successfully!`);
       input.value = '';
     } catch(err) {
       showImportMsg(msgEl, 'error', 'Error parsing CSV. Please check the file format.');

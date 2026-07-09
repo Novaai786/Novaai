@@ -2558,15 +2558,15 @@ let tasks = [];
 let tickets = []; // now loaded from Supabase (see loadTicketsFromSupabase)
 let currentProfileContactId = null;
 let currentProfileTab = 'overview';
-let emails = JSON.parse(localStorage.getItem('crm_emails') || '[]');
-let campaignSettings = JSON.parse(localStorage.getItem('crm_campaign_settings') || '{}');
-let campaignLogs = JSON.parse(localStorage.getItem('crm_campaign_logs') || '[]');
-let sequences = JSON.parse(localStorage.getItem('crm_sequences') || '[]');
-let sequenceEnrollments = JSON.parse(localStorage.getItem('crm_sequence_enrollments') || '[]');
+let emails = []; // now loaded from Supabase (see loadEmailsFromSupabase)
+let campaignSettings = {}; // now loaded from Supabase (see loadCampaignSettingsFromSupabase)
+let campaignLogs = JSON.parse(localStorage.getItem('crm_campaign_logs') || '[]'); // mirrors Apps Script/Google Sheets tracking data — not Supabase-backed
+let sequences = []; // now loaded from Supabase (see loadSequencesFromSupabase)
+let sequenceEnrollments = []; // now loaded from Supabase (see loadSequenceEnrollmentsFromSupabase)
 let seqSelectedIds = new Set();
 let campaignSelectedIds = new Set();
 let products = []; // now loaded from Supabase (see loadProductsFromSupabase)
-let team = JSON.parse(localStorage.getItem('crm_team') || '[]');
+let team = []; // now loaded from Supabase (see loadTeamFromSupabase)
 
 const PERMISSION_MODULES = [
   { key: 'contacts', label: 'Contacts' },
@@ -2580,17 +2580,7 @@ const PERMISSION_MODULES = [
   { key: 'team', label: 'Team & Roles' }
 ];
 
-let roles = JSON.parse(localStorage.getItem('crm_roles') || 'null');
-if (!roles) {
-  const allModules = (view, create, edit, del) => Object.fromEntries(PERMISSION_MODULES.map(m => [m.key, { view, create, edit, del }]));
-  const salesModules = ['contacts', 'deals', 'tasks'];
-  roles = [
-    { id: 1, name: 'Admin', permissions: allModules(true, true, true, true) },
-    { id: 2, name: 'Manager', permissions: Object.fromEntries(PERMISSION_MODULES.map(m => [m.key, { view: ['reports','contacts','deals','companies'].includes(m.key), create: false, edit: false, del: false }])) },
-    { id: 3, name: 'Sales Rep', permissions: Object.fromEntries(PERMISSION_MODULES.map(m => [m.key, { view: salesModules.includes(m.key), create: salesModules.includes(m.key), edit: salesModules.includes(m.key), del: false }])) }
-  ];
-  localStorage.setItem('crm_roles', JSON.stringify(roles));
-}
+let roles = []; // now loaded from Supabase (see loadRolesFromSupabase; default roles auto-seeded on first load)
 
 let categories = []; // now loaded from Supabase (see loadCategoriesFromSupabase)
 
@@ -5163,21 +5153,77 @@ function emailDailySummary() {
 }
 
 // EMAILS
-function saveEmail() {
+function mapEmailFromDb(row) {
+  return {
+    id: row.id,
+    contact: row.contact || '',
+    email: row.email || '',
+    subject: row.subject || '',
+    type: row.type || '',
+    status: row.status || '',
+    notes: row.notes || '',
+    date: row.date || ''
+  };
+}
+
+function mapEmailToDb(data, userId) {
+  return {
+    contact: data.contact || null,
+    email: data.email || null,
+    subject: data.subject || null,
+    type: data.type || null,
+    status: data.status || null,
+    notes: data.notes || null,
+    date: data.date || null,
+    user_id: userId
+  };
+}
+
+async function loadEmailsFromSupabase() {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const userId = session.user.id;
+    const { data, error } = await supabaseClient
+      .from('emails')
+      .select('*')
+      .eq('user_id', userId)
+      .order('id', { ascending: false });
+    if (error) { console.error('Could not load emails:', error); return; }
+    emails = (data || []).map(mapEmailFromDb);
+    renderEmails();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function saveEmail() {
   const contact = document.getElementById('e-contact').value.trim();
   if (!contact) { alert('Contact name required!'); return; }
-  emails.push({
-    id: Date.now(), contact,
+  const data = {
+    contact,
     email: document.getElementById('e-email').value.trim(),
     subject: document.getElementById('e-subject').value.trim(),
     type: document.getElementById('e-type').value,
     status: document.getElementById('e-status').value,
     notes: document.getElementById('e-notes').value.trim(),
     date: new Date().toLocaleDateString()
-  });
-  save(); closeModal('emailModal');
-  ['e-contact','e-email','e-subject','e-notes'].forEach(id => document.getElementById(id).value = '');
-  renderEmails();
+  };
+
+  try {
+    const session = window.__currentSession;
+    if (!session) { alert('Session expired. Please log in again.'); return; }
+    const userId = session.user.id;
+    const dbRow = mapEmailToDb(data, userId);
+    const { error } = await supabaseClient.from('emails').insert(dbRow);
+    if (error) { alert('Could not save email log: ' + error.message); return; }
+    closeModal('emailModal');
+    ['e-contact','e-email','e-subject','e-notes'].forEach(id => document.getElementById(id).value = '');
+    await loadEmailsFromSupabase();
+  } catch (err) {
+    alert('Something went wrong while saving the email log.');
+    console.error(err);
+  }
 }
 
 function renderEmails() {
@@ -5195,7 +5241,15 @@ function renderEmails() {
     </div>`).join('');
 }
 
-function deleteEmail(id) { emails = emails.filter(e=>e.id!==id); save(); renderEmails(); }
+async function deleteEmail(id) {
+  try {
+    const { error } = await supabaseClient.from('emails').delete().eq('id', id);
+    if (error) { alert('Could not delete email log: ' + error.message); return; }
+    await loadEmailsFromSupabase();
+  } catch (err) {
+    console.error(err);
+  }
+}
 
 // ===== EMAIL CAMPAIGNS (Gmail via Google Apps Script) =====
 
@@ -5223,20 +5277,49 @@ function switchEmailTab(tab) {
   }
 }
 
+async function loadCampaignSettingsFromSupabase() {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const userId = session.user.id;
+    const { data, error } = await supabaseClient
+      .from('campaign_settings')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (error) { console.error('Could not load campaign settings:', error); return; }
+    campaignSettings = data ? { webAppUrl: data.web_app_url || '', fromName: data.from_name || '' } : {};
+    if (document.getElementById('campaignWebAppUrl')) loadCampaignSettings();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
 function loadCampaignSettings() {
   document.getElementById('campaignWebAppUrl').value = campaignSettings.webAppUrl || '';
   document.getElementById('campaignFromName').value = campaignSettings.fromName || '';
 }
 
-function saveCampaignSettings() {
+async function saveCampaignSettings() {
   campaignSettings = {
     webAppUrl: document.getElementById('campaignWebAppUrl').value.trim(),
     fromName: document.getElementById('campaignFromName').value.trim()
   };
-  localStorage.setItem('crm_campaign_settings', JSON.stringify(campaignSettings));
   const msg = document.getElementById('campaignSettingsSaved');
-  msg.textContent = '✓ Saved';
-  setTimeout(() => msg.textContent = '', 2000);
+  try {
+    const session = window.__currentSession;
+    if (!session) { alert('Session expired. Please log in again.'); return; }
+    const userId = session.user.id;
+    const { error } = await supabaseClient
+      .from('campaign_settings')
+      .upsert({ web_app_url: campaignSettings.webAppUrl, from_name: campaignSettings.fromName, user_id: userId }, { onConflict: 'user_id' });
+    if (error) { alert('Could not save campaign settings: ' + error.message); return; }
+    msg.textContent = '✓ Saved';
+    setTimeout(() => msg.textContent = '', 2000);
+  } catch (err) {
+    alert('Something went wrong while saving campaign settings.');
+    console.error(err);
+  }
 }
 
 function populateCampaignFilters() {
@@ -5636,23 +5719,62 @@ function clearSequenceForm() {
   addSequenceStep();
 }
 
-function saveSequence() {
+function mapSequenceFromDb(row) {
+  return { id: row.id, name: row.name || '', steps: row.steps || [] };
+}
+
+function mapSequenceToDb(data, userId) {
+  return { name: data.name || null, steps: data.steps || [], user_id: userId };
+}
+
+async function loadSequencesFromSupabase() {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const userId = session.user.id;
+    const { data, error } = await supabaseClient
+      .from('sequences')
+      .select('*')
+      .eq('user_id', userId)
+      .order('id', { ascending: false });
+    if (error) { console.error('Could not load sequences:', error); return; }
+    sequences = (data || []).map(mapSequenceFromDb);
+    renderSequencesList();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function saveSequence() {
   const name = document.getElementById('seq-name').value.trim();
   if (!name) { alert('Sequence name required!'); return; }
   if (!seqBuilderSteps.length || seqBuilderSteps.some(s => !s.subject.trim() || !s.body.trim())) {
     alert('Har email step mein Subject aur Body required hai!'); return;
   }
   const editId = document.getElementById('seq-edit-id').value;
-  if (editId) {
-    const s = sequences.find(s => s.id == editId);
-    if (s) { s.name = name; s.steps = JSON.parse(JSON.stringify(seqBuilderSteps)); }
-  } else {
-    sequences.push({ id: Date.now(), name, steps: JSON.parse(JSON.stringify(seqBuilderSteps)) });
+  const steps = JSON.parse(JSON.stringify(seqBuilderSteps));
+
+  try {
+    const session = window.__currentSession;
+    if (!session) { alert('Session expired. Please log in again.'); return; }
+    const userId = session.user.id;
+    const dbRow = mapSequenceToDb({ name, steps }, userId);
+
+    if (editId) {
+      const { error } = await supabaseClient.from('sequences').update(dbRow).eq('id', editId);
+      if (error) { alert('Could not update sequence: ' + error.message); return; }
+    } else {
+      const { error } = await supabaseClient.from('sequences').insert(dbRow);
+      if (error) { alert('Could not save sequence: ' + error.message); return; }
+    }
+
+    clearSequenceForm();
+    await loadSequencesFromSupabase();
+    showToast('✅ Sequence saved!');
+  } catch (err) {
+    alert('Something went wrong while saving the sequence.');
+    console.error(err);
   }
-  save();
-  clearSequenceForm();
-  renderSequencesList();
-  showToast('✅ Sequence saved!');
 }
 
 function renderSequencesList() {
@@ -5682,11 +5804,16 @@ function editSequence(id) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-function deleteSequence(id) {
+async function deleteSequence(id) {
   if (!confirm('Ye sequence delete karni hai? (Already enrolled contacts par asar nahi padega)')) return;
-  sequences = sequences.filter(s => s.id !== id);
-  save();
-  renderSequencesList();
+  try {
+    const { error } = await supabaseClient.from('sequences').delete().eq('id', id);
+    if (error) { alert('Could not delete sequence: ' + error.message); return; }
+    await loadSequencesFromSupabase();
+  } catch (err) {
+    alert('Something went wrong while deleting the sequence.');
+    console.error(err);
+  }
 }
 
 function openEnrollPanel(sequenceId) {
@@ -5734,6 +5861,52 @@ function renderSeqContactList() {
       <input type="checkbox" class="seq-contact-cb" data-id="${c.id}" onchange="onSeqContactToggle(${c.id}, this.checked)" ${seqSelectedIds.has(c.id) ? 'checked' : ''}>
       <span style="flex:1"><strong>${c.name || ''}</strong> <span style="color:var(--text-light)"> — ${c.company || 'No company'} (${c.email})${c.leadScore ? ' · ' + c.leadScore : ''}${c.country ? ' · ' + c.country : ''}</span></span>
     </label>`).join('');
+}
+
+function mapEnrollmentFromDb(row) {
+  return {
+    id: row.id,
+    sequenceId: row.sequence_id || null,
+    sequenceName: row.sequence_name || '',
+    contactId: row.contact_id || null,
+    contactName: row.contact_name || '',
+    contactEmail: row.contact_email || '',
+    enrolledDate: row.enrolled_date || '',
+    status: row.status || 'active',
+    steps: row.steps || []
+  };
+}
+
+function mapEnrollmentToDb(data, userId) {
+  return {
+    sequence_id: data.sequenceId || null,
+    sequence_name: data.sequenceName || null,
+    contact_id: data.contactId || null,
+    contact_name: data.contactName || null,
+    contact_email: data.contactEmail || null,
+    enrolled_date: data.enrolledDate || null,
+    status: data.status || null,
+    steps: data.steps || [],
+    user_id: userId
+  };
+}
+
+async function loadSequenceEnrollmentsFromSupabase() {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const userId = session.user.id;
+    const { data, error } = await supabaseClient
+      .from('sequence_enrollments')
+      .select('*')
+      .eq('user_id', userId)
+      .order('id', { ascending: false });
+    if (error) { console.error('Could not load sequence enrollments:', error); return; }
+    sequenceEnrollments = (data || []).map(mapEnrollmentFromDb);
+    renderEnrollmentsTable();
+  } catch (err) {
+    console.error(err);
+  }
 }
 
 function onSeqContactToggle(id, checked) {
@@ -5813,12 +5986,21 @@ async function enrollContactsInSequence() {
         stepOk = false;
       }
     }
-    sequenceEnrollments.push(enrollment);
+    try {
+      const session = window.__currentSession;
+      if (session) {
+        const dbRow = mapEnrollmentToDb(enrollment, session.user.id);
+        const { error } = await supabaseClient.from('sequence_enrollments').insert(dbRow);
+        if (error) console.error('Could not save enrollment:', error);
+      }
+    } catch (err) {
+      console.error(err);
+    }
     enrolledCount++;
     line.textContent = stepOk ? `✅ Enrolled ${c.email} — ${seq.steps.length} emails scheduled` : `⚠️ Enrolled ${c.email} with some failures`;
   }
 
-  save();
+  await loadSequenceEnrollmentsFromSupabase();
   const summary = document.createElement('div');
   summary.style.marginTop = '8px';
   summary.style.fontWeight = '600';
@@ -5875,9 +6057,15 @@ async function stopEnrollment(enrollmentId) {
     } catch (err) { /* ignore individual failures */ }
   }
   e.status = 'stopped';
-  save();
-  renderEnrollmentsTable();
-  showToast(`⏹ Sequence stopped for ${e.contactName}`);
+  try {
+    const { error } = await supabaseClient.from('sequence_enrollments').update({ status: e.status, steps: e.steps }).eq('id', e.id);
+    if (error) { alert('Could not update enrollment: ' + error.message); return; }
+    await loadSequenceEnrollmentsFromSupabase();
+    showToast(`⏹ Sequence stopped for ${e.contactName}`);
+  } catch (err) {
+    alert('Something went wrong while stopping the enrollment.');
+    console.error(err);
+  }
 }
 
 async function deleteEnrollment(enrollmentId) {
@@ -5894,10 +6082,15 @@ async function deleteEnrollment(enrollmentId) {
       });
     } catch (err) { /* ignore */ }
   }
-  sequenceEnrollments = sequenceEnrollments.filter(en => en.id !== e.id);
-  save();
-  renderEnrollmentsTable();
-  showToast(`🗑️ Enrollment deleted for ${e.contactName}`);
+  try {
+    const { error } = await supabaseClient.from('sequence_enrollments').delete().eq('id', e.id);
+    if (error) { alert('Could not delete enrollment: ' + error.message); return; }
+    await loadSequenceEnrollmentsFromSupabase();
+    showToast(`🗑️ Enrollment deleted for ${e.contactName}`);
+  } catch (err) {
+    alert('Something went wrong while deleting the enrollment.');
+    console.error(err);
+  }
 }
 
 // ===================== FOLLOW-UP FROM DIRECT CAMPAIGN EMAIL =====================
@@ -5950,8 +6143,7 @@ async function scheduleFollowupFromCampaign() {
     if (!data.success) { alert('Follow-up schedule nahi ho saka: ' + (data.error || 'unknown error')); return; }
 
     // Track this as a 1-step "sequence enrollment" so it shows in Active Enrollments with Stop/Delete options
-    sequenceEnrollments.push({
-      id: Date.now() + Math.random(),
+    const enrollment = {
       sequenceId: null,
       sequenceName: `Follow-up: ${log.subject}`,
       contactId: log.contactId,
@@ -5966,11 +6158,20 @@ async function scheduleFollowupFromCampaign() {
         queueId: data.queueId || null,
         status: 'pending'
       }]
-    });
-    save();
+    };
+    try {
+      const session = window.__currentSession;
+      if (session) {
+        const dbRow = mapEnrollmentToDb(enrollment, session.user.id);
+        const { error } = await supabaseClient.from('sequence_enrollments').insert(dbRow);
+        if (error) console.error('Could not save follow-up enrollment:', error);
+      }
+    } catch (err) {
+      console.error(err);
+    }
     closeModal('followupModal');
     showToast(`✅ Follow-up scheduled for ${scheduledAt.toLocaleString()}`);
-    renderEnrollmentsTable();
+    await loadSequenceEnrollmentsFromSupabase();
   } catch (err) {
     alert('Follow-up schedule failed: ' + err.message);
   }
@@ -6383,6 +6584,46 @@ function renderProducts() {
 }
 
 // ===================== TEAM & ROLES =====================
+function mapRoleFromDb(row) {
+  return { id: row.id, name: row.name || '', permissions: row.permissions || {} };
+}
+
+function mapRoleToDb(data, userId) {
+  return { name: data.name || null, permissions: data.permissions || {}, user_id: userId };
+}
+
+async function loadRolesFromSupabase() {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const userId = session.user.id;
+    let { data, error } = await supabaseClient.from('roles').select('*').eq('user_id', userId).order('id', { ascending: true });
+    if (error) { console.error('Could not load roles:', error); return; }
+
+    if ((!data || !data.length) && !localStorage.getItem('crm_roles_seeded')) {
+      const allModules = (view, create, edit, del) => Object.fromEntries(PERMISSION_MODULES.map(m => [m.key, { view, create, edit, del }]));
+      const salesModules = ['contacts', 'deals', 'tasks'];
+      const defaults = [
+        { name: 'Admin', permissions: allModules(true, true, true, true) },
+        { name: 'Manager', permissions: Object.fromEntries(PERMISSION_MODULES.map(m => [m.key, { view: ['reports','contacts','deals','companies'].includes(m.key), create: false, edit: false, del: false }])) },
+        { name: 'Sales Rep', permissions: Object.fromEntries(PERMISSION_MODULES.map(m => [m.key, { view: salesModules.includes(m.key), create: salesModules.includes(m.key), edit: salesModules.includes(m.key), del: false }])) }
+      ];
+      const { error: seedErr } = await supabaseClient.from('roles').insert(defaults.map(d => mapRoleToDb(d, userId)));
+      if (!seedErr) {
+        localStorage.setItem('crm_roles_seeded', '1');
+        const reload = await supabaseClient.from('roles').select('*').eq('user_id', userId).order('id', { ascending: true });
+        data = reload.data;
+      }
+    }
+
+    roles = (data || []).map(mapRoleFromDb);
+    renderTeam();
+    populateRoleDropdown();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
 function permSummary(role) {
   const active = PERMISSION_MODULES.filter(m => {
     const p = role.permissions[m.key];
@@ -6441,7 +6682,7 @@ function editRole(id) {
   openModal('roleModal');
 }
 
-function saveRole() {
+async function saveRole() {
   const name = document.getElementById('role-name').value.trim();
   if (!name) { alert('Role name required!'); return; }
   const permissions = {};
@@ -6455,20 +6696,39 @@ function saveRole() {
     };
   });
   const editId = document.getElementById('role-edit-id').value;
-  if (editId) {
-    const r = roles.find(r => r.id == editId);
-    if (r) {
-      const oldName = r.name;
-      r.name = name; r.permissions = permissions;
-      if (oldName !== name) team.forEach(m => { if (m.role === oldName) m.role = name; });
+
+  try {
+    const session = window.__currentSession;
+    if (!session) { alert('Session expired. Please log in again.'); return; }
+    const userId = session.user.id;
+    const dbRow = mapRoleToDb({ name, permissions }, userId);
+
+    if (editId) {
+      const oldRole = roles.find(r => r.id == editId);
+      const oldName = oldRole ? oldRole.name : null;
+      const { error } = await supabaseClient.from('roles').update(dbRow).eq('id', editId);
+      if (error) { alert('Could not update role: ' + error.message); return; }
+      if (oldName && oldName !== name) {
+        const affected = team.filter(m => m.role === oldName);
+        for (const m of affected) {
+          await supabaseClient.from('team').update({ role: name }).eq('id', m.id);
+        }
+        await loadTeamFromSupabase();
+      }
+    } else {
+      const { error } = await supabaseClient.from('roles').insert(dbRow);
+      if (error) { alert('Could not save role: ' + error.message); return; }
     }
-  } else {
-    roles.push({ id: Date.now(), name, permissions });
+
+    closeModal('roleModal'); clearRoleForm();
+    await loadRolesFromSupabase();
+  } catch (err) {
+    alert('Something went wrong while saving the role.');
+    console.error(err);
   }
-  save(); closeModal('roleModal'); clearRoleForm(); renderRoles(); populateRoleDropdown(); renderTeam();
 }
 
-function deleteRole(id) {
+async function deleteRole(id) {
   const r = roles.find(r => r.id === id);
   if (!r) return;
   const inUse = team.some(m => m.role === r.name);
@@ -6476,9 +6736,20 @@ function deleteRole(id) {
     ? `"${r.name}" role kuch team members ko assign hai. Delete karne se unka role "Unassigned" ho jayega. Continue?`
     : 'Delete this role?';
   if (!confirm(msg)) return;
-  roles = roles.filter(x => x.id !== id);
-  team.forEach(m => { if (m.role === r.name) m.role = ''; });
-  save(); renderRoles(); populateRoleDropdown(); renderTeam();
+
+  try {
+    const { error } = await supabaseClient.from('roles').delete().eq('id', id);
+    if (error) { alert('Could not delete role: ' + error.message); return; }
+    const affected = team.filter(m => m.role === r.name);
+    for (const m of affected) {
+      await supabaseClient.from('team').update({ role: '' }).eq('id', m.id);
+    }
+    await loadTeamFromSupabase();
+    await loadRolesFromSupabase();
+  } catch (err) {
+    alert('Something went wrong while deleting the role.');
+    console.error(err);
+  }
 }
 
 function populateRoleDropdown(selected) {
@@ -6496,19 +6767,61 @@ function updateRoleHint() {
   hint.textContent = r ? `Access: ${permSummary(r)}` : 'No role assigned — no module access.';
 }
 
-function saveTeamMember() {
+function mapTeamFromDb(row) {
+  return { id: row.id, name: row.name || '', email: row.email || '', role: row.role || '' };
+}
+
+function mapTeamToDb(data, userId) {
+  return { name: data.name || null, email: data.email || null, role: data.role || null, user_id: userId };
+}
+
+async function loadTeamFromSupabase() {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const userId = session.user.id;
+    const { data, error } = await supabaseClient
+      .from('team')
+      .select('*')
+      .eq('user_id', userId)
+      .order('id', { ascending: true });
+    if (error) { console.error('Could not load team:', error); return; }
+    team = (data || []).map(mapTeamFromDb);
+    renderTeam();
+    updateBadges();
+    if (typeof populateOwnerDropdown === 'function') populateOwnerDropdown();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function saveTeamMember() {
   const name = document.getElementById('tm-name').value.trim();
   const email = document.getElementById('tm-email').value.trim();
   if (!name || !email) { alert('Name and email are required!'); return; }
   const editId = document.getElementById('tm-edit-id').value;
   const role = document.getElementById('tm-role').value;
-  if (editId) {
-    const m = team.find(m => m.id == editId);
-    if (m) { m.name = name; m.email = email; m.role = role; }
-  } else {
-    team.push({ id: Date.now(), name, email, role });
+
+  try {
+    const session = window.__currentSession;
+    if (!session) { alert('Session expired. Please log in again.'); return; }
+    const userId = session.user.id;
+    const dbRow = mapTeamToDb({ name, email, role }, userId);
+
+    if (editId) {
+      const { error } = await supabaseClient.from('team').update(dbRow).eq('id', editId);
+      if (error) { alert('Could not update team member: ' + error.message); return; }
+    } else {
+      const { error } = await supabaseClient.from('team').insert(dbRow);
+      if (error) { alert('Could not save team member: ' + error.message); return; }
+    }
+
+    closeModal('teamModal'); clearTeamForm();
+    await loadTeamFromSupabase();
+  } catch (err) {
+    alert('Something went wrong while saving the team member.');
+    console.error(err);
   }
-  save(); closeModal('teamModal'); clearTeamForm(); renderTeam(); updateBadges(); populateOwnerDropdown();
 }
 
 function clearTeamForm() {
@@ -6530,8 +6843,16 @@ function editTeamMember(id) {
   openModal('teamModal');
 }
 
-function deleteTeamMember(id) {
-  if (confirm('Remove this team member?')) { team = team.filter(m => m.id !== id); save(); renderTeam(); updateBadges(); populateOwnerDropdown(); }
+async function deleteTeamMember(id) {
+  if (!confirm('Remove this team member?')) return;
+  try {
+    const { error } = await supabaseClient.from('team').delete().eq('id', id);
+    if (error) { alert('Could not remove team member: ' + error.message); return; }
+    await loadTeamFromSupabase();
+  } catch (err) {
+    alert('Something went wrong while removing the team member.');
+    console.error(err);
+  }
 }
 
 function renderTeam() {
@@ -7131,6 +7452,12 @@ if (remindersEnabled) checkTaskReminders();
       await loadInvoicesFromSupabase();
       await loadTicketsFromSupabase();
       await loadProductsFromSupabase();
+      await loadRolesFromSupabase();
+      await loadTeamFromSupabase();
+      await loadEmailsFromSupabase();
+      await loadCampaignSettingsFromSupabase();
+      await loadSequencesFromSupabase();
+      await loadSequenceEnrollmentsFromSupabase();
     }
   } catch (err) {
     console.error('Could not initialize leads:', err);

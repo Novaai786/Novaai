@@ -2350,136 +2350,233 @@ Leadnovaai</textarea>
     </div>
 
     <div style="font-size:13.5px;line-height:1.7;color:var(--text)">
-      <p style="margin-bottom:10px">Is guide se aap apne Gmail account se <strong>free mein roazana 500 emails tak</strong> bhej sakte hain — seedha NovaAICRM se, bina kisi paid tool ke. Waqt lagega: 10-15 minutes (sirf ek dafa karna hai).</p>
+      <p style="margin-bottom:10px">This guide lets you send up to <strong>500 free emails a day</strong> from your own Gmail account, directly from NovaAICRM — no paid tool needed. Setup takes about 5 minutes and you only do it once. You do <strong>not</strong> need to create a Google Sheet yourself — the script creates and manages its own sheet automatically.</p>
 
-      <h4 style="margin:16px 0 6px">Step 1: Google Sheet Banao</h4>
-      <p>
-        <a href="https://sheets.google.com" target="_blank">sheets.google.com</a> par jayein aur <strong>Blank Spreadsheet</strong> banayein, naam rakhein <code>NovaAICRM Campaigns</code>.
-        Pehli row mein ye headers likhein (A se G tak): <code>Email, Subject, Body, Status, SentAt, OpenedAt, RowID</code>.
-        URL se apni <strong>Spreadsheet ID</strong> copy kar lein (<code>/d/</code> aur <code>/edit</code> ke darmiyan wala hissa).
-      </p>
+      <h4 style="margin:16px 0 6px">Step 1: Open Apps Script</h4>
+      <p>Go to <a href="https://script.google.com" target="_blank">script.google.com</a> → <strong>New project</strong>. Delete any default code already in <code>Code.gs</code>.</p>
 
-      <h4 style="margin:16px 0 6px">Step 2: Apps Script Editor Kholein</h4>
-      <p>Google Sheet ke andar: <strong>Extensions → Apps Script</strong>. Default code delete kar dein.</p>
-
-      <h4 style="margin:16px 0 6px">Step 3: Ye Code Paste Karein</h4>
+      <h4 style="margin:16px 0 6px">Step 2: Paste This Code</h4>
       <div style="position:relative;margin-bottom:10px">
         <button class="btn btn-outline btn-sm" style="position:absolute;top:8px;right:8px;z-index:2" onclick="copyScriptCode()">📋 Copy Code</button>
-        <pre id="scriptGuideCode" style="background:#0F172A;color:#E2E8F0;padding:16px;border-radius:8px;overflow-x:auto;font-size:11.5px;line-height:1.6;white-space:pre;max-height:340px;overflow-y:auto;">// ===== NovaAICRM Email Campaign Script =====
+        <pre id="scriptGuideCode" style="background:#0F172A;color:#E2E8F0;padding:16px;border-radius:8px;overflow-x:auto;font-size:11.5px;line-height:1.6;white-space:pre;max-height:340px;overflow-y:auto;">// ===== NovaAICRM — Gmail Email Engine (Google Apps Script) =====
+// No manual Google Sheet needed — this script creates and manages
+// its own Google Sheet automatically the first time it runs.
+// Handles: Send Now, Schedule for Later, Sequences, and Open Tracking.
 
-// STEP A: Yahan apni Spreadsheet ID paste karein
-const SHEET_ID = 'YAHAN_APNI_SPREADSHEET_ID_PASTE_KAREIN';
-const SHEET_NAME = 'Sheet1';
+const SHEET_NAME_QUEUE = 'EmailQueue';
+const SHEET_NAME_LOG = 'EmailLog';
 
-function saveDeploymentUrl() {
+// ---------- Spreadsheet is created automatically (no setup needed) ----------
+function getOrCreateSpreadsheet() {
+  const props = PropertiesService.getScriptProperties();
+  let sheetId = props.getProperty('SHEET_ID');
+  if (sheetId) {
+    try { return SpreadsheetApp.openById(sheetId); } catch (e) { /* recreate below */ }
+  }
+  const ss = SpreadsheetApp.create('NovaAICRM Email Data');
+  props.setProperty('SHEET_ID', ss.getId());
+  const queue = ss.getSheets()[0];
+  queue.setName(SHEET_NAME_QUEUE);
+  queue.appendRow(['queueId', 'to', 'subject', 'body', 'fromName', 'scheduledAt', 'status', 'sentAt']);
+  const log = ss.insertSheet(SHEET_NAME_LOG);
+  log.appendRow(['trackId', 'to', 'subject', 'fromName', 'status', 'sentAt', 'openedAt']);
+  return ss;
+}
+
+function getSheet(name) {
+  const ss = getOrCreateSpreadsheet();
+  let sh = ss.getSheetByName(name);
+  if (!sh) {
+    sh = ss.insertSheet(name);
+    if (name === SHEET_NAME_QUEUE) sh.appendRow(['queueId', 'to', 'subject', 'body', 'fromName', 'scheduledAt', 'status', 'sentAt']);
+    if (name === SHEET_NAME_LOG) sh.appendRow(['trackId', 'to', 'subject', 'fromName', 'status', 'sentAt', 'openedAt']);
+  }
+  return sh;
+}
+
+// ---------- Background timer installs itself automatically ----------
+function ensureTrigger() {
+  const exists = ScriptApp.getProjectTriggers().some(t =&gt; t.getHandlerFunction() === 'processQueue');
+  if (!exists) {
+    ScriptApp.newTrigger('processQueue').timeBased().everyMinutes(10).create();
+  }
+}
+
+// ---------- Helpers ----------
+function genId() { return Utilities.getUuid(); }
+function jsonOut(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }
+function trackingPixelTag(trackId) {
   const url = ScriptApp.getService().getUrl();
-  PropertiesService.getScriptProperties().setProperty('DEPLOYMENT_URL', url);
-  Logger.log('Saved URL: ' + url);
+  return '&lt;img src="' + url + '?track=' + trackId + '" width="1" height="1" style="display:none"&gt;';
 }
 
-function getDeploymentUrl() {
-  return PropertiesService.getScriptProperties().getProperty('DEPLOYMENT_URL');
-}
+// ---------- Main API used by the CRM ----------
+function doPost(e) {
+  ensureTrigger();
+  let req;
+  try { req = JSON.parse(e.postData.contents); }
+  catch (err) { return jsonOut({ success: false, error: 'Invalid request' }); }
 
-function sendPendingEmails() {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_NAME);
-  const data = sheet.getDataRange().getValues();
-  const deploymentUrl = getDeploymentUrl();
-
-  for (let i = 1; i < data.length; i++) {
-    const row = data[i];
-    const [email, subject, body, status] = row;
-    const rowId = i + 1;
-
-    if (status === 'Pending' && email) {
-      try {
-        const trackingPixel = deploymentUrl
-          ? '&lt;img src="' + deploymentUrl + '?track=' + rowId + '" width="1" height="1" style="display:none;"&gt;'
-          : '';
-
-        const htmlBody = body.replace(/\n/g, '&lt;br&gt;') + trackingPixel;
-
-        GmailApp.sendEmail(email, subject, body, {
-          htmlBody: htmlBody
-        });
-
-        sheet.getRange(rowId, 4).setValue('Sent');
-        sheet.getRange(rowId, 5).setValue(new Date());
-        sheet.getRange(rowId, 7).setValue(rowId);
-
-      } catch (err) {
-        sheet.getRange(rowId, 4).setValue('Failed: ' + err.message);
-      }
-
-      Utilities.sleep(1000);
+  try {
+    switch (req.action) {
+      case 'sendEmail': return handleSendEmail(req);
+      case 'scheduleEmail': return handleScheduleEmail(req);
+      case 'getQueue': return handleGetQueue();
+      case 'cancelScheduled': return handleCancelScheduled(req);
+      case 'deleteQueueItem': return handleDeleteQueueItem(req);
+      case 'updateScheduled': return handleUpdateScheduled(req);
+      case 'getStatus': return handleGetStatus();
+      case 'deleteEmailLog': return handleDeleteEmailLog(req);
+      default: return jsonOut({ success: false, error: 'Unknown action: ' + req.action });
     }
+  } catch (err) {
+    return jsonOut({ success: false, error: err.message });
   }
 }
 
+// ---------- Open-tracking pixel ----------
 function doGet(e) {
-  const rowId = e.parameter.track;
-
-  if (rowId) {
+  const trackId = e.parameter.track;
+  if (trackId) {
     try {
-      const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_NAME);
-      const currentOpenedAt = sheet.getRange(parseInt(rowId), 6).getValue();
-
-      if (!currentOpenedAt) {
-        sheet.getRange(parseInt(rowId), 6).setValue(new Date());
+      const sh = getSheet(SHEET_NAME_LOG);
+      const data = sh.getDataRange().getValues();
+      for (let i = 1; i &lt; data.length; i++) {
+        if (data[i][0] === trackId &amp;&amp; !data[i][6]) {
+          sh.getRange(i + 1, 5).setValue('Opened');
+          sh.getRange(i + 1, 7).setValue(new Date());
+          break;
+        }
       }
-    } catch (err) {
-      Logger.log('Tracking error: ' + err.message);
-    }
+    } catch (err) { /* silent */ }
   }
-
-  const pixel = Utilities.base64Decode(
-    'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBTAA7'
-  );
-  return ContentService
-    .createBinaryOutput(pixel)
-    .setMimeType(ContentService.MimeType.GIF);
+  const pixel = Utilities.base64Decode('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBTAA7');
+  return ContentService.createBinaryOutput(pixel).setMimeType(ContentService.MimeType.GIF);
 }
 
-function createTimeTrigger() {
-  const triggers = ScriptApp.getProjectTriggers();
-  triggers.forEach(t => {
-    if (t.getHandlerFunction() === 'sendPendingEmails') {
-      ScriptApp.deleteTrigger(t);
+// ---------- Action handlers ----------
+function handleSendEmail(req) {
+  const trackId = genId();
+  const fromName = req.fromName || 'NovaAICRM';
+  try {
+    const htmlBody = String(req.body).replace(/\n/g, '&lt;br&gt;') + trackingPixelTag(trackId);
+    GmailApp.sendEmail(req.to, req.subject, req.body, { htmlBody: htmlBody, name: fromName });
+    getSheet(SHEET_NAME_LOG).appendRow([trackId, req.to, req.subject, fromName, 'Sent', new Date(), '']);
+    return jsonOut({ success: true, trackId: trackId });
+  } catch (err) {
+    return jsonOut({ success: false, error: err.message });
+  }
+}
+
+function handleScheduleEmail(req) {
+  const queueId = genId();
+  getSheet(SHEET_NAME_QUEUE).appendRow([queueId, req.to, req.subject, req.body, req.fromName || 'NovaAICRM', req.scheduledAt, 'pending', '']);
+  return jsonOut({ success: true, queueId: queueId });
+}
+
+function handleGetQueue() {
+  const data = getSheet(SHEET_NAME_QUEUE).getDataRange().getValues();
+  const rows = [];
+  for (let i = 1; i &lt; data.length; i++) {
+    const r = data[i];
+    rows.push({ queueId: r[0], to: r[1], subject: r[2], body: r[3], fromName: r[4], scheduledAt: r[5], status: r[6], sentAt: r[7] });
+  }
+  return jsonOut({ success: true, data: rows });
+}
+
+function findQueueRow(sh, queueId) {
+  const data = sh.getDataRange().getValues();
+  for (let i = 1; i &lt; data.length; i++) { if (data[i][0] === queueId) return i + 1; }
+  return -1;
+}
+
+function handleCancelScheduled(req) {
+  const sh = getSheet(SHEET_NAME_QUEUE);
+  const row = findQueueRow(sh, req.queueId);
+  if (row === -1) return jsonOut({ success: false, error: 'Not found' });
+  sh.getRange(row, 7).setValue('cancelled');
+  return jsonOut({ success: true });
+}
+
+function handleDeleteQueueItem(req) {
+  const sh = getSheet(SHEET_NAME_QUEUE);
+  const row = findQueueRow(sh, req.queueId);
+  if (row === -1) return jsonOut({ success: false, error: 'Not found' });
+  sh.deleteRow(row);
+  return jsonOut({ success: true });
+}
+
+function handleUpdateScheduled(req) {
+  const sh = getSheet(SHEET_NAME_QUEUE);
+  const row = findQueueRow(sh, req.queueId);
+  if (row === -1) return jsonOut({ success: false, error: 'Not found' });
+  sh.getRange(row, 3).setValue(req.subject);
+  sh.getRange(row, 4).setValue(req.body);
+  sh.getRange(row, 6).setValue(req.scheduledAt);
+  return jsonOut({ success: true });
+}
+
+function handleGetStatus() {
+  const data = getSheet(SHEET_NAME_LOG).getDataRange().getValues();
+  const rows = [];
+  for (let i = 1; i &lt; data.length; i++) {
+    const r = data[i];
+    rows.push({ trackId: r[0], to: r[1], subject: r[2], fromName: r[3], status: r[4], sentAt: r[5], openedAt: r[6] });
+  }
+  return jsonOut({ success: true, data: rows });
+}
+
+function handleDeleteEmailLog(req) {
+  const sh = getSheet(SHEET_NAME_LOG);
+  const data = sh.getDataRange().getValues();
+  for (let i = 1; i &lt; data.length; i++) {
+    if (data[i][0] === req.trackId) { sh.deleteRow(i + 1); break; }
+  }
+  return jsonOut({ success: true });
+}
+
+// ---------- Runs automatically every ~10 minutes: sends due scheduled/sequence emails ----------
+function processQueue() {
+  const sh = getSheet(SHEET_NAME_QUEUE);
+  const data = sh.getDataRange().getValues();
+  const now = new Date();
+  for (let i = 1; i &lt; data.length; i++) {
+    const [queueId, to, subject, body, fromName, scheduledAt, status] = data[i];
+    if (status === 'pending' &amp;&amp; to &amp;&amp; new Date(scheduledAt) &lt;= now) {
+      try {
+        const trackId = genId();
+        const htmlBody = String(body).replace(/\n/g, '&lt;br&gt;') + trackingPixelTag(trackId);
+        GmailApp.sendEmail(to, subject, body, { htmlBody: htmlBody, name: fromName || 'NovaAICRM' });
+        sh.getRange(i + 1, 7).setValue('sent');
+        sh.getRange(i + 1, 8).setValue(new Date());
+        getSheet(SHEET_NAME_LOG).appendRow([trackId, to, subject, fromName || 'NovaAICRM', 'Sent', new Date(), '']);
+      } catch (err) {
+        sh.getRange(i + 1, 7).setValue('failed: ' + err.message);
+      }
+      Utilities.sleep(500);
     }
-  });
-
-  ScriptApp.newTrigger('sendPendingEmails')
-    .timeBased()
-    .everyMinutes(10)
-    .create();
-
-  Logger.log('Trigger created successfully!');
+  }
 }</pre>
       </div>
-      <p style="font-size:12px;color:var(--text-light);margin-bottom:14px">Code mein <code>YAHAN_APNI_SPREADSHEET_ID_PASTE_KAREIN</code> ki jagah apni asal Spreadsheet ID (Step 1 se) paste karna na bhoolein.</p>
+      <p style="font-size:12px;color:var(--text-light);margin-bottom:14px">Nothing to edit in this code — no Spreadsheet ID, no manual sheet setup. It's ready to deploy as-is.</p>
 
-      <h4 style="margin:16px 0 6px">Step 4: Deploy Karein (Web App)</h4>
+      <h4 style="margin:16px 0 6px">Step 3: Deploy as a Web App</h4>
       <p>
-        <strong>Deploy → New deployment</strong> → gear icon (⚙️) → <strong>Web app</strong> select karein.<br>
+        <strong>Deploy → New deployment</strong> → click the gear icon (⚙️) → select <strong>Web app</strong>.<br>
         Execute as: <strong>Me</strong> &nbsp;|&nbsp; Who has access: <strong>Anyone</strong><br>
-        <strong>Deploy</strong> dabayein, permission allow karein ("Advanced" → "Go to project (unsafe)" pe click karke), aur mila hua <strong>Web app URL</strong> copy kar lein.
+        Click <strong>Deploy</strong>. If asked to authorize, click <strong>Authorize access</strong> → choose your Google account → <strong>Advanced</strong> → <strong>"Go to project (unsafe)"</strong> → <strong>Allow</strong>.<br>
+        Copy the <strong>Web app URL</strong> you're given (it ends with <code>/exec</code>).
       </p>
 
-      <h4 style="margin:16px 0 6px">Step 5 &amp; 6: URL Save Karein aur Trigger Chalayein</h4>
-      <p>
-        Function dropdown se <code>saveDeploymentUrl</code> select karke <strong>Run ▶️</strong> karein.<br>
-        Phir <code>createTimeTrigger</code> select karke dobara <strong>Run ▶️</strong> karein — ab script har 10 minute mein khud pending emails check kar ke bhejega.
-      </p>
-
-      <h4 style="margin:16px 0 6px">Step 7: CRM Mein Connect Karein</h4>
-      <p>Upar "Sender Setup" mein apna <strong>Web App URL</strong> paste karein aur Save Settings dabayein. Bas, ab yahan se campaigns bhej sakte hain.</p>
+      <h4 style="margin:16px 0 6px">Step 4: Connect It to the CRM</h4>
+      <p>Paste that Web app URL into <strong>"Sender Setup"</strong> above and click <strong>Save Settings</strong>. That's it — <strong>Send Campaign Now</strong>, <strong>Schedule for Later</strong>, and <strong>Sequences</strong> all work immediately. The background timer that sends scheduled and sequence emails installs itself automatically the first time you send or schedule anything — no separate step needed, and it checks every 10 minutes for anything due.</p>
 
       <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:10px">
-        <strong style="font-size:12.5px">⚠️ Important:</strong>
+        <strong style="font-size:12.5px">⚠️ Good to know:</strong>
         <ul style="margin:8px 0 0 18px;font-size:12.5px;color:var(--text-light);line-height:1.6">
-          <li>Free Gmail limit: 500 emails/day.</li>
-          <li>Ye script sirf aapke apne Gmail account se kaam karta hai — kisi ka bhi email/password nahi maanga jata.</li>
-          <li>Zyada limit ke liye Google Workspace account use karein (1500/day).</li>
+          <li>Free Gmail limit: 500 emails/day (1,500/day on Google Workspace).</li>
+          <li>This script only ever uses your own Gmail account — no one's email or password is ever requested.</li>
+          <li>If you ever redeploy and get a new URL, remember to update it again in Sender Setup above.</li>
         </ul>
       </div>
     </div>

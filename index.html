@@ -2555,7 +2555,7 @@ let paymentMethods = []; // now loaded from Supabase (see loadPaymentMethodsFrom
 let invoices = []; // now loaded from Supabase (see loadInvoicesFromSupabase)
 let deals = [];
 let tasks = [];
-let tickets = JSON.parse(localStorage.getItem('crm_tickets') || '[]');
+let tickets = []; // now loaded from Supabase (see loadTicketsFromSupabase)
 let currentProfileContactId = null;
 let currentProfileTab = 'overview';
 let emails = JSON.parse(localStorage.getItem('crm_emails') || '[]');
@@ -2565,17 +2565,7 @@ let sequences = JSON.parse(localStorage.getItem('crm_sequences') || '[]');
 let sequenceEnrollments = JSON.parse(localStorage.getItem('crm_sequence_enrollments') || '[]');
 let seqSelectedIds = new Set();
 let campaignSelectedIds = new Set();
-let products = JSON.parse(localStorage.getItem('crm_products') || '[]');
-if (!products.length && !localStorage.getItem('crm_products_seeded')) {
-  products = [
-    { id: Date.now()+1, name: 'HubSpot Setup', category: 'HubSpot Setup', price: '500', description: 'Full HubSpot CRM setup, pipeline configuration, and onboarding.' },
-    { id: Date.now()+2, name: 'CRM Automation', category: 'CRM Automation', price: '350', description: 'Workflow automation, deal stage triggers, and task reminders inside the CRM.' },
-    { id: Date.now()+3, name: 'Lead Generation', category: 'Lead Generation', price: '800', description: 'B2B lead generation using LinkedIn, Apollo, and targeted prospecting.' },
-    { id: Date.now()+4, name: 'Cold Email Setup', category: 'Cold Email Setup', price: '400', description: 'Cold email infrastructure, sequences, and deliverability setup.' }
-  ];
-  localStorage.setItem('crm_products', JSON.stringify(products));
-  localStorage.setItem('crm_products_seeded', '1');
-}
+let products = []; // now loaded from Supabase (see loadProductsFromSupabase)
 let team = JSON.parse(localStorage.getItem('crm_team') || '[]');
 
 const PERMISSION_MODULES = [
@@ -3444,29 +3434,86 @@ function openTicketForm(contactId) {
   openModal('ticketModal');
 }
 
-function saveTicket() {
+function mapTicketFromDb(row) {
+  return {
+    id: row.id,
+    contactId: row.contactid || null,
+    subject: row.subject || '',
+    status: row.status || 'Open',
+    priority: row.priority || 'Medium',
+    description: row.description || '',
+    date: row.date || ''
+  };
+}
+
+function mapTicketToDb(data, userId) {
+  return {
+    contactid: data.contactId || null,
+    subject: data.subject || null,
+    status: data.status || null,
+    priority: data.priority || null,
+    description: data.description || null,
+    date: data.date || null,
+    user_id: userId
+  };
+}
+
+async function loadTicketsFromSupabase() {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const userId = session.user.id;
+    const { data, error } = await supabaseClient
+      .from('tickets')
+      .select('*')
+      .eq('user_id', userId)
+      .order('id', { ascending: false });
+    if (error) { console.error('Could not load tickets:', error); return; }
+    tickets = (data || []).map(mapTicketFromDb);
+    renderContactProfileBody();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function saveTicket() {
   const contactId = Number(document.getElementById('tk-contact-id').value);
   const subject = document.getElementById('tk-subject').value.trim();
   if (!subject) { alert('Subject required!'); return; }
-  tickets.push({
-    id: Date.now(),
+  const data = {
     contactId,
     subject,
     status: document.getElementById('tk-status').value,
     priority: document.getElementById('tk-priority').value,
     description: document.getElementById('tk-description').value.trim(),
     date: new Date().toLocaleDateString()
-  });
-  save();
-  closeModal('ticketModal');
-  renderContactProfileBody();
+  };
+
+  try {
+    const session = window.__currentSession;
+    if (!session) { alert('Session expired. Please log in again.'); return; }
+    const userId = session.user.id;
+    const dbRow = mapTicketToDb(data, userId);
+    const { error } = await supabaseClient.from('tickets').insert(dbRow);
+    if (error) { alert('Could not save ticket: ' + error.message); return; }
+    closeModal('ticketModal');
+    await loadTicketsFromSupabase();
+  } catch (err) {
+    alert('Something went wrong while saving the ticket.');
+    console.error(err);
+  }
 }
 
-function deleteTicket(id) {
+async function deleteTicket(id) {
   if (!confirm('Delete this ticket?')) return;
-  tickets = tickets.filter(t => t.id !== id);
-  save();
-  renderContactProfileBody();
+  try {
+    const { error } = await supabaseClient.from('tickets').delete().eq('id', id);
+    if (error) { alert('Could not delete ticket: ' + error.message); return; }
+    await loadTicketsFromSupabase();
+  } catch (err) {
+    alert('Something went wrong while deleting the ticket.');
+    console.error(err);
+  }
 }
 
 function renderProfilePayments(c) {
@@ -6212,27 +6259,75 @@ function closeSidebar() {
 }
 
 // ===================== PRODUCTS =====================
-function saveProduct() {
+function mapProductFromDb(row) {
+  return {
+    id: row.id,
+    name: row.name || '',
+    category: row.category || '',
+    price: row.price || '',
+    description: row.description || ''
+  };
+}
+
+function mapProductToDb(data, userId) {
+  return {
+    name: data.name || null,
+    category: data.category || null,
+    price: data.price || null,
+    description: data.description || null,
+    user_id: userId
+  };
+}
+
+async function loadProductsFromSupabase() {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const userId = session.user.id;
+    const { data, error } = await supabaseClient
+      .from('products')
+      .select('*')
+      .eq('user_id', userId)
+      .order('id', { ascending: false });
+    if (error) { console.error('Could not load products:', error); return; }
+    products = (data || []).map(mapProductFromDb);
+    renderProducts();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function saveProduct() {
   const name = document.getElementById('p-name').value.trim();
   if (!name) { alert('Product name required!'); return; }
   const editId = document.getElementById('p-edit-id').value;
-  if (editId) {
-    const p = products.find(p => p.id == editId);
-    if (p) {
-      p.name = name;
-      p.category = document.getElementById('p-category').value;
-      p.price = document.getElementById('p-price').value;
-      p.description = document.getElementById('p-description').value.trim();
+  const data = {
+    name,
+    category: document.getElementById('p-category').value,
+    price: document.getElementById('p-price').value,
+    description: document.getElementById('p-description').value.trim()
+  };
+
+  try {
+    const session = window.__currentSession;
+    if (!session) { alert('Session expired. Please log in again.'); return; }
+    const userId = session.user.id;
+    const dbRow = mapProductToDb(data, userId);
+
+    if (editId) {
+      const { error } = await supabaseClient.from('products').update(dbRow).eq('id', editId);
+      if (error) { alert('Could not update product: ' + error.message); return; }
+    } else {
+      const { error } = await supabaseClient.from('products').insert(dbRow);
+      if (error) { alert('Could not save product: ' + error.message); return; }
     }
-  } else {
-    products.push({
-      id: Date.now(), name,
-      category: document.getElementById('p-category').value,
-      price: document.getElementById('p-price').value,
-      description: document.getElementById('p-description').value.trim()
-    });
+
+    closeModal('productModal'); clearProductForm();
+    await loadProductsFromSupabase();
+  } catch (err) {
+    alert('Something went wrong while saving the product.');
+    console.error(err);
   }
-  save(); closeModal('productModal'); clearProductForm(); renderProducts();
 }
 
 function clearProductForm() {
@@ -6254,8 +6349,16 @@ function editProduct(id) {
   openModal('productModal');
 }
 
-function deleteProduct(id) {
-  if (confirm('Delete this product?')) { products = products.filter(p => p.id !== id); save(); renderProducts(); }
+async function deleteProduct(id) {
+  if (!confirm('Delete this product?')) return;
+  try {
+    const { error } = await supabaseClient.from('products').delete().eq('id', id);
+    if (error) { alert('Could not delete product: ' + error.message); return; }
+    await loadProductsFromSupabase();
+  } catch (err) {
+    alert('Something went wrong while deleting the product.');
+    console.error(err);
+  }
 }
 
 function renderProducts() {
@@ -7026,6 +7129,8 @@ if (remindersEnabled) checkTaskReminders();
       await loadTasksFromSupabase();
       await loadPaymentMethodsFromSupabase();
       await loadInvoicesFromSupabase();
+      await loadTicketsFromSupabase();
+      await loadProductsFromSupabase();
     }
   } catch (err) {
     console.error('Could not initialize leads:', err);

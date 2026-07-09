@@ -697,6 +697,9 @@
     }
     window.__currentSession = session;
     document.documentElement.style.visibility = 'visible';
+    if (typeof loadCategoriesFromSupabase === 'function') {
+      loadCategoriesFromSupabase();
+    }
     if (typeof loadContactsFromSupabase === 'function') {
       loadContactsFromSupabase();
     }
@@ -1663,9 +1666,13 @@ Leadnovaai</textarea>
     </div>
     <div class="form-group">
       <label class="form-label">Service Category</label>
-      <select class="form-control" id="c-category">
+      <select class="form-control" id="c-category" onchange="populateContactStageOptions()">
         <option value="">Unassigned</option>
       </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Pipeline Stage</label>
+      <select class="form-control" id="c-stage"></select>
     </div>
     <div class="form-group">
       <label class="form-label">Company Website</label>
@@ -2595,17 +2602,7 @@ if (!roles) {
   localStorage.setItem('crm_roles', JSON.stringify(roles));
 }
 
-let categories = JSON.parse(localStorage.getItem('crm_categories') || 'null');
-if (!categories) {
-  categories = [
-    { id: 1, name: 'Lead Generation', stages: ['New Lead','Qualifying','List Delivered','Follow-up','Won','Lost'] },
-    { id: 2, name: 'HubSpot CRM Setup', stages: ['Discovery Call','Proposal Sent','Onboarding','Setup In Progress','Handover','Won','Lost'] },
-    { id: 3, name: 'AI Automation', stages: ['Discovery Call','Scoping','Building','Testing','Delivered','Won','Lost'] },
-    { id: 4, name: 'Cold Email Campaign', stages: ['Sequence Started','Replied','Meeting Booked','Proposal Sent','Won','Lost'] },
-    { id: 5, name: 'SEO Backlink', stages: ['Outreach','Guest Post Pitched','Content Approved','Link Placed','Won','Lost'] }
-  ];
-  localStorage.setItem('crm_categories', JSON.stringify(categories));
-}
+let categories = []; // now loaded from Supabase (see loadCategoriesFromSupabase)
 
 function showToast(msg) {
   let el = document.getElementById('toastMsg');
@@ -2762,6 +2759,7 @@ function mapLeadFromDb(row) {
     leadScore: row.lead_score || '',
     owner: row.owner || '',
     category: row.category || '',
+    stage: row.stage || '',
     website: row.website || '',
     linkedin: row.linkedin || '',
     painPoint: row.pain_point || '',
@@ -2791,6 +2789,7 @@ function mapLeadToDb(data, userId) {
     lead_score: data.leadScore || null,
     owner: data.owner || null,
     category: data.category || null,
+    stage: data.stage || null,
     website: data.website || null,
     linkedin: data.linkedin || null,
     pain_point: data.painPoint || null,
@@ -2844,6 +2843,7 @@ async function saveContact() {
     leadScore: document.getElementById('c-leadscore').value,
     owner: document.getElementById('c-owner').value,
     category: document.getElementById('c-category').value,
+    stage: document.getElementById('c-stage').value,
     website: document.getElementById('c-website').value.trim(),
     linkedin: document.getElementById('c-linkedin').value.trim(),
     painPoint: document.getElementById('c-painpoint').value,
@@ -2887,6 +2887,7 @@ function clearContactForm() {
   document.getElementById('c-leadscore').value = '';
   populateOwnerDropdown();
   document.getElementById('c-category').value = '';
+  populateContactStageOptions();
   document.getElementById('c-painpoint').value = '';
   document.getElementById('c-decisionmaker').value = '';
   document.getElementById('c-budget').value = '';
@@ -2913,6 +2914,7 @@ function editContact(id) {
   document.getElementById('c-leadscore').value = c.leadScore || '';
   populateOwnerDropdown(c.owner);
   document.getElementById('c-category').value = c.category || '';
+  populateContactStageOptions(c.stage || '');
   document.getElementById('c-website').value = c.website || '';
   document.getElementById('c-linkedin').value = c.linkedin || '';
   document.getElementById('c-painpoint').value = c.painPoint || '';
@@ -3042,6 +3044,7 @@ function renderLeftCol(c) {
       <div class="cp-keyinfo-title">Key Information</div>
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Contact owner</div><div class="cp-keyinfo-val">${c.owner || window.__currentUserName || 'Unassigned'}</div></div>
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Service Category</div><div class="cp-keyinfo-val">${(categories.find(cat => cat.id == c.category) || {}).name || 'Unassigned'}</div></div>
+      <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Pipeline Stage</div><div class="cp-keyinfo-val">${c.stage || '-'}</div></div>
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Phone Number</div><div class="cp-keyinfo-val">${c.phone || '--'}</div></div>
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Country</div><div class="cp-keyinfo-val">${c.country || '--'}</div></div>
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Lifecycle Stage</div><div class="cp-keyinfo-val">${badge(c.status)}</div></div>
@@ -4176,6 +4179,22 @@ function populateDealStageOptions(selectedStage) {
   autoFillProbability();
 }
 
+function populateContactStageOptions(selectedStage) {
+  const stageSel = document.getElementById('c-stage');
+  if (!stageSel) return;
+  const catId = document.getElementById('c-category').value;
+  let stageList;
+  if (!catId) {
+    stageList = PIPELINE_STAGES.map(s => s.name);
+  } else {
+    const cat = categories.find(c => c.id == catId);
+    stageList = cat ? cat.stages : PIPELINE_STAGES.map(s => s.name);
+  }
+  const current = selectedStage || stageSel.value;
+  stageSel.innerHTML = stageList.map(s => `<option>${s}</option>`).join('');
+  if (current && stageList.includes(current)) stageSel.value = current;
+}
+
 function mapDealFromDb(row) {
   return {
     id: row.id,
@@ -4412,7 +4431,43 @@ function editCategory(id) {
   openModal('categoryModal');
 }
 
-function saveCategory() {
+function mapCategoryFromDb(row) {
+  return {
+    id: row.id,
+    name: row.name || '',
+    stages: row.stages || []
+  };
+}
+
+function mapCategoryToDb(data, userId) {
+  return {
+    name: data.name || null,
+    stages: data.stages || [],
+    user_id: userId
+  };
+}
+
+async function loadCategoriesFromSupabase() {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const userId = session.user.id;
+    const { data, error } = await supabaseClient
+      .from('categories')
+      .select('*')
+      .eq('user_id', userId)
+      .order('id', { ascending: true });
+    if (error) { console.error('Could not load categories:', error); return; }
+    categories = (data || []).map(mapCategoryFromDb);
+    renderCategories();
+    populateCategoryDropdowns();
+    renderDeals();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function saveCategory() {
   const name = document.getElementById('cat-name').value.trim();
   if (!name) { alert('Category name required!'); return; }
   const rows = [...document.querySelectorAll('#cat-stages-list [data-stage-row] input')];
@@ -4420,33 +4475,55 @@ function saveCategory() {
   if (!middleStages.length) { alert('Kam az kam ek pipeline stage add karo.'); return; }
   const stages = [...middleStages, 'Won', 'Lost'];
   const editId = document.getElementById('cat-edit-id').value;
-  if (editId) {
-    const cat = categories.find(c => c.id == editId);
-    if (cat) { cat.name = name; cat.stages = stages; }
-  } else {
-    categories.push({ id: Date.now(), name, stages });
+
+  try {
+    const session = window.__currentSession;
+    if (!session) { alert('Session expired. Please log in again.'); return; }
+    const userId = session.user.id;
+    const dbRow = mapCategoryToDb({ name, stages }, userId);
+
+    if (editId) {
+      const { error } = await supabaseClient.from('categories').update(dbRow).eq('id', editId);
+      if (error) { alert('Could not update category: ' + error.message); return; }
+    } else {
+      const { error } = await supabaseClient.from('categories').insert(dbRow);
+      if (error) { alert('Could not save category: ' + error.message); return; }
+    }
+
+    closeModal('categoryModal'); clearCategoryForm();
+    await loadCategoriesFromSupabase();
+  } catch (err) {
+    alert('Something went wrong while saving the category.');
+    console.error(err);
   }
-  save(); closeModal('categoryModal'); clearCategoryForm(); renderCategories();
-  populateCategoryDropdowns();
 }
 
-function deleteCategory(id) {
+async function deleteCategory(id) {
   const inUse = contacts.some(c => c.category == id) || companies.some(c => c.category == id) || deals.some(d => d.category == id);
   const msg = inUse
     ? 'Ye category kuch contacts/companies/deals mein use ho rahi hai. Delete karne se un par category "Unassigned" ho jayegi. Continue?'
     : 'Delete this category?';
   if (!confirm(msg)) return;
-  categories = categories.filter(c => c.id !== id);
-  contacts.forEach(c => { if (c.category == id) c.category = ''; });
-  companies.forEach(c => { if (c.category == id) c.category = ''; });
-  deals.forEach(d => { if (d.category == id) d.category = ''; });
-  save(); renderCategories(); populateCategoryDropdowns(); renderDeals();
+
+  try {
+    const { error } = await supabaseClient.from('categories').delete().eq('id', id);
+    if (error) { alert('Could not delete category: ' + error.message); return; }
+
+    contacts.forEach(c => { if (c.category == id) c.category = ''; });
+    companies.forEach(c => { if (c.category == id) c.category = ''; });
+    deals.forEach(d => { if (d.category == id) d.category = ''; });
+
+    await loadCategoriesFromSupabase();
+  } catch (err) {
+    alert('Something went wrong while deleting the category.');
+    console.error(err);
+  }
 }
 
 function populateCategoryDropdowns() {
   const opts = '<option value="">Unassigned</option>' + categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
   const contactSel = document.getElementById('c-category');
-  if (contactSel) { const v = contactSel.value; contactSel.innerHTML = opts; contactSel.value = v; }
+  if (contactSel) { const v = contactSel.value; contactSel.innerHTML = opts; contactSel.value = v; populateContactStageOptions(); }
   const companySel = document.getElementById('co-category');
   if (companySel) { const v = companySel.value; companySel.innerHTML = opts; companySel.value = v; }
   const dealSel = document.getElementById('d-category');
@@ -6802,90 +6879,6 @@ function showImportMsg(el, type, msg) {
   setTimeout(() => { el.style.display = 'none'; }, 5000);
 }
 
-// ===== CATEGORIES (PIPELINE STAGES) - SUPABASE =====
-async function loadCategoriesFromSupabase() {
-  try {
-    const session = window.__currentSession;
-    if (!session) return;
-
-    const { data, error } = await supabaseClient
-      .from('categories')
-      .select('*')
-      .eq('user_id', session.user.id)
-      .order('created_at', { ascending: true });
-
-    if (error) throw error;
-
-    window.serviceCategories = (data || []).map(cat => ({
-      id: cat.id,
-      name: cat.name,
-      stages: cat.stages || []
-    }));
-    
-    console.log('✅ Categories loaded from Supabase:', window.serviceCategories.length);
-  } catch (err) {
-    console.error('❌ Error loading categories:', err);
-  }
-}
-
-async function saveCategoryToSupabase(category) {
-  try {
-    const session = window.__currentSession;
-    if (!session) {
-      alert('Session not found!');
-      return;
-    }
-
-    const { data, error } = await supabaseClient
-      .from('categories')
-      .insert([{
-        name: category.name,
-        stages: category.stages || [],
-        user_id: session.user.id
-      }])
-      .select();
-
-    if (error) throw error;
-    console.log('✅ Category saved:', data[0]);
-    return data[0];
-  } catch (err) {
-    console.error('❌ Error saving category:', err);
-    alert('Error saving category: ' + err.message);
-  }
-}
-
-async function updateCategoryInSupabase(categoryId, updates) {
-  try {
-    const { data, error } = await supabaseClient
-      .from('categories')
-      .update(updates)
-      .eq('id', categoryId)
-      .select();
-
-    if (error) throw error;
-    console.log('✅ Category updated:', data[0]);
-    return data[0];
-  } catch (err) {
-    console.error('❌ Error updating category:', err);
-    alert('Error updating category: ' + err.message);
-  }
-}
-
-async function deleteCategoryFromSupabase(categoryId) {
-  try {
-    const { error } = await supabaseClient
-      .from('categories')
-      .delete()
-      .eq('id', categoryId);
-
-    if (error) throw error;
-    console.log('✅ Category deleted');
-  } catch (err) {
-    console.error('❌ Error deleting category:', err);
-    alert('Error deleting category: ' + err.message);
-  }
-}
-
 // INIT
 renderDashboard();
 populateCategoryDropdowns();
@@ -6903,16 +6896,11 @@ if (remindersEnabled) checkTaskReminders();
       window.__currentSession = session;
     }
     if (session) {
-      // 🆕 Load Categories FIRST (Deals depend karta hai!)
       await loadCategoriesFromSupabase();
-      
-      // Load other data
       await loadContactsFromSupabase();
       await loadCompaniesFromSupabase();
       await loadDealsFromSupabase();
       await loadTasksFromSupabase();
-      
-      console.log('✅ All Supabase data loaded successfully!');
     }
   } catch (err) {
     console.error('Could not initialize leads:', err);

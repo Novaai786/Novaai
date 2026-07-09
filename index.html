@@ -2551,8 +2551,8 @@ function createTimeTrigger() {
 // DATA
 let contacts = [];
 let companies = [];
-let paymentMethods = JSON.parse(localStorage.getItem('crm_paymentMethods') || '[]');
-let invoices = JSON.parse(localStorage.getItem('crm_invoices') || '[]');
+let paymentMethods = []; // now loaded from Supabase (see loadPaymentMethodsFromSupabase)
+let invoices = []; // now loaded from Supabase (see loadInvoicesFromSupabase)
 let deals = [];
 let tasks = [];
 let tickets = JSON.parse(localStorage.getItem('crm_tickets') || '[]');
@@ -3511,28 +3511,84 @@ function renderProfilePayments(c) {
       </div>`).join('') : `<div style="text-align:center;color:var(--text-light);font-size:13px;padding:14px">No payment methods added.</div>`}`;
 }
 
-function addPaymentMethod(contactId) {
+function mapPaymentMethodFromDb(row) {
+  return {
+    id: row.id,
+    type: row.type || '',
+    details: row.details || '',
+    contactId: row.contactid || null
+  };
+}
+
+function mapPaymentMethodToDb(data, userId) {
+  return {
+    type: data.type || null,
+    details: data.details || null,
+    contactid: data.contactId || null,
+    user_id: userId
+  };
+}
+
+async function loadPaymentMethodsFromSupabase() {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const userId = session.user.id;
+    const { data, error } = await supabaseClient
+      .from('payment_methods')
+      .select('*')
+      .eq('user_id', userId)
+      .order('id', { ascending: false });
+    if (error) { console.error('Could not load payment methods:', error); return; }
+    paymentMethods = (data || []).map(mapPaymentMethodFromDb);
+    renderContactProfileBody();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function addPaymentMethod(contactId) {
   const c = contacts.find(c => c.id === contactId);
   if (!c) return;
   const details = document.getElementById('pm-details').value.trim();
   if (!details) { alert('Please enter payment details!'); return; }
-  paymentMethods.push({ id: Date.now(), type: document.getElementById('pm-type').value, details, contactId });
-  save();
-  renderContactProfileBody();
+  try {
+    const session = window.__currentSession;
+    if (!session) { alert('Session expired. Please log in again.'); return; }
+    const userId = session.user.id;
+    const dbRow = mapPaymentMethodToDb({ type: document.getElementById('pm-type').value, details, contactId }, userId);
+    const { error } = await supabaseClient.from('payment_methods').insert(dbRow);
+    if (error) { alert('Could not save payment method: ' + error.message); return; }
+    await loadPaymentMethodsFromSupabase();
+  } catch (err) {
+    alert('Something went wrong while saving the payment method.');
+    console.error(err);
+  }
 }
 
-function deletePaymentMethod(pmId) {
-  paymentMethods = paymentMethods.filter(p => p.id !== pmId);
-  save();
-  renderContactProfileBody();
+async function deletePaymentMethod(pmId) {
+  if (!confirm('Delete this payment method?')) return;
+  try {
+    const { error } = await supabaseClient.from('payment_methods').delete().eq('id', pmId);
+    if (error) { alert('Could not delete payment method: ' + error.message); return; }
+    await loadPaymentMethodsFromSupabase();
+  } catch (err) {
+    alert('Something went wrong while deleting the payment method.');
+    console.error(err);
+  }
 }
 
-function linkExistingPaymentMethod(contactId, pmId) {
+async function linkExistingPaymentMethod(contactId, pmId) {
   const p = paymentMethods.find(p => String(p.id) === String(pmId));
   if (!p) return;
-  p.contactId = contactId;
-  save();
-  renderContactProfileBody();
+  try {
+    const { error } = await supabaseClient.from('payment_methods').update({ contactid: contactId }).eq('id', pmId);
+    if (error) { alert('Could not link payment method: ' + error.message); return; }
+    await loadPaymentMethodsFromSupabase();
+  } catch (err) {
+    alert('Something went wrong while linking the payment method.');
+    console.error(err);
+  }
 }
 
 function renderProfileInvoices(c) {
@@ -3596,7 +3652,51 @@ function clearInvoiceForm() {
   document.getElementById('inv-notes').value = '';
 }
 
-function saveInvoice() {
+function mapInvoiceFromDb(row) {
+  return {
+    id: row.id,
+    number: row.number || '',
+    amount: row.amount || '',
+    status: row.status || 'Draft',
+    date: row.date || '',
+    dueDate: row.duedate || '',
+    notes: row.notes || '',
+    contactId: row.contactid || null
+  };
+}
+
+function mapInvoiceToDb(data, userId) {
+  return {
+    number: data.number || null,
+    amount: data.amount || null,
+    status: data.status || null,
+    date: data.date || null,
+    duedate: data.dueDate || null,
+    notes: data.notes || null,
+    contactid: data.contactId || null,
+    user_id: userId
+  };
+}
+
+async function loadInvoicesFromSupabase() {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const userId = session.user.id;
+    const { data, error } = await supabaseClient
+      .from('invoices')
+      .select('*')
+      .eq('user_id', userId)
+      .order('id', { ascending: false });
+    if (error) { console.error('Could not load invoices:', error); return; }
+    invoices = (data || []).map(mapInvoiceFromDb);
+    renderContactProfileBody();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function saveInvoice() {
   const number = document.getElementById('inv-number').value.trim();
   if (!number) { alert('Invoice number required!'); return; }
   const editId = document.getElementById('inv-edit-id').value;
@@ -3610,32 +3710,55 @@ function saveInvoice() {
     notes: document.getElementById('inv-notes').value.trim(),
     contactId
   };
-  if (editId) {
-    const i = invoices.find(i => i.id == editId);
-    if (i) Object.assign(i, data);
-  } else {
-    invoices.push(Object.assign({ id: Date.now() }, data));
+
+  try {
+    const session = window.__currentSession;
+    if (!session) { alert('Session expired. Please log in again.'); return; }
+    const userId = session.user.id;
+    const dbRow = mapInvoiceToDb(data, userId);
+
+    if (editId) {
+      const { error } = await supabaseClient.from('invoices').update(dbRow).eq('id', editId);
+      if (error) { alert('Could not update invoice: ' + error.message); return; }
+    } else {
+      const { error } = await supabaseClient.from('invoices').insert(dbRow);
+      if (error) { alert('Could not save invoice: ' + error.message); return; }
+    }
+
+    closeModal('invoiceModal');
+    clearInvoiceForm();
+    await loadInvoicesFromSupabase();
+    currentProfileContactId = contactId;
+    openContactProfile(contactId);
+  } catch (err) {
+    alert('Something went wrong while saving the invoice.');
+    console.error(err);
   }
-  save();
-  closeModal('invoiceModal');
-  clearInvoiceForm();
-  currentProfileContactId = contactId;
-  openContactProfile(contactId);
 }
 
-function deleteInvoice(id) {
+async function deleteInvoice(id) {
   if (!confirm('Delete this invoice?')) return;
-  invoices = invoices.filter(i => i.id !== id);
-  save();
-  renderContactProfileBody();
+  try {
+    const { error } = await supabaseClient.from('invoices').delete().eq('id', id);
+    if (error) { alert('Could not delete invoice: ' + error.message); return; }
+    await loadInvoicesFromSupabase();
+  } catch (err) {
+    alert('Something went wrong while deleting the invoice.');
+    console.error(err);
+  }
 }
 
-function linkExistingInvoice(contactId, invId) {
+async function linkExistingInvoice(contactId, invId) {
   const i = invoices.find(i => String(i.id) === String(invId));
   if (!i) return;
-  i.contactId = contactId;
-  save();
-  renderContactProfileBody();
+  try {
+    const { error } = await supabaseClient.from('invoices').update({ contactid: contactId }).eq('id', invId);
+    if (error) { alert('Could not link invoice: ' + error.message); return; }
+    await loadInvoicesFromSupabase();
+  } catch (err) {
+    alert('Something went wrong while linking the invoice.');
+    console.error(err);
+  }
 }
 
 function printInvoice(id) {
@@ -6901,6 +7024,8 @@ if (remindersEnabled) checkTaskReminders();
       await loadCompaniesFromSupabase();
       await loadDealsFromSupabase();
       await loadTasksFromSupabase();
+      await loadPaymentMethodsFromSupabase();
+      await loadInvoicesFromSupabase();
     }
   } catch (err) {
     console.error('Could not initialize leads:', err);

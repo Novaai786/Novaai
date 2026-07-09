@@ -5288,7 +5288,7 @@ async function loadCampaignSettingsFromSupabase() {
       .eq('user_id', userId)
       .maybeSingle();
     if (error) { console.error('Could not load campaign settings:', error); return; }
-    campaignSettings = data ? { webAppUrl: data.web_app_url || '', fromName: data.from_name || '' } : {};
+    campaignSettings = data ? { webAppUrl: data.web_app_url || '', fromName: data.from_name || '', campaignGoal: data.campaign_goal || null } : {};
     if (document.getElementById('campaignWebAppUrl')) loadCampaignSettings();
   } catch (err) {
     console.error(err);
@@ -5303,7 +5303,8 @@ function loadCampaignSettings() {
 async function saveCampaignSettings() {
   campaignSettings = {
     webAppUrl: document.getElementById('campaignWebAppUrl').value.trim(),
-    fromName: document.getElementById('campaignFromName').value.trim()
+    fromName: document.getElementById('campaignFromName').value.trim(),
+    campaignGoal: campaignSettings.campaignGoal || null
   };
   const msg = document.getElementById('campaignSettingsSaved');
   try {
@@ -5312,7 +5313,7 @@ async function saveCampaignSettings() {
     const userId = session.user.id;
     const { error } = await supabaseClient
       .from('campaign_settings')
-      .upsert({ web_app_url: campaignSettings.webAppUrl, from_name: campaignSettings.fromName, user_id: userId }, { onConflict: 'user_id' });
+      .upsert({ web_app_url: campaignSettings.webAppUrl, from_name: campaignSettings.fromName, campaign_goal: campaignSettings.campaignGoal, user_id: userId }, { onConflict: 'user_id' });
     if (error) { alert('Could not save campaign settings: ' + error.message); return; }
     msg.textContent = '✓ Saved';
     setTimeout(() => msg.textContent = '', 2000);
@@ -6259,7 +6260,7 @@ function updateCampaignStats() {
   document.getElementById('statOpened').textContent = opened;
   document.getElementById('statReplied').textContent = replied;
 
-  const goal = parseInt(localStorage.getItem('crm_campaign_goal') || '');
+  const goal = parseInt(campaignSettings.campaignGoal || '');
   const goalInput = document.getElementById('campaignGoalInput');
   if (goal) {
     goalInput.value = goal;
@@ -6269,11 +6270,22 @@ function updateCampaignStats() {
   }
 }
 
-function saveCampaignGoal() {
+async function saveCampaignGoal() {
   const val = document.getElementById('campaignGoalInput').value;
-  if (val) localStorage.setItem('crm_campaign_goal', val);
-  else localStorage.removeItem('crm_campaign_goal');
-  updateCampaignStats();
+  campaignSettings.campaignGoal = val || null;
+  try {
+    const session = window.__currentSession;
+    if (!session) { alert('Session expired. Please log in again.'); return; }
+    const userId = session.user.id;
+    const { error } = await supabaseClient
+      .from('campaign_settings')
+      .upsert({ web_app_url: campaignSettings.webAppUrl || null, from_name: campaignSettings.fromName || null, campaign_goal: campaignSettings.campaignGoal, user_id: userId }, { onConflict: 'user_id' });
+    if (error) { alert('Could not save campaign goal: ' + error.message); return; }
+    updateCampaignStats();
+  } catch (err) {
+    alert('Something went wrong while saving the campaign goal.');
+    console.error(err);
+  }
 }
 
 function renderCampaignTrackingTable() {

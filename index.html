@@ -712,7 +712,7 @@
 <!-- SIDEBAR -->
 <aside class="sidebar" id="sidebar">
   <div class="logo">
-    <div class="logo-icon">⚡</div>
+    <div class="logo-icon" id="sidebarLogoIcon" style="overflow:hidden">⚡</div>
     <div class="logo-text">Nova<span>AICRM</span></div>
   </div>
   <nav>
@@ -775,10 +775,9 @@
       <input type="text" placeholder="Search..." id="globalSearch" oninput="globalSearch()">
     </div>
     <div class="topbar-actions">
-      <button class="btn btn-primary" onclick="openAddModal()" id="addBtn" style="display:none">+ Create</button>
       <div class="user-menu-wrap">
         <button class="user-menu-btn" onclick="toggleUserMenu()">
-          <div class="avatar" title="Account" style="width:36px;height:36px;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;">👤</div>
+          <div class="avatar" title="Account" id="topbarAvatar" style="width:36px;height:36px;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;overflow:hidden;">👤</div>
           <span class="user-menu-caret">▾</span>
         </button>
         <div class="user-dropdown" id="userDropdown">
@@ -2297,6 +2296,27 @@ Leadnovaai</textarea>
       <div class="modal-title">Complete Your Profile</div>
       <button class="modal-close" onclick="closeModal('completeProfileModal')">✕</button>
     </div>
+
+    <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:16px">
+      <!-- Profile Picture Upload -->
+      <div style="text-align:center">
+        <div class="form-label" style="margin-bottom:8px">Profile Picture</div>
+        <div id="cp-avatar-preview" style="width:80px;height:80px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:24px;overflow:hidden;margin:0 auto 8px;border:2px solid var(--border)">👤</div>
+        <input type="file" id="cp-avatar-file" accept="image/*" style="display:none" onchange="previewAndUploadImage(event,'avatar')">
+        <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('cp-avatar-file').click()">📷 Upload Photo</button>
+      </div>
+      <!-- Company Logo Upload -->
+      <div style="text-align:center">
+        <div class="form-label" style="margin-bottom:8px">Company Logo</div>
+        <div id="cp-logo-preview" style="width:80px;height:80px;border-radius:12px;background:var(--bg);color:var(--text-light);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:24px;overflow:hidden;margin:0 auto 8px;border:2px solid var(--border)">🏢</div>
+        <input type="file" id="cp-logo-file" accept="image/*" style="display:none" onchange="previewAndUploadImage(event,'logo')">
+        <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('cp-logo-file').click()">🖼️ Upload Logo</button>
+      </div>
+    </div>
+    <div id="cp-upload-msg" style="font-size:12px;color:var(--text-light);margin-bottom:10px;display:none"></div>
+    <input type="hidden" id="cp-avatar-url">
+    <input type="hidden" id="cp-logo-url">
+
     <div class="form-group">
       <label class="form-label">Full Name *</label>
       <input class="form-control" id="cp-full-name" placeholder="e.g. Nadir Hussain">
@@ -2758,18 +2778,6 @@ function showSection(id, el) {
     team:'Team & Roles'
   };
   document.getElementById('pageTitle').textContent = titles[id] || id;
-  const btnLabels = {
-    dashboard:null, contacts:'+ Create Contact', companies:'+ Create Company', deals:null,
-    categories:'+ Add Category', tasks:'+ Create Task', email:'+ Create Email Log', products:'+ Create Product',
-    automation:null, reports:null, importexport:null, team:'+ Add Team Member'
-  };
-  const addBtn = document.getElementById('addBtn');
-  if (btnLabels[id] === null) {
-    addBtn.style.display = 'none';
-  } else {
-    addBtn.style.display = '';
-    addBtn.textContent = btnLabels[id] || '+ Create';
-  }
   closeSidebar();
   if (id === 'dashboard') renderDashboard();
   if (id === 'contacts') renderContacts();
@@ -2781,17 +2789,6 @@ function showSection(id, el) {
   if (id === 'products') renderProducts();
   if (id === 'reports') renderReports();
   if (id === 'team') renderTeam();
-}
-
-function openAddModal() {
-  const active = document.querySelector('.section.active').id.replace('section-','');
-  const map = {contacts:'contactModal',companies:'companyModal',deals:'dealModal',categories:'categoryModal',tasks:'taskModal',email:'emailModal',dashboard:'contactModal',products:'productModal',team:'teamModal'};
-  if (map[active] === 'contactModal') clearContactForm();
-  if (map[active] === 'dealModal') clearDealForm();
-  if (map[active] === 'categoryModal') clearCategoryForm();
-  if (map[active] === 'productModal') clearProductForm();
-  if (map[active] === 'teamModal') clearTeamForm();
-  if (map[active]) openModal(map[active]);
 }
 
 // MODAL
@@ -7637,13 +7634,14 @@ if (remindersEnabled) checkTaskReminders();
 
     const { data: profile } = await supabaseClient
       .from('profiles')
-      .select('full_name')
+      .select('full_name, avatar_url, logo_url')
       .eq('id', user.id)
       .single();
 
     document.getElementById('userMenuName').textContent =
       (profile && profile.full_name) ? profile.full_name : 'My Account';
     window.__currentUserName = (profile && profile.full_name) ? profile.full_name : (user.email || 'Me');
+    if (profile) applyProfileMediaToUI(profile.avatar_url, profile.logo_url);
     if (typeof populateOwnerDropdown === 'function') populateOwnerDropdown();
   } catch (err) {
     console.error('Could not load user menu info:', err);
@@ -7707,6 +7705,7 @@ async function handleDeleteAccount() {
 async function openCompleteProfile() {
   toggleUserMenu();
   document.getElementById('cp-error').style.display = 'none';
+  document.getElementById('cp-upload-msg').style.display = 'none';
 
   try {
     const session = window.__currentSession;
@@ -7714,7 +7713,7 @@ async function openCompleteProfile() {
 
     const { data: profile, error } = await supabaseClient
       .from('profiles')
-      .select('full_name, agency_name, founded_date, phone, website, address, currency')
+      .select('full_name, agency_name, founded_date, phone, website, address, currency, avatar_url, logo_url')
       .eq('id', userId)
       .single();
 
@@ -7728,12 +7727,103 @@ async function openCompleteProfile() {
       document.getElementById('cp-website').value = profile.website || '';
       document.getElementById('cp-address').value = profile.address || '';
       document.getElementById('cp-currency').value = profile.currency || 'USD';
+      document.getElementById('cp-avatar-url').value = profile.avatar_url || '';
+      document.getElementById('cp-logo-url').value = profile.logo_url || '';
+
+      const avatarPrev = document.getElementById('cp-avatar-preview');
+      avatarPrev.innerHTML = profile.avatar_url
+        ? `<img src="${profile.avatar_url}" style="width:100%;height:100%;object-fit:cover">`
+        : '👤';
+
+      const logoPrev = document.getElementById('cp-logo-preview');
+      logoPrev.innerHTML = profile.logo_url
+        ? `<img src="${profile.logo_url}" style="width:100%;height:100%;object-fit:cover">`
+        : '🏢';
     }
   } catch (err) {
     console.error(err);
   }
 
   openModal('completeProfileModal');
+}
+
+// ===== Image Upload (Profile Picture / Company Logo) =====
+// Requires a public Supabase Storage bucket named "profile-media"
+async function previewAndUploadImage(event, type) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const msgEl = document.getElementById('cp-upload-msg');
+  const previewEl = document.getElementById(type === 'avatar' ? 'cp-avatar-preview' : 'cp-logo-preview');
+  const urlField = document.getElementById(type === 'avatar' ? 'cp-avatar-url' : 'cp-logo-url');
+
+  if (!file.type.startsWith('image/')) {
+    msgEl.style.display = 'block';
+    msgEl.style.color = '#dc2626';
+    msgEl.textContent = 'Please select a valid image file.';
+    return;
+  }
+  if (file.size > 3 * 1024 * 1024) {
+    msgEl.style.display = 'block';
+    msgEl.style.color = '#dc2626';
+    msgEl.textContent = 'Image must be under 3MB.';
+    return;
+  }
+
+  // Instant local preview while uploading
+  const localUrl = URL.createObjectURL(file);
+  previewEl.innerHTML = `<img src="${localUrl}" style="width:100%;height:100%;object-fit:cover">`;
+
+  msgEl.style.display = 'block';
+  msgEl.style.color = 'var(--text-light)';
+  msgEl.textContent = 'Uploading...';
+
+  try {
+    const session = window.__currentSession;
+    const userId = session.user.id;
+    const ext = file.name.split('.').pop();
+    const path = `${type}/${userId}-${Date.now()}.${ext}`;
+
+    const { error: uploadError } = await supabaseClient
+      .storage
+      .from('profile-media')
+      .upload(path, file, { upsert: true });
+
+    if (uploadError) {
+      msgEl.style.color = '#dc2626';
+      msgEl.textContent = 'Upload failed: ' + uploadError.message;
+      return;
+    }
+
+    const { data: publicUrlData } = supabaseClient
+      .storage
+      .from('profile-media')
+      .getPublicUrl(path);
+
+    urlField.value = publicUrlData.publicUrl;
+    msgEl.style.color = 'var(--success)';
+    msgEl.textContent = (type === 'avatar' ? 'Profile picture' : 'Logo') + ' uploaded! Click "Save Profile" to apply.';
+  } catch (err) {
+    console.error(err);
+    msgEl.style.color = '#dc2626';
+    msgEl.textContent = 'Something went wrong while uploading.';
+  }
+}
+
+// Apply avatar/logo to topbar + sidebar UI after load or save
+function applyProfileMediaToUI(avatarUrl, logoUrl) {
+  const topbarAvatar = document.getElementById('topbarAvatar');
+  if (topbarAvatar) {
+    topbarAvatar.innerHTML = avatarUrl
+      ? `<img src="${avatarUrl}" style="width:100%;height:100%;object-fit:cover">`
+      : '👤';
+  }
+  const sidebarLogo = document.getElementById('sidebarLogoIcon');
+  if (sidebarLogo) {
+    sidebarLogo.innerHTML = logoUrl
+      ? `<img src="${logoUrl}" style="width:100%;height:100%;object-fit:cover">`
+      : '⚡';
+  }
 }
 
 async function saveCompleteProfile() {
@@ -7744,6 +7834,8 @@ async function saveCompleteProfile() {
   const website = document.getElementById('cp-website').value.trim();
   const address = document.getElementById('cp-address').value.trim();
   const currency = document.getElementById('cp-currency').value;
+  const avatarUrl = document.getElementById('cp-avatar-url').value.trim();
+  const logoUrl = document.getElementById('cp-logo-url').value.trim();
   const errorBox = document.getElementById('cp-error');
   errorBox.style.display = 'none';
 
@@ -7766,7 +7858,9 @@ async function saveCompleteProfile() {
         phone: phone || null,
         website: website || null,
         address: address || null,
-        currency: currency
+        currency: currency,
+        avatar_url: avatarUrl || null,
+        logo_url: logoUrl || null
       })
       .eq('id', userId);
 
@@ -7777,6 +7871,7 @@ async function saveCompleteProfile() {
     }
 
     document.getElementById('userMenuName').textContent = fullName;
+    applyProfileMediaToUI(avatarUrl, logoUrl);
     closeModal('completeProfileModal');
     alert('Profile updated successfully!');
   } catch (err) {

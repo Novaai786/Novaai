@@ -1335,6 +1335,31 @@ Leadnovaai</textarea>
     <div class="section" id="section-automation">
       <div class="card" style="margin-bottom:20px">
         <div class="card-header">
+          <div class="card-title">⚙️ AI Settings</div>
+          <span id="aiUsageBadge" style="font-size:12px;color:var(--text-light)"></span>
+        </div>
+        <div style="padding:20px">
+          <div class="form-group">
+            <label class="form-label">AI Provider</label>
+            <select class="form-control" id="ai-provider-select" onchange="onAiProviderChange()">
+              <option value="free">🆓 Free (NovaAICRM shared AI — limited daily uses)</option>
+              <option value="openai">OpenAI (your own API key)</option>
+              <option value="claude">Claude (your own API key)</option>
+              <option value="gemini">Gemini (your own API key)</option>
+            </select>
+          </div>
+          <div class="form-group" id="ai-key-group" style="display:none">
+            <label class="form-label">API Key</label>
+            <input class="form-control" id="ai-api-key" type="password" placeholder="Paste your API key">
+            <div style="font-size:11.5px;color:var(--text-light);margin-top:4px">Your key is stored securely and only used for your own AI requests — never shared.</div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="saveAIConfig()">💾 Save AI Settings</button>
+          <span id="ai-config-msg" style="font-size:12px;margin-left:10px;display:none"></span>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header">
           <div class="card-title">🤖 AI Automation Center</div>
           <span style="font-size:12px;color:var(--text-light)">Powered by NovaAICRM Intelligence</span>
         </div>
@@ -6993,50 +7018,183 @@ function renderTeam() {
 }
 
 // ===================== AI AUTOMATION =====================
-function runAI(type) {
+// ===== AI Config (Free / BYOK) =====
+let currentAIConfig = { provider: 'free', daily_usage: 0 };
+
+function onAiProviderChange() {
+  const provider = document.getElementById('ai-provider-select').value;
+  document.getElementById('ai-key-group').style.display = provider === 'free' ? 'none' : 'block';
+}
+
+async function loadAIConfig() {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const { data, error } = await supabaseClient
+      .from('ai_config')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .single();
+    if (!error && data) {
+      currentAIConfig = data;
+      document.getElementById('ai-provider-select').value = data.provider;
+      onAiProviderChange();
+      if (data.provider !== 'free' && data.api_key) {
+        document.getElementById('ai-api-key').value = data.api_key;
+      }
+      updateAIUsageBadge();
+    }
+  } catch (err) {
+    console.error('Could not load AI config:', err);
+  }
+}
+
+function updateAIUsageBadge() {
+  const badge = document.getElementById('aiUsageBadge');
+  if (!badge) return;
+  if (currentAIConfig.provider === 'free') {
+    const today = new Date().toISOString().split('T')[0];
+    const usage = currentAIConfig.usage_date === today ? currentAIConfig.daily_usage : 0;
+    badge.textContent = `Free tier: ${usage}/250 used today`;
+  } else {
+    badge.textContent = `Using your own ${currentAIConfig.provider} key`;
+  }
+}
+
+async function saveAIConfig() {
+  const provider = document.getElementById('ai-provider-select').value;
+  const apiKey = document.getElementById('ai-api-key').value.trim();
+  const msg = document.getElementById('ai-config-msg');
+
+  if (provider !== 'free' && !apiKey) {
+    msg.style.display = 'inline';
+    msg.style.color = '#dc2626';
+    msg.textContent = 'Please enter your API key.';
+    return;
+  }
+
+  try {
+    const session = window.__currentSession;
+    const userId = session.user.id;
+    const { error } = await supabaseClient
+      .from('ai_config')
+      .upsert({
+        user_id: userId,
+        provider: provider,
+        api_key: provider === 'free' ? null : apiKey,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id' });
+
+    if (error) {
+      msg.style.display = 'inline';
+      msg.style.color = '#dc2626';
+      msg.textContent = 'Could not save: ' + error.message;
+      return;
+    }
+
+    msg.style.display = 'inline';
+    msg.style.color = 'var(--success)';
+    msg.textContent = '✓ Saved!';
+    await loadAIConfig();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+// Core function — every real AI feature calls this. Routes to free or BYOK automatically via the edge function.
+async function callAI(prompt, feature) {
+  const session = window.__currentSession;
+  if (!session) throw new Error('Session expired. Please log in again.');
+
+  const { data, error } = await supabaseClient.functions.invoke('ai-generate', {
+    body: { prompt, feature }
+  });
+
+  if (error) {
+    let message = 'AI request failed.';
+    try {
+      const body = await error.context.json();
+      if (body.error === 'quota_exceeded') message = body.message;
+      else if (body.error) message = body.error;
+    } catch (e) {}
+    throw new Error(message);
+  }
+
+  if (data.usage_today) {
+    currentAIConfig.daily_usage = data.usage_today;
+    currentAIConfig.usage_date = new Date().toISOString().split('T')[0];
+    updateAIUsageBadge();
+  }
+
+  return data.text;
+}
+
+async function runAI(type) {
   const card = document.getElementById('aiOutputCard');
   const title = document.getElementById('aiOutputTitle');
   const body = document.getElementById('aiOutputBody');
   card.style.display = 'block';
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   const wonDeals = deals.filter(d => d.stage === 'Won').length;
   const totalDeals = deals.length;
   const conversion = totalDeals ? ((wonDeals / totalDeals) * 100).toFixed(1) : 0;
-  const topContact = contacts.length ? contacts[contacts.length - 1].name : 'your top contact';
+  const topContact = contacts.length ? contacts[contacts.length - 1] : null;
   const openDeals = deals.filter(d => d.stage !== 'Won' && d.stage !== 'Lost');
 
+  // ===== REAL AI: Lead Scoring =====
+  if (type === 'lead-scoring') {
+    title.textContent = '🎯 AI Lead Scoring Results';
+    if (!contacts.length) {
+      body.innerHTML = '<div style="color:var(--text-light)">No contacts found. Add contacts to get lead scores.</div>';
+      return;
+    }
+    body.innerHTML = '<div style="color:var(--text-light)">🤖 AI analysing your leads…</div>';
+    const recent = contacts.slice(-5).reverse();
+    const prompt = `You are a sales AI scoring leads for a CRM. For each contact below, give a score from 0-100 (based on status, company presence, and likely buying intent) and a one-line reason. Respond ONLY as JSON array like [{"name":"...","score":85,"reason":"..."}], nothing else.\n\nContacts:\n${recent.map(c => `- ${c.name}, company: ${c.company || 'unknown'}, status: ${c.status}`).join('\n')}`;
+
+    try {
+      const raw = await callAI(prompt, 'lead-scoring');
+      const clean = raw.replace(/```json|```/g, '').trim();
+      const results = JSON.parse(clean);
+      body.innerHTML = results.map(r => {
+        const score = Math.max(0, Math.min(100, r.score));
+        const bar = '█'.repeat(Math.round(score/10)) + '░'.repeat(10 - Math.round(score/10));
+        return `<div style="margin-bottom:10px;padding:10px;background:var(--bg);border-radius:8px">
+          <strong>${r.name}</strong><br>
+          <span style="font-family:monospace;color:var(--primary)">${bar}</span> <strong>${score}/100</strong><br>
+          <span style="font-size:12px;color:var(--text-light)">${r.reason || ''}</span>
+        </div>`;
+      }).join('') + '<br><em style="color:var(--text-light)">Scored live by AI based on your contact data.</em>';
+    } catch (err) {
+      body.innerHTML = `<div style="color:#dc2626">⚠️ ${err.message}</div>`;
+    }
+    return;
+  }
+
+  // ===== REAL AI: Email Writer =====
+  if (type === 'email-writer') {
+    title.textContent = '✉️ AI Email Draft';
+    if (!topContact) {
+      body.innerHTML = '<div style="color:var(--text-light)">No contacts found. Add a contact first.</div>';
+      return;
+    }
+    body.innerHTML = '<div style="color:var(--text-light)">🤖 AI writing your email…</div>';
+    const prompt = `Write a short, personalised cold outreach email (under 120 words) from a sales agency to a lead named ${topContact.name}${topContact.company ? ' at ' + topContact.company : ''}. Tone: friendly, professional, not pushy. Include a subject line. Format as:\nSubject: ...\n\n[email body]`;
+
+    try {
+      const draft = await callAI(prompt, 'email-writer');
+      body.innerHTML = `<strong>Generated for: ${topContact.name}</strong><br><br>
+        <div style="background:var(--bg);padding:16px;border-radius:8px;border-left:3px solid var(--primary);white-space:pre-wrap">${draft}</div>
+        <br><em style="color:var(--text-light)">Personalise before sending.</em>`;
+    } catch (err) {
+      body.innerHTML = `<div style="color:#dc2626">⚠️ ${err.message}</div>`;
+    }
+    return;
+  }
+
+  // ===== Rule-based (upgrading to AI in a later step) =====
   const outputs = {
-    'lead-scoring': {
-      t: '🎯 AI Lead Scoring Results',
-      b: `<strong>Lead Scoring Complete — ${contacts.length} contacts analysed</strong><br><br>
-          ${contacts.length === 0 ? 'No contacts found. Add contacts to get lead scores.' :
-          contacts.slice(-5).reverse().map((c, i) => {
-            const score = Math.max(40, 95 - (i * 12) + (c.status === 'Interested' ? 15 : c.status === 'Contacted' ? 5 : 0));
-            const bar = '█'.repeat(Math.round(score/10)) + '░'.repeat(10 - Math.round(score/10));
-            return `<div style="margin-bottom:10px;padding:10px;background:var(--bg);border-radius:8px">
-              <strong>${c.name}</strong> — ${c.company || 'No company'}<br>
-              <span style="font-family:monospace;color:var(--primary)">${bar}</span> <strong>${score}/100</strong>
-              <span style="margin-left:8px">${badge(c.status)}</span>
-            </div>`;
-          }).join('')}
-          <br><em style="color:var(--text-light)">Scores based on status, engagement, and recency. Update contact status to refresh scores.</em>`
-    },
-    'email-writer': {
-      t: '✉️ AI Email Draft',
-      b: `<strong>Generated cold outreach email for: ${topContact}</strong><br><br>
-          <div style="background:var(--bg);padding:16px;border-radius:8px;border-left:3px solid var(--primary)">
-            <strong>Subject:</strong> Quick question about your CRM setup<br><br>
-            Hi ${topContact.split(' ')[0]},<br><br>
-            I came across your company and noticed you might be looking to streamline your sales process. 
-            Many businesses in your space are leaving money on the table without a proper CRM setup.<br><br>
-            I help companies like yours set up HubSpot, automate lead follow-ups, and close more deals 
-            — typically within 2–3 weeks.<br><br>
-            Would you be open to a 15-minute call this week to see if there's a fit?<br><br>
-            Best,<br>
-            [Your Name]
-          </div>
-          <br><em style="color:var(--text-light)">Personalise before sending. Add more contacts to generate tailored variations.</em>`
-    },
     'followup': {
       t: '🔁 AI Follow-up Suggestions',
       b: `<strong>Follow-up plan generated for ${contacts.filter(c=>c.status==='Contacted'||c.status==='New').length} active leads</strong><br><br>
@@ -7079,7 +7237,6 @@ function runAI(type) {
   const out = outputs[type];
   title.textContent = out.t;
   body.innerHTML = out.b;
-  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ===================== REPORTS =====================
@@ -7597,6 +7754,7 @@ function showImportMsg(el, type, msg) {
   if (favicon) favicon.dataset.defaultHref = favicon.href;
 })();
 renderDashboard();
+loadAIConfig();
 populateCategoryDropdowns();
 populateRoleDropdown();
 updateBadges();

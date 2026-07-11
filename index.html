@@ -1339,19 +1339,37 @@ Leadnovaai</textarea>
           <span id="aiUsageBadge" style="font-size:12px;color:var(--text-light)"></span>
         </div>
         <div style="padding:20px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:12px 14px;margin-bottom:16px">
+            <div style="font-size:13px;color:#1E3A8A">
+              📖 <b>New here?</b> Get your own free AI key (Gemini or Groq) in 2 minutes.
+            </div>
+            <button class="btn btn-outline btn-sm" onclick="downloadAIGuide()" style="white-space:nowrap">Get Free Setup Guide</button>
+          </div>
+          <div id="aiTrialBanner" style="display:none;align-items:flex-start;gap:10px;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;padding:12px 14px;margin-bottom:16px">
+            <span style="font-size:18px">⚠️</span>
+            <div style="font-size:13px;color:#991B1B">
+              <strong>Aapka 3-din ka free AI trial khatam ho gaya hai.</strong><br>
+              AI features dobara use karne ke liye neeche apna free provider select karein aur API key add karein.
+              Step-by-step guide ke liye upar <b>"Get Free Setup Guide"</b> button dabayein.
+            </div>
+          </div>
           <div class="form-group">
             <label class="form-label">AI Provider</label>
             <select class="form-control" id="ai-provider-select" onchange="onAiProviderChange()">
-              <option value="free">🆓 Free (NovaAICRM shared AI — limited daily uses)</option>
-              <option value="openai">OpenAI (your own API key)</option>
-              <option value="claude">Claude (your own API key)</option>
-              <option value="gemini">Gemini (your own API key)</option>
+              <option value="free">🆓 Free (3-day trial, 250 calls/day shared)</option>
+              <option value="gemini">Gemini — your own key (free, 1,500 calls/day)</option>
+              <option value="groq">Groq — your own key (free, ~1,000 calls/day, super fast)</option>
+              <option value="cerebras">Cerebras — your own key (free, ~1M tokens/day)</option>
+              <option value="openrouter">OpenRouter — your own key (free, 50+ models)</option>
+              <option value="cloudflare">Cloudflare Workers AI — your own key (free, ~10,000/day)</option>
+              <option value="openai">OpenAI (your own paid key)</option>
+              <option value="claude">Claude (your own paid key)</option>
             </select>
           </div>
           <div class="form-group" id="ai-key-group" style="display:none">
             <label class="form-label">API Key</label>
             <input class="form-control" id="ai-api-key" type="password" placeholder="Paste your API key">
-            <div style="font-size:11.5px;color:var(--text-light);margin-top:4px">Your key is stored securely and only used for your own AI requests — never shared.</div>
+            <div style="font-size:11.5px;color:var(--text-light);margin-top:4px" id="ai-key-hint">Your key is stored securely and only used for your own AI requests — never shared.</div>
           </div>
           <button class="btn btn-primary btn-sm" onclick="saveAIConfig()">💾 Save AI Settings</button>
           <span id="ai-config-msg" style="font-size:12px;margin-left:10px;display:none"></span>
@@ -1369,7 +1387,16 @@ Leadnovaai</textarea>
               <div class="ai-card-icon">🎯</div>
               <div><span class="ai-card-badge">AI SCORING</span></div>
               <div class="ai-card-title">AI Lead Scoring</div>
-              <div class="ai-card-desc">Automatically score and rank your leads based on engagement, company size, and deal potential. Focus your energy on the highest value prospects.</div>
+              <div class="ai-card-desc">Select the leads you want scored — AI evaluates engagement, company signals, and buying intent for exactly the contacts you choose.</div>
+              <div style="margin-bottom:10px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                  <span style="font-size:12px;color:var(--text-light)">Select leads</span>
+                  <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer">
+                    <input type="checkbox" id="scoring-select-all" onchange="toggleAllScoringLeads(this)"> Select all
+                  </label>
+                </div>
+                <div id="scoring-lead-list" style="max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--bg)"></div>
+              </div>
               <button class="btn btn-primary btn-sm" onclick="runAI('lead-scoring')">Run Lead Scoring</button>
             </div>
             <div class="ai-card">
@@ -1377,6 +1404,10 @@ Leadnovaai</textarea>
               <div><span class="ai-card-badge">AI WRITER</span></div>
               <div class="ai-card-title">AI Email Writer</div>
               <div class="ai-card-desc">Generate personalised cold emails, follow-ups, and outreach sequences instantly. Just select a contact and let AI craft the perfect message.</div>
+              <div style="margin-bottom:10px">
+                <span style="font-size:12px;color:var(--text-light)">Select a contact</span>
+                <select class="form-control" id="email-writer-contact" style="margin-top:4px"></select>
+              </div>
               <button class="btn btn-primary btn-sm" onclick="runAI('email-writer')">Generate Email</button>
             </div>
             <div class="ai-card">
@@ -2810,6 +2841,7 @@ function showSection(id, el) {
   document.getElementById('pageTitle').textContent = titles[id] || id;
   closeSidebar();
   if (id === 'dashboard') renderDashboard();
+  if (id === 'automation') populateAIContactSelectors();
   if (id === 'contacts') renderContacts();
   if (id === 'companies') renderCompanies();
   if (id === 'deals') renderDeals();
@@ -7021,9 +7053,40 @@ function renderTeam() {
 // ===== AI Config (Free / BYOK) =====
 let currentAIConfig = { provider: 'free', daily_usage: 0 };
 
+// ===== Free AI Setup Guide (embedded PDF, no external hosting needed) =====
+const AI_GUIDE_PDF_B64 = "JVBERi0xLjQKJZOMi54gUmVwb3J0TGFiIEdlbmVyYXRlZCBQREYgZG9jdW1lbnQgKG9wZW5zb3VyY2UpCjEgMCBvYmoKPDwKL0YxIDIgMCBSIC9GMiAzIDAgUiAvRjMgNCAwIFIgL0Y0IDYgMCBSCj4+CmVuZG9iagoyIDAgb2JqCjw8Ci9CYXNlRm9udCAvSGVsdmV0aWNhIC9FbmNvZGluZyAvV2luQW5zaUVuY29kaW5nIC9OYW1lIC9GMSAvU3VidHlwZSAvVHlwZTEgL1R5cGUgL0ZvbnQKPj4KZW5kb2JqCjMgMCBvYmoKPDwKL0Jhc2VGb250IC9IZWx2ZXRpY2EtQm9sZCAvRW5jb2RpbmcgL1dpbkFuc2lFbmNvZGluZyAvTmFtZSAvRjIgL1N1YnR5cGUgL1R5cGUxIC9UeXBlIC9Gb250Cj4+CmVuZG9iago0IDAgb2JqCjw8Ci9CYXNlRm9udCAvU3ltYm9sIC9OYW1lIC9GMyAvU3VidHlwZSAvVHlwZTEgL1R5cGUgL0ZvbnQKPj4KZW5kb2JqCjUgMCBvYmoKPDwKL0NvbnRlbnRzIDExIDAgUiAvTWVkaWFCb3ggWyAwIDAgNTk1LjI3NTYgODQxLjg4OTggXSAvUGFyZW50IDEwIDAgUiAvUmVzb3VyY2VzIDw8Ci9Gb250IDEgMCBSIC9Qcm9jU2V0IFsgL1BERiAvVGV4dCAvSW1hZ2VCIC9JbWFnZUMgL0ltYWdlSSBdCj4+IC9Sb3RhdGUgMCAvVHJhbnMgPDwKCj4+IAogIC9UeXBlIC9QYWdlCj4+CmVuZG9iago2IDAgb2JqCjw8Ci9CYXNlRm9udCAvWmFwZkRpbmdiYXRzIC9OYW1lIC9GNCAvU3VidHlwZSAvVHlwZTEgL1R5cGUgL0ZvbnQKPj4KZW5kb2JqCjcgMCBvYmoKPDwKL0NvbnRlbnRzIDEyIDAgUiAvTWVkaWFCb3ggWyAwIDAgNTk1LjI3NTYgODQxLjg4OTggXSAvUGFyZW50IDEwIDAgUiAvUmVzb3VyY2VzIDw8Ci9Gb250IDEgMCBSIC9Qcm9jU2V0IFsgL1BERiAvVGV4dCAvSW1hZ2VCIC9JbWFnZUMgL0ltYWdlSSBdCj4+IC9Sb3RhdGUgMCAvVHJhbnMgPDwKCj4+IAogIC9UeXBlIC9QYWdlCj4+CmVuZG9iago4IDAgb2JqCjw8Ci9QYWdlTW9kZSAvVXNlTm9uZSAvUGFnZXMgMTAgMCBSIC9UeXBlIC9DYXRhbG9nCj4+CmVuZG9iago5IDAgb2JqCjw8Ci9BdXRob3IgKFwoYW5vbnltb3VzXCkpIC9DcmVhdGlvbkRhdGUgKEQ6MjAyNjA3MTEwNDU5MTErMDAnMDAnKSAvQ3JlYXRvciAoXCh1bnNwZWNpZmllZFwpKSAvS2V5d29yZHMgKCkgL01vZERhdGUgKEQ6MjAyNjA3MTEwNDU5MTErMDAnMDAnKSAvUHJvZHVjZXIgKFJlcG9ydExhYiBQREYgTGlicmFyeSAtIFwob3BlbnNvdXJjZVwpKSAKICAvU3ViamVjdCAoXCh1bnNwZWNpZmllZFwpKSAvVGl0bGUgKFwoYW5vbnltb3VzXCkpIC9UcmFwcGVkIC9GYWxzZQo+PgplbmRvYmoKMTAgMCBvYmoKPDwKL0NvdW50IDIgL0tpZHMgWyA1IDAgUiA3IDAgUiBdIC9UeXBlIC9QYWdlcwo+PgplbmRvYmoKMTEgMCBvYmoKPDwKL0ZpbHRlciBbIC9BU0NJSTg1RGVjb2RlIC9GbGF0ZURlY29kZSBdIC9MZW5ndGggMjA0NQo+PgpzdHJlYW0KR2IhO2U5NjhpRyZBSUkzbS5lcFcpNE1lYkdBYDttR2FxOENhMT5lTihSVGUiNm1UVTFPPCsjQGhxZU1jOHNEYHRbImktTV9tKEwjK0VrI05Ebmd1M1IhPWJRSWkmOiMpb0owPiI6MF9PJSNBY1EwYEQzKU5YJWNRQTJEXiklJE9qSSJqYSQibiUmWVpfZFVIKUklVCwjUiI3ZzEoQ108V1QnOFIiKzVpU3UvKjtmKzMoPWMiVzI0JyVXWy8pMkI6UW0nJyFBY0tWL1dbUDt1Ui1EaGRRRmQ5PkE/RThIWy89Q0xAPTEzJCZwRkBnPT1hX20oNDxuO2ZDS2U4UyMjRTFdT0pULCU1bC9dTXVJQWZGSW05XHVLWj1VbTZVXy1jYyFOQHJQbElmO0xeSzs0XXAwaUxDYzBWUiFLJFFiM29eZ291Mio+OiRIVSp0TElBYUBHZ0AqJyo4MUFSXiFjPllQL1ohP2coNixxQUVuR0YiIi0pXW8pQ0lYKjgnPz4oJF0tZGY6NC5QcU9AJCNFZEw0cCxCKiYrYSZnXTUmcCUkRyhaKGkxOmw7cj5IXSNkK1tBXDp0c0xKOk1FPTIkJVI7VTNaRjtrXTRBOm4pS1dnTXJOVCRwKTtRNGY0S25VMmJjI1ljKzhJQUg5TU8waSprXF8/YyUqX1hdcl5vS3FSa1JdbDxZXFVROj0wVls8cUFgOCVIWyg/K2RwJywlRl0rZjhtSzZKV1xvKDVfUGQnQEBeXk0tLV1XZmJCWGRvOCkibmx1U1QoYkhqa041S2lCQV5ALS9BXVUrRUkyMmJOZEI5Ulw1RDQ9PSNMKV9bQVZZJWQvbVNEZ0NHISwtVXJePycjSGU/Z0dhVyFbcj1YSTJVTkRpI05YJTomVkRjYWBwWCJVWy1PTFgsRV1ubmZScDRuKE1TKjRgQm04KU5HVldGZE5FaDU1MnJkXUxVI0RROyY0VyhvcGNpQFZtb3UsO08kITRkP1dfJ2tASUQiJD9XYTxBcmtOOlcyRiNVOVxVTm1fLjdDPDAvV3M1ZkZlLT5FRiohaC1PMF9CXEFwWyohY1x1Imxma2s4VUkqLWU8Xk1yRXI1MU9SX1JoJlNYdTtnYiZeXDNbZWhHOW9LUWNAWmpsZypRSipsISU5NSdhQUZUM1FJKFBpQzloOTYiJzdGVHUkdWdFLTkzSCFjI1BdSShpVypqcmZnU0coXyw5TS5FM0VnXilSSC05JyMhIjNcKiovXFZhKkwrY1VyV3Q5cTchdCpTJjNTXmlYXE9ucVsraWdqVk5FJmduNDBaPXEpKDJAWyVfTzU+YSdmXSxBa05gUTglQGxKUGdzSGljM08nT3I6cjJTSG0uVDZpcF1kdGQ3KlpAYFRdIT5DVyxwJjxjWFQhS0hvXkMtLGlqY05FZUhBWD81WFQhaUNNKm5uXGFAPGk7JE0jVyJYWiRBWW85LGIuWytvTFFJQihxK2spZDRNTVQuMiQlMmdYbmk3RnBtI1xxTSZSbltMNmA0NTFWOzw9U0xMbmc5aCdxVWk2YC8qJGlaZDUrWjU3WS1yZWY1QiUlN1EoRCNgZUVIPzhkciNnQzNsQkheLmNfZzpAQ25CYTJwIVc0ZTpHOz1CY1g6SixTXWg4Yi1sWC5MLnBaXmRgL3JQS2I7SyYlODRbJ1k7YVhIUD9idGVRbVdlciY9Iyg5WFhoVCEwTFNnNDNacy9vT1UiNSUlIj4mIlViPE9RVUcxYy4uWmYjJFpoViciW21tMi89TTcyYyhmY3JbJSYnZ1A5WS1WSU1IbSlZQCQhJFBMPG04Wm4vSlNsNj1BIk5Qc1skIlhFNiFmM1FwdCdPXmlbND0vQDpfbypWSGFmX1pNREUhW25ZKHQ2WXJoRjJmUTgnRzluIm8mQF0wLCFHUCptIypecis3N0wuRyE2Lyo9YkJQMFQ7MipdPFsoUGZiTShIQiVgPl9KY0hicyEqNVYvXzhHQW9yIT1QUFJIZF1jKDNULU1vcSJWOG8xNkxRI2plY1k6MmgiIklZOyhHMCQ0aVI1NjAqSHIwNzknSDh0c2RjVCJpQ14qMGg5ZD9kTiRhSC01IjxYYl5vaC5tUzAiaj4iVzk8Qj5mXVRfQktkMDM2c1cwL1Q/QF9QWV1CPm9NSlNlLnBTUzlHNWpsSGoxY01mNShzQEVFZHUtc0g8NyQmXm4wQnBtOzJeQylLNSItUkBSWCpxZCpjZ2RRXSQ3OC1iKmppWSMtYVJDQGwvN2hxcmxhOnJcVmhmc2UtMStnZCtnMGhPYmA6J1xHbl9fZklyJUMxMHA2Vm8taGcrTm1nKVlfLl1jPCUoPWxPQSNOblgwSCcjMUFdU20hQzJiLmJVRlcpP0xiTWFHVkknOD5Ob3NsZzVULUk8ISgoTjUmWWYyVnMmP1F1JjcqQDpaMjNSNS9JQWk6V1ZBKGleUzxsVmlqYmZeY25CbCJkMSEiMTJKSlY6Pj4yS0dbNCJJRlNgaTZVQmReZldeXWxpKmg0VTExRlZmKjFzOEpjOF5NTichIygnNFFEX1RtOmozX3RLRltVXnI6Tkc7TWAncigsQy1VYSdBUSVoSi1SUj5fTzVBXU8yMjUsdWEwWiY9TVZbblFXXUhQXyZHLjRrM0tKOCIuRGZZQ05xSidqb08xayU6SmN1QFomMGVoOXJHNGxDZz07TiVlblxNYkUlW2tkKDo0M2knMzFbaGZKfj5lbmRzdHJlYW0KZW5kb2JqCjEyIDAgb2JqCjw8Ci9GaWx0ZXIgWyAvQVNDSUk4NURlY29kZSAvRmxhdGVEZWNvZGUgXSAvTGVuZ3RoIDE5MTQKPj4Kc3RyZWFtCkdiITtkaGJWdXQmOldmR1IsZC1YPCsqQiloZ0lMXlkhcXUvRCgzazRRJD4lVy1KO2pUS0MnNjNeVj1ePTouVD06NjgpNTorV3Vmc1phOTdPbz9FNDNnJV0iPERpdGRJbC1ubFk3Wjo4cTVnNldAbEA1SjlySWF0TGV1blhtYkUkbmQuLF5bM3FFRGY8XDg9WmNtZm5fJWY8XzY2LzNFS0xpKSlLcy4uRVQ/T1ctJiskdXRTOShUIWVAV3JxK0RgMDByIVtiNnBpcDtDI3BCX0dtMlpALkhaUzszUm85UTRJNzJTa0IwaEY0RjNPL1cpTHFRSTk+LyxaTCRBRy5wTl1XbyQ0PHBzPSFlWTknWDpeVExvKGwyJyhNNGJkdCNEXS4zRUNaOjk1RVgmLk0qLihBVi5EY2YudUs3TDEoZ0VgLSlxWVphMDJOa3JjcycrRjMhR1hZZkFeVjBDVHU0I1U3Uzw1QjpvTyFnMkg4amdgJWpkZzdYNSNfWiIhW1pFTS1PS2pPKWc0M2ZqayZESSVJUXNZTVMiS1Vob2dUMC9CQzlFRVYuRyFeYUJiO2FaPD83UGBHZVQsbWw5OS9oTFozRnJYOzxwTChCL1Y3QEZzNVkpNWhfQFdyT2ErQlQhQVxkYi0nUmRgMmhEWUJIRHMybXNiQUcwQyhbJE5WMD1bUkZKLHE7LW0nPTRdRXAxViFMa1ojWjQhPW1OZTo4V2M2VEsjTm1VbzRTLkNxKUUoal4hIk1BOFRQQmE3Sy0pKTQlaSwwPm9YRm8ycDE9PDwtLDhGUz5ObnJZRGdWT0dwZXUtLyFSQEFaLzgtX3EpbFpfOEBuP05iS21gK0UwM2AwciNyPCtgVFpMZFw9WD9sNi9AJzRURnV1aVFdY1RpRjAkI1MqUzE1MCdmXDE/MEdybGdaZHBVXyhTMkhrOW5cVE5GdTRPYDY0UDMiYDFBOTFubjM2ZT9oIUY1aCtCUzcyPUw3J1sjWVldZV1nTWQ6V0otQVkrZlpLIyhRLUtXbXA7ZU1ldENNczFMKVJBdEtTRzJTZERHJU1jQCpaJldmOF46P11fMDpkVD1kaikkOzI/IUVvUW5jLTVFLyo/NkE+PS46Y1Y9Vl4jPlI/SCsoRHEtR0YsWkY+Zyp1Km5POilDXEZqaWdIQkZzL2E/TFRfZmByYUxHbCwiLTUkSCEsVidlImw5VjtBciIyVFs2WjknPDMxP2c8QmYnZGNOXEMhPFVbbEE4Y2BKcVNLcSQ7N0w3PlVaMi1GVDgiRTAvZG4qcWp0bS9TbVkzWmE+STZdZl1IQXElOUVFYkpCaFxvRlsxSzhZXGtUNmAyMG5RY25fRFwwSTwiXmxCY0VUUkgibitpW0diWi1SWjkwSWFuQFs1TEIzKyVrXDo5WmIlKU83ZFojN2VSJ2hJSVMybS4/a0cnSiQpNmROJDQpLidFVEtPSGRNJkArcHBmb0xWIkA2Nlx1b19dXEcoOi9kOHJcJj5rUiFOUEpoYnMjbiojTW81YFVcK2o0TnAzXDFjRyNVTSg/STlhO2QjdXAtXi9PbTRELilZYk0kO0ljS0s8VVdDcT9RaEFmQlEuM09fM0k1TlVGLjpoPC4pMlhTSC5OZmIyY3UlXyE7LkZSXEMpIlEkZVlTNTJgQkllLlo/OUUiTzVLQzJSbUlOMTBwJk1rNGIhU1U9LjJxLjFjKyVELnBxJWxsXXRSbmMibnEsbUxvLUMvb1pFLWU2bS0jaTBbMTxGJFgxdWcrbC4vTCowblxucy8zYEpwPSRCUzVqY2hpNy5yRCs5Olg5RUV0ZGtbZDsnN1kzJmZobCo+JVwmMXEsa1FTXG1GZ3FhUzhgPV0iQkBGb1FGUyEycWshVTlldW1LZlNkb3UiLXFdc0g+XzlpTW5BOz4jX3Q2blNqXS5ePnVFQzROUlZgaExdOzZNJlIuPDluP1A3OVMiUC43OGZgNm8ySFAsVkUkRCtkVFhwNW8oTD8qOzRRY24hSlNGYV5nKEsnPXJzZUExOmVeMS9iListMVgvLHBEaXVlaFlLWm5tTFZqLjM3PXVVO0o9NDMxNVZTQUsjPFUzZ0hKP2wpOTBEcSgtMGFZNi48P0JjI1xPMjxROC1AUStZKjIjYy9HbGVcSDxvO21HXjxFOFRELyRLbWVVL25uMmlcY3FKRSQsLFpsVENlLGc8aF9MIkxvWCIpQG44RmtyaDsrcmU/ZypSLmFUM2s2LDA9LVkiWjc9OU49YEU8LmUqMWJBRyo5VTYyJVopQzBOWF8/bGljSyhIWidLWmwzb0I4YzNCPG04YUZhX2koMF86XHU4UypxNWdPMzQyOClOaEhSUyhSY3FMXWl1RmNPN1dtKDE7UUs+NVExNEJJPSpLOmwjP0FvSDlXbiEsYDZYVE8jKiRAXipyLk5YIURecVRPUCZmITlSIlwiU1FEZ3NkcSJZOVtfKFBmN2xeSChpOUokKzkkSTlWYkJNWms0SkgvVUVDJzZYI2NPXWIpPl9IbnFSVyQnSmRRJGE5IUpMNk4ySSIqbS4pWG9+PmVuZHN0cmVhbQplbmRvYmoKeHJlZgowIDEzCjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDA2MSAwMDAwMCBuIAowMDAwMDAwMTIyIDAwMDAwIG4gCjAwMDAwMDAyMjkgMDAwMDAgbiAKMDAwMDAwMDM0MSAwMDAwMCBuIAowMDAwMDAwNDE4IDAwMDAwIG4gCjAwMDAwMDA2MjMgMDAwMDAgbiAKMDAwMDAwMDcwNiAwMDAwMCBuIAowMDAwMDAwOTExIDAwMDAwIG4gCjAwMDAwMDA5ODAgMDAwMDAgbiAKMDAwMDAwMTI2MCAwMDAwMCBuIAowMDAwMDAxMzI2IDAwMDAwIG4gCjAwMDAwMDM0NjMgMDAwMDAgbiAKdHJhaWxlcgo8PAovSUQgCls8YjE4Y2VhM2Y2YzFmMzQwNmViZGY4YTMzZGY1M2YzOWM+PGIxOGNlYTNmNmMxZjM0MDZlYmRmOGEzM2RmNTNmMzljPl0KJSBSZXBvcnRMYWIgZ2VuZXJhdGVkIFBERiBkb2N1bWVudCAtLSBkaWdlc3QgKG9wZW5zb3VyY2UpCgovSW5mbyA5IDAgUgovUm9vdCA4IDAgUgovU2l6ZSAxMwo+PgpzdGFydHhyZWYKNTQ2OQolJUVPRgo=";
+
+function downloadAIGuide() {
+  const byteChars = atob(AI_GUIDE_PDF_B64);
+  const byteNumbers = new Array(byteChars.length);
+  for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+  const byteArray = new Uint8Array(byteNumbers);
+  const blob = new Blob([byteArray], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank');
+}
+
 function onAiProviderChange() {
   const provider = document.getElementById('ai-provider-select').value;
   document.getElementById('ai-key-group').style.display = provider === 'free' ? 'none' : 'block';
+
+  const hints = {
+    gemini: 'Get your free key at <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a> — 1,500 calls/day.',
+    groq: 'Get your free key at <a href="https://console.groq.com/keys" target="_blank">console.groq.com/keys</a> — ~1,000 calls/day, very fast.',
+    cerebras: 'Get your free key at <a href="https://cloud.cerebras.ai" target="_blank">cloud.cerebras.ai</a> — ~1M tokens/day.',
+    openrouter: 'Get your free key at <a href="https://openrouter.ai/keys" target="_blank">openrouter.ai/keys</a> — access to 50+ free models.',
+    cloudflare: 'Enter as <b>account_id:api_token</b> (both from <a href="https://dash.cloudflare.com" target="_blank">dash.cloudflare.com</a> → Workers AI) — ~10,000 calls/day.',
+    openai: 'Paid key from <a href="https://platform.openai.com/api-keys" target="_blank">platform.openai.com</a>.',
+    claude: 'Paid key from <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>.'
+  };
+  const hintEl = document.getElementById('ai-key-hint');
+  if (hintEl) {
+    hintEl.innerHTML = hints[provider] || 'Your key is stored securely and only used for your own AI requests — never shared.';
+  }
+  const keyInput = document.getElementById('ai-api-key');
+  if (keyInput) {
+    keyInput.placeholder = provider === 'cloudflare' ? 'account_id:api_token' : 'Paste your API key';
+  }
 }
 
 async function loadAIConfig() {
@@ -7042,6 +7105,11 @@ async function loadAIConfig() {
       if (data.provider !== 'free' && data.api_key) {
         document.getElementById('ai-api-key').value = data.api_key;
       }
+      if (data.provider === 'free' && data.trial_start_date) {
+        const today = new Date().toISOString().split('T')[0];
+        const daysElapsed = Math.floor((new Date(today) - new Date(data.trial_start_date)) / 86400000);
+        currentAIConfig.trial_expired = daysElapsed >= 3;
+      }
       updateAIUsageBadge();
     }
   } catch (err) {
@@ -7051,13 +7119,34 @@ async function loadAIConfig() {
 
 function updateAIUsageBadge() {
   const badge = document.getElementById('aiUsageBadge');
+  const banner = document.getElementById('aiTrialBanner');
   if (!badge) return;
+
   if (currentAIConfig.provider === 'free') {
     const today = new Date().toISOString().split('T')[0];
     const usage = currentAIConfig.usage_date === today ? currentAIConfig.daily_usage : 0;
-    badge.textContent = `Free tier: ${usage}/250 used today`;
+
+    if (currentAIConfig.trial_start_date) {
+      const daysElapsed = Math.floor((new Date(today) - new Date(currentAIConfig.trial_start_date)) / 86400000);
+      const daysLeft = Math.max(0, 3 - daysElapsed);
+      if (currentAIConfig.trial_expired || daysLeft <= 0) {
+        badge.textContent = 'Free trial expired';
+        badge.style.color = '#dc2626';
+        if (banner) banner.style.display = 'flex';
+      } else {
+        badge.textContent = `Free trial: ${daysLeft} day${daysLeft === 1 ? '' : 's'} left · ${usage}/250 used today`;
+        badge.style.color = 'var(--text-light)';
+        if (banner) banner.style.display = 'none';
+      }
+    } else {
+      badge.textContent = '3-day free trial · not started yet';
+      badge.style.color = 'var(--text-light)';
+      if (banner) banner.style.display = 'none';
+    }
   } else {
-    badge.textContent = `Using your own ${currentAIConfig.provider} key`;
+    badge.textContent = `Using your own ${currentAIConfig.provider} key — unlimited daily use`;
+    badge.style.color = 'var(--success)';
+    if (banner) banner.style.display = 'none';
   }
 }
 
@@ -7114,8 +7203,15 @@ async function callAI(prompt, feature) {
     let message = 'AI request failed.';
     try {
       const body = await error.context.json();
-      if (body.error === 'quota_exceeded') message = body.message;
-      else if (body.error) message = body.error;
+      if (body.error === 'quota_exceeded' || body.error === 'trial_expired') {
+        message = body.message;
+        if (body.error === 'trial_expired') {
+          currentAIConfig.trial_expired = true;
+          updateAIUsageBadge();
+        }
+      } else if (body.error) {
+        message = body.error;
+      }
     } catch (e) {}
     throw new Error(message);
   }
@@ -7129,6 +7225,40 @@ async function callAI(prompt, feature) {
   return data.text;
 }
 
+async // ===== AI Automation: Lead/Contact Selectors =====
+function populateAIContactSelectors() {
+  // Lead scoring checklist
+  const listEl = document.getElementById('scoring-lead-list');
+  if (listEl) {
+    if (!contacts.length) {
+      listEl.innerHTML = '<div style="font-size:12px;color:var(--text-light)">No contacts yet.</div>';
+    } else {
+      listEl.innerHTML = contacts.map(c => `
+        <label style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:13px;cursor:pointer">
+          <input type="checkbox" class="scoring-lead-checkbox" value="${c.id}">
+          <span>${c.name}${c.company ? ' — ' + c.company : ''}</span>
+        </label>
+      `).join('');
+    }
+    const selectAll = document.getElementById('scoring-select-all');
+    if (selectAll) selectAll.checked = false;
+  }
+
+  // Email writer dropdown
+  const selectEl = document.getElementById('email-writer-contact');
+  if (selectEl) {
+    if (!contacts.length) {
+      selectEl.innerHTML = '<option value="">No contacts yet</option>';
+    } else {
+      selectEl.innerHTML = contacts.map(c => `<option value="${c.id}">${c.name}${c.company ? ' — ' + c.company : ''}</option>`).join('');
+    }
+  }
+}
+
+function toggleAllScoringLeads(checkbox) {
+  document.querySelectorAll('.scoring-lead-checkbox').forEach(cb => { cb.checked = checkbox.checked; });
+}
+
 async function runAI(type) {
   const card = document.getElementById('aiOutputCard');
   const title = document.getElementById('aiOutputTitle');
@@ -7139,7 +7269,6 @@ async function runAI(type) {
   const wonDeals = deals.filter(d => d.stage === 'Won').length;
   const totalDeals = deals.length;
   const conversion = totalDeals ? ((wonDeals / totalDeals) * 100).toFixed(1) : 0;
-  const topContact = contacts.length ? contacts[contacts.length - 1] : null;
   const openDeals = deals.filter(d => d.stage !== 'Won' && d.stage !== 'Lost');
 
   // ===== REAL AI: Lead Scoring =====
@@ -7149,9 +7278,14 @@ async function runAI(type) {
       body.innerHTML = '<div style="color:var(--text-light)">No contacts found. Add contacts to get lead scores.</div>';
       return;
     }
-    body.innerHTML = '<div style="color:var(--text-light)">🤖 AI analysing your leads…</div>';
-    const recent = contacts.slice(-5).reverse();
-    const prompt = `You are a sales AI scoring leads for a CRM. For each contact below, give a score from 0-100 (based on status, company presence, and likely buying intent) and a one-line reason. Respond ONLY as JSON array like [{"name":"...","score":85,"reason":"..."}], nothing else.\n\nContacts:\n${recent.map(c => `- ${c.name}, company: ${c.company || 'unknown'}, status: ${c.status}`).join('\n')}`;
+    const selectedIds = Array.from(document.querySelectorAll('.scoring-lead-checkbox:checked')).map(cb => cb.value);
+    if (!selectedIds.length) {
+      body.innerHTML = '<div style="color:#dc2626">⚠️ Please select at least one lead from the list above, then click "Run Lead Scoring".</div>';
+      return;
+    }
+    const selected = contacts.filter(c => selectedIds.includes(String(c.id)));
+    body.innerHTML = `<div style="color:var(--text-light)">🤖 AI analysing ${selected.length} selected lead(s)…</div>`;
+    const prompt = `You are a sales AI scoring leads for a CRM. For each contact below, give a score from 0-100 (based on status, company presence, and likely buying intent) and a one-line reason. Respond ONLY as JSON array like [{"name":"...","score":85,"reason":"..."}], nothing else.\n\nContacts:\n${selected.map(c => `- ${c.name}, company: ${c.company || 'unknown'}, status: ${c.status}`).join('\n')}`;
 
     try {
       const raw = await callAI(prompt, 'lead-scoring');
@@ -7175,8 +7309,14 @@ async function runAI(type) {
   // ===== REAL AI: Email Writer =====
   if (type === 'email-writer') {
     title.textContent = '✉️ AI Email Draft';
-    if (!topContact) {
+    if (!contacts.length) {
       body.innerHTML = '<div style="color:var(--text-light)">No contacts found. Add a contact first.</div>';
+      return;
+    }
+    const selectedContactId = document.getElementById('email-writer-contact').value;
+    const topContact = contacts.find(c => String(c.id) === String(selectedContactId));
+    if (!topContact) {
+      body.innerHTML = '<div style="color:#dc2626">⚠️ Please select a contact from the dropdown above.</div>';
       return;
     }
     body.innerHTML = '<div style="color:var(--text-light)">🤖 AI writing your email…</div>';

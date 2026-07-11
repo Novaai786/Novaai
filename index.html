@@ -775,7 +775,7 @@
     <div class="topbar-title" id="pageTitle">Dashboard</div>
     <div class="search-bar">
       <span class="search-icon">🔍</span>
-      <input type="text" placeholder="Search..." id="globalSearch" oninput="globalSearch()">
+      <input type="text" placeholder="Search..." id="globalSearch" oninput="globalSearch()" autocomplete="off" name="crm-global-search-nofill">
     </div>
     <div class="topbar-actions">
       <div class="user-menu-wrap">
@@ -1175,7 +1175,7 @@ Leadnovaai</textarea>
               </select>
             </div>
           </div>
-          <input type="text" id="campaignSearchName" class="form-control" placeholder="🔍 Search by name..." style="margin-bottom:10px" oninput="renderCampaignContacts()">
+          <input type="text" id="campaignSearchName" class="form-control" placeholder="🔍 Search by name..." style="margin-bottom:10px" oninput="renderCampaignContacts()" autocomplete="off">
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:8px;cursor:pointer">
             <input type="checkbox" id="campaignSelectAll" onchange="toggleAllCampaignContacts(this)"> Select All (filtered)
           </label>
@@ -1277,7 +1277,7 @@ Leadnovaai</textarea>
           <div class="card-header"><div class="card-title">➕ Enroll Contacts — <span id="seqEnrollName"></span></div></div>
           <input type="hidden" id="seq-enroll-id">
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-            <input type="text" id="seqSearchName" class="form-control" placeholder="🔍 Search by name..." style="flex:1;min-width:160px;padding:7px 10px;font-size:13px" oninput="renderSeqContactList()">
+            <input type="text" id="seqSearchName" class="form-control" placeholder="🔍 Search by name..." style="flex:1;min-width:160px;padding:7px 10px;font-size:13px" oninput="renderSeqContactList()" autocomplete="off">
             <select id="seqFilterLeadScore" class="form-control" style="width:130px;padding:7px 10px;font-size:13px" onchange="renderSeqContactList()">
               <option value="">All Leads</option>
               <option value="Hot 🔥">Hot 🔥</option>
@@ -1397,24 +1397,42 @@ Leadnovaai</textarea>
                 </div>
                 <div id="scoring-lead-list" style="max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--bg)"></div>
               </div>
+              <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;margin-bottom:10px">
+                <input type="checkbox" id="scoring-visit-websites" checked> 🌐 Visit company websites for deeper, more accurate scoring (slower)
+              </label>
               <button class="btn btn-primary btn-sm" onclick="runAI('lead-scoring')">Run Lead Scoring</button>
             </div>
             <div class="ai-card">
               <div class="ai-card-icon">✉️</div>
               <div><span class="ai-card-badge">AI WRITER</span></div>
               <div class="ai-card-title">AI Email Writer</div>
-              <div class="ai-card-desc">Generate personalised cold emails, follow-ups, and outreach sequences instantly. Just select a contact and let AI craft the perfect message.</div>
+              <div class="ai-card-desc">Short, personal, human-sounding emails — written from real pain points found on the lead's own website and tech stack. Never generic.</div>
               <div style="margin-bottom:10px">
                 <span style="font-size:12px;color:var(--text-light)">Select a contact</span>
                 <select class="form-control" id="email-writer-contact" style="margin-top:4px"></select>
               </div>
+              <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;margin-bottom:10px">
+                <input type="checkbox" id="email-visit-website" checked> 🌐 Research their website &amp; tech stack for pain points
+              </label>
               <button class="btn btn-primary btn-sm" onclick="runAI('email-writer')">Generate Email</button>
             </div>
             <div class="ai-card">
               <div class="ai-card-icon">🔁</div>
               <div><span class="ai-card-badge">AI FOLLOW-UP</span></div>
               <div class="ai-card-title">AI Follow-up Generator</div>
-              <div class="ai-card-desc">Never miss a follow-up again. AI analyses your contact history and automatically suggests the next best action for each lead in your pipeline.</div>
+              <div class="ai-card-desc">Unique, human follow-ups per lead — grounded in the specific pain points AI finds on their website. Never a generic "just checking in".</div>
+              <div style="margin-bottom:10px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                  <span style="font-size:12px;color:var(--text-light)">Select leads</span>
+                  <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer">
+                    <input type="checkbox" id="followup-select-all" onchange="toggleAllFollowupLeads(this)"> Select all
+                  </label>
+                </div>
+                <div id="followup-lead-list" style="max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--bg)"></div>
+              </div>
+              <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;margin-bottom:10px">
+                <input type="checkbox" id="followup-visit-website" checked> 🌐 Research their website &amp; tech stack for pain points
+              </label>
               <button class="btn btn-primary btn-sm" onclick="runAI('followup')">Generate Follow-ups</button>
             </div>
             <div class="ai-card">
@@ -7191,12 +7209,12 @@ async function saveAIConfig() {
 }
 
 // Core function — every real AI feature calls this. Routes to free or BYOK automatically via the edge function.
-async function callAI(prompt, feature) {
+async function callAI(prompt, feature, leads) {
   const session = window.__currentSession;
   if (!session) throw new Error('Session expired. Please log in again.');
 
   const { data, error } = await supabaseClient.functions.invoke('ai-generate', {
-    body: { prompt, feature }
+    body: leads ? { prompt, feature, leads } : { prompt, feature }
   });
 
   if (error) {
@@ -7253,10 +7271,31 @@ function populateAIContactSelectors() {
       selectEl.innerHTML = contacts.map(c => `<option value="${c.id}">${c.name}${c.company ? ' — ' + c.company : ''}</option>`).join('');
     }
   }
+
+  // Follow-up generator checklist
+  const followupListEl = document.getElementById('followup-lead-list');
+  if (followupListEl) {
+    if (!contacts.length) {
+      followupListEl.innerHTML = '<div style="font-size:12px;color:var(--text-light)">No contacts yet.</div>';
+    } else {
+      followupListEl.innerHTML = contacts.map(c => `
+        <label style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:13px;cursor:pointer">
+          <input type="checkbox" class="followup-lead-checkbox" value="${c.id}">
+          <span>${c.name}${c.company ? ' — ' + c.company : ''}</span>
+        </label>
+      `).join('');
+    }
+    const followupSelectAll = document.getElementById('followup-select-all');
+    if (followupSelectAll) followupSelectAll.checked = false;
+  }
 }
 
 function toggleAllScoringLeads(checkbox) {
   document.querySelectorAll('.scoring-lead-checkbox').forEach(cb => { cb.checked = checkbox.checked; });
+}
+
+function toggleAllFollowupLeads(checkbox) {
+  document.querySelectorAll('.followup-lead-checkbox').forEach(cb => { cb.checked = checkbox.checked; });
 }
 
 async function runAI(type) {
@@ -7284,6 +7323,31 @@ async function runAI(type) {
       return;
     }
     const selected = contacts.filter(c => selectedIds.includes(String(c.id)));
+    const visitWebsites = document.getElementById('scoring-visit-websites')?.checked;
+    const hasAnyWebsite = selected.some(c => c.website);
+
+    if (visitWebsites && hasAnyWebsite) {
+      body.innerHTML = `<div style="color:var(--text-light)">🌐 AI visiting company websites and analysing ${selected.length} selected lead(s)… this can take a bit longer.</div>`;
+      const leadsPayload = selected.map(c => ({ name: c.name, company: c.company || '', status: c.status, website: c.website || '' }));
+      try {
+        const raw = await callAI('', 'lead-scoring-deep', leadsPayload);
+        const clean = raw.replace(/```json|```/g, '').trim();
+        const results = JSON.parse(clean);
+        body.innerHTML = results.map(r => {
+          const score = Math.max(0, Math.min(100, r.score));
+          const bar = '█'.repeat(Math.round(score/10)) + '░'.repeat(10 - Math.round(score/10));
+          return `<div style="margin-bottom:10px;padding:10px;background:var(--bg);border-radius:8px">
+            <strong>${r.name}</strong><br>
+            <span style="font-family:monospace;color:var(--primary)">${bar}</span> <strong>${score}/100</strong><br>
+            <span style="font-size:12px;color:var(--text-light)">${r.reason || ''}</span>
+          </div>`;
+        }).join('') + '<br><em style="color:var(--text-light)">🌐 Scored using live company website research.</em>';
+      } catch (err) {
+        body.innerHTML = `<div style="color:#dc2626">⚠️ ${err.message}</div>`;
+      }
+      return;
+    }
+
     body.innerHTML = `<div style="color:var(--text-light)">🤖 AI analysing ${selected.length} selected lead(s)…</div>`;
     const prompt = `You are a sales AI scoring leads for a CRM. For each contact below, give a score from 0-100 (based on status, company presence, and likely buying intent) and a one-line reason. Respond ONLY as JSON array like [{"name":"...","score":85,"reason":"..."}], nothing else.\n\nContacts:\n${selected.map(c => `- ${c.name}, company: ${c.company || 'unknown'}, status: ${c.status}`).join('\n')}`;
 
@@ -7319,14 +7383,57 @@ async function runAI(type) {
       body.innerHTML = '<div style="color:#dc2626">⚠️ Please select a contact from the dropdown above.</div>';
       return;
     }
-    body.innerHTML = '<div style="color:var(--text-light)">🤖 AI writing your email…</div>';
-    const prompt = `Write a short, personalised cold outreach email (under 120 words) from a sales agency to a lead named ${topContact.name}${topContact.company ? ' at ' + topContact.company : ''}. Tone: friendly, professional, not pushy. Include a subject line. Format as:\nSubject: ...\n\n[email body]`;
+    const visitWebsite = document.getElementById('email-visit-website')?.checked;
+    const useDeep = visitWebsite && topContact.website;
+
+    body.innerHTML = useDeep
+      ? '<div style="color:var(--text-light)">🌐 AI researching their website &amp; writing a personal email…</div>'
+      : '<div style="color:var(--text-light)">🤖 AI writing your email…</div>';
 
     try {
-      const draft = await callAI(prompt, 'email-writer');
+      let draft;
+      if (useDeep) {
+        draft = await callAI('', 'email-writer-deep', [{ name: topContact.name, company: topContact.company || '', status: topContact.status, website: topContact.website }]);
+      } else {
+        const prompt = `Write a short (under 90 words), casual, human-sounding cold outreach email from a sales agency to a lead named ${topContact.name}${topContact.company ? ' at ' + topContact.company : ''}. No corporate buzzwords, no "I hope this finds you well". Include a subject line. Format as:\nSubject: ...\n\n[email body]`;
+        draft = await callAI(prompt, 'email-writer');
+      }
       body.innerHTML = `<strong>Generated for: ${topContact.name}</strong><br><br>
         <div style="background:var(--bg);padding:16px;border-radius:8px;border-left:3px solid var(--primary);white-space:pre-wrap">${draft}</div>
-        <br><em style="color:var(--text-light)">Personalise before sending.</em>`;
+        <br><em style="color:var(--text-light)">${useDeep ? '🌐 Personalised using live research on their website & tech stack.' : 'Personalise before sending.'}</em>`;
+    } catch (err) {
+      body.innerHTML = `<div style="color:#dc2626">⚠️ ${err.message}</div>`;
+    }
+    return;
+  }
+
+  // ===== REAL AI: Follow-up Generator =====
+  if (type === 'followup') {
+    title.textContent = '🔁 AI Follow-up Suggestions';
+    if (!contacts.length) {
+      body.innerHTML = '<div style="color:var(--text-light)">No contacts found. Add contacts to get follow-up suggestions.</div>';
+      return;
+    }
+    const selectedIds = Array.from(document.querySelectorAll('.followup-lead-checkbox:checked')).map(cb => cb.value);
+    if (!selectedIds.length) {
+      body.innerHTML = '<div style="color:#dc2626">⚠️ Please select at least one lead from the list above, then click "Generate Follow-ups".</div>';
+      return;
+    }
+    const selected = contacts.filter(c => selectedIds.includes(String(c.id)));
+    const visitWebsite = document.getElementById('followup-visit-website')?.checked;
+
+    body.innerHTML = `<div style="color:var(--text-light)">${visitWebsite ? '🌐' : '🤖'} AI generating unique follow-ups for ${selected.length} lead(s)…</div>`;
+    const leadsPayload = selected.map(c => ({ name: c.name, company: c.company || '', status: c.status, website: visitWebsite ? (c.website || '') : '' }));
+
+    try {
+      const raw = await callAI('', 'followup-deep', leadsPayload);
+      const clean = raw.replace(/```json|```/g, '').trim();
+      const results = JSON.parse(clean);
+      body.innerHTML = results.map((r) => `
+        <div style="margin-bottom:10px;padding:10px;background:var(--bg);border-radius:8px">
+          <strong>${r.name}</strong><br>
+          <span style="color:var(--primary)">→</span> ${r.message}
+        </div>`).join('') + `<br><em style="color:var(--text-light)">${visitWebsite ? '🌐 Each message grounded in real research on their website & tech stack.' : 'Follow up within 48 hours for best response rates.'}</em>`;
     } catch (err) {
       body.innerHTML = `<div style="color:#dc2626">⚠️ ${err.message}</div>`;
     }
@@ -7335,18 +7442,6 @@ async function runAI(type) {
 
   // ===== Rule-based (upgrading to AI in a later step) =====
   const outputs = {
-    'followup': {
-      t: '🔁 AI Follow-up Suggestions',
-      b: `<strong>Follow-up plan generated for ${contacts.filter(c=>c.status==='Contacted'||c.status==='New').length} active leads</strong><br><br>
-          ${contacts.filter(c => c.status === 'Contacted' || c.status === 'New').slice(0, 5).map(c => `
-            <div style="margin-bottom:10px;padding:10px;background:var(--bg);border-radius:8px">
-              <strong>${c.name}</strong> (${c.status})<br>
-              <span style="color:var(--primary)">→</span> ${c.status === 'New' ? 
-                'Send initial outreach email introducing your services' : 
-                'Send value-add follow-up — share a case study or free tip relevant to their business'}
-            </div>`).join('') || '<div style="color:var(--text-light)">No active leads to follow up. Mark contacts as New or Contacted to see suggestions.</div>'}
-          <br><em style="color:var(--text-light)">Follow up within 48 hours for best response rates.</em>`
-    },
     'deal-prediction': {
       t: '📊 AI Deal Prediction Report',
       b: `<strong>Pipeline Analysis — ${openDeals.length} open deals</strong><br><br>

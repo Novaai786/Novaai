@@ -731,6 +731,10 @@
       <span class="icon">🏢</span> Companies
       <span class="nav-badge" id="companiesBadge">0</span>
     </div>
+    <div class="nav-item" onclick="showSection('lists', this)">
+      <span class="icon">📋</span> Lists
+      <span class="nav-badge" id="listsBadge">0</span>
+    </div>
     <div class="nav-label">Sales</div>
     <div class="nav-item" onclick="showSection('deals', this)">
       <span class="icon">💼</span> Deals
@@ -991,6 +995,25 @@
           <table id="companiesTableEl">
             <thead><tr><th>Company</th><th>Industry</th><th>Website</th><th>CRM</th><th>Size</th><th>Country</th><th>Employees</th><th>Revenue</th><th>Tech Stack</th><th>Automation</th><th>Opportunity Score</th><th>Action</th></tr></thead>
             <tbody id="companiesTable"><tr><td colspan="11" style="text-align:center;color:var(--text-light);padding:20px">No companies yet.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- LISTS -->
+    <div class="section" id="section-lists">
+      <div style="padding:12px 16px;font-size:12px;color:var(--text-light);background:#fff;border:1px solid var(--border);border-radius:10px;margin-bottom:14px">
+        📋 <b>Static Lists</b> mein aap records ko manually add karte hain (jaise HubSpot). ⚡ <b>Smart Lists</b> aapke set kiye gaye filters ke mutabiq khud-ba-khud update hoti rehti hain.
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">All Lists</div>
+          <button class="btn btn-primary btn-sm" onclick="clearListForm();openModal('listModal')">+ Create List</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>List Name</th><th>Object</th><th>Type</th><th>Members</th><th>Created</th><th>Action</th></tr></thead>
+            <tbody id="listsTable"><tr><td colspan="6" style="text-align:center;color:var(--text-light);padding:20px">No lists yet. Create your first list!</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -2153,6 +2176,90 @@ Leadnovaai</textarea>
   </div>
 </div>
 
+<!-- List Create/Edit Modal -->
+<div class="modal-overlay" id="listModal">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header">
+      <div class="modal-title" id="listModalTitle">Create List</div>
+      <button class="modal-close" onclick="closeModal('listModal')">✕</button>
+    </div>
+    <input type="hidden" id="l-edit-id">
+    <div class="form-group">
+      <label class="form-label">List Name *</label>
+      <input class="form-control" id="l-name" placeholder="e.g. Hot SaaS Leads">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Object Type *</label>
+        <select class="form-control" id="l-objecttype" onchange="onListObjectTypeChange()">
+          <option value="contact">👥 Contacts</option>
+          <option value="company">🏢 Companies</option>
+          <option value="deal">💼 Deals</option>
+          <option value="task">✅ Tasks</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">List Type *</label>
+        <select class="form-control" id="l-listtype" onchange="onListTypeChange()">
+          <option value="static">📌 Static (manually add records)</option>
+          <option value="smart">⚡ Smart (auto-updates by filter)</option>
+        </select>
+      </div>
+    </div>
+    <div id="l-smart-filters-wrap" style="display:none">
+      <label class="form-label">Filter Criteria <span style="font-size:10px;color:var(--text-light)">(record must match ALL conditions)</span></label>
+      <div id="l-filters-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px"></div>
+      <button class="btn btn-outline btn-sm" onclick="addListFilterRow()">+ Add Filter</button>
+    </div>
+    <div id="l-static-note" style="font-size:12px;color:var(--text-light);margin:10px 0">
+      💡 List save karne ke baad, list detail page se records "+ Add Records" button se add kar sakte hain.
+    </div>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button class="btn btn-primary" style="flex:1" onclick="saveList()">💾 Save List</button>
+      <button class="btn btn-outline" onclick="clearListForm();closeModal('listModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- List Detail Modal -->
+<div class="modal-overlay" id="listDetailModal">
+  <div class="modal" style="max-width:1000px;width:95vw;max-height:88vh;overflow-y:auto">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="listDetailTitle">List</div>
+        <div style="font-size:12px;color:var(--text-light);margin-top:2px" id="listDetailMeta"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal('listDetailModal')">✕</button>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+      <div style="font-size:12px;color:var(--text-light)" id="listDetailCount"></div>
+      <button class="btn btn-primary btn-sm" id="listDetailAddBtn" onclick="openListAddRecordsModal()">+ Add Records</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead id="listDetailTableHead"></thead>
+        <tbody id="listDetailTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Add Records to List Modal -->
+<div class="modal-overlay" id="listAddRecordsModal">
+  <div class="modal" style="max-width:560px;max-height:80vh;overflow-y:auto">
+    <div class="modal-header">
+      <div class="modal-title">Add Records to List</div>
+      <button class="modal-close" onclick="closeModal('listAddRecordsModal')">✕</button>
+    </div>
+    <input class="form-control" id="l-add-search" placeholder="Search..." oninput="renderListAddRecordsOptions()" style="margin-bottom:10px">
+    <div id="listAddRecordsOptions" style="display:flex;flex-direction:column;gap:6px;max-height:340px;overflow-y:auto"></div>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button class="btn btn-primary" style="flex:1" onclick="confirmAddRecordsToList()">Add Selected</button>
+      <button class="btn btn-outline" onclick="closeModal('listAddRecordsModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- Deal Details / Tracking Modal -->
 <div class="modal-overlay" id="dealDetailsModal">
   <div class="modal">
@@ -2843,6 +2950,8 @@ let roles = []; // now loaded from Supabase (see loadRolesFromSupabase; default 
 
 let categories = []; // now loaded from Supabase (see loadCategoriesFromSupabase)
 
+let lists = []; // now loaded from Supabase (see loadListsFromSupabase) — HubSpot-style Static & Smart Lists
+
 function showToast(msg) {
   let el = document.getElementById('toastMsg');
   if (!el) {
@@ -2914,7 +3023,7 @@ function showSection(id, el) {
   document.getElementById('section-' + id).classList.add('active');
   if (el) el.classList.add('active');
   const titles = {
-    dashboard:'Dashboard', contacts:'Contacts', companies:'Companies',
+    dashboard:'Dashboard', contacts:'Contacts', companies:'Companies', lists:'Lists',
     deals:'Deals & Pipeline', categories:'Service Categories & Pipelines', tasks:'Tasks', email:'Email Tracking',
     products:'Products', automation:'AI Automation', reports:'Reports', importexport:'Import / Export',
     team:'Team & Roles', properties:'Properties'
@@ -2925,6 +3034,7 @@ function showSection(id, el) {
   if (id === 'automation') populateAIContactSelectors();
   if (id === 'contacts') renderContacts();
   if (id === 'companies') renderCompanies();
+  if (id === 'lists') renderLists();
   if (id === 'deals') renderDeals();
   if (id === 'categories') renderCategories();
   if (id === 'tasks') renderTasks();
@@ -5489,6 +5599,391 @@ async function deleteTask(id) {
   }
 }
 
+// ===== LISTS (HubSpot-style Static & Smart Lists) =====
+const LIST_OBJECT_TYPES = [
+  { key: 'contact', label: 'Contacts', icon: '👥' },
+  { key: 'company', label: 'Companies', icon: '🏢' },
+  { key: 'deal', label: 'Deals', icon: '💼' },
+  { key: 'task', label: 'Tasks', icon: '✅' }
+];
+
+const LIST_FIELD_DEFS = {
+  contact: [
+    { key: 'status', label: 'Status', type: 'select', options: ['New','Contacted','Interested','Closed','Lost'] },
+    { key: 'source', label: 'Lead Source', type: 'select', options: ['LinkedIn','Apollo','Fiverr','Upwork','Cold Email'] },
+    { key: 'icp', label: 'ICP Tag', type: 'select', options: ['SaaS','Marketing Agency','Web Agency','IT Company','Recruitment Agency'] },
+    { key: 'leadScore', label: 'Lead Score', type: 'select', options: ['Hot 🔥','Warm 🟡','Cold ❄️'] },
+    { key: 'priority', label: 'Priority', type: 'select', options: ['High','Medium','Low'] },
+    { key: 'country', label: 'Country', type: 'text' },
+    { key: 'company', label: 'Company', type: 'text' },
+    { key: 'owner', label: 'Owner', type: 'text' },
+    { key: 'category', label: 'Category', type: 'text' }
+  ],
+  company: [
+    { key: 'industry', label: 'Industry', type: 'text' },
+    { key: 'size', label: 'Company Size', type: 'text' },
+    { key: 'country', label: 'Country', type: 'text' },
+    { key: 'crm', label: 'Current CRM', type: 'text' },
+    { key: 'automation', label: 'Automation Level', type: 'select', options: ['Not Automated','Basic','Advanced','Fully Automated'] },
+    { key: 'category', label: 'Category', type: 'text' }
+  ],
+  deal: [
+    { key: 'stage', label: 'Stage', type: 'text' },
+    { key: 'category', label: 'Category', type: 'text' },
+    { key: 'owner', label: 'Owner', type: 'text' },
+    { key: 'value', label: 'Deal Value', type: 'number' }
+  ],
+  task: [
+    { key: 'priority', label: 'Priority', type: 'select', options: ['High','Medium','Low'] },
+    { key: 'contact', label: 'Related Contact', type: 'text' },
+    { key: 'date', label: 'Due Date', type: 'text' }
+  ]
+};
+
+const LIST_RECORD_COLUMNS = {
+  contact: [
+    { key: 'fname', label: 'First Name' }, { key: 'lname', label: 'Last Name' },
+    { key: 'email', label: 'Email' }, { key: 'company', label: 'Company' },
+    { key: 'status', label: 'Status' }
+  ],
+  company: [
+    { key: 'name', label: 'Company' }, { key: 'industry', label: 'Industry' },
+    { key: 'website', label: 'Website' }, { key: 'country', label: 'Country' }
+  ],
+  deal: [
+    { key: 'name', label: 'Deal' }, { key: 'company', label: 'Company' },
+    { key: 'stage', label: 'Stage' }, { key: 'value', label: 'Value' }
+  ],
+  task: [
+    { key: 'title', label: 'Title' }, { key: 'contact', label: 'Contact' },
+    { key: 'priority', label: 'Priority' }, { key: 'date', label: 'Due Date' }
+  ]
+};
+
+function getObjectArray(objectType) {
+  return { contact: contacts, company: companies, deal: deals, task: tasks }[objectType] || [];
+}
+
+function getRecordLabel(objectType, r) {
+  if (objectType === 'contact') return `${r.fname || ''} ${r.lname || ''}`.trim() || '(no name)';
+  if (objectType === 'company') return r.name || '(no name)';
+  if (objectType === 'deal') return r.name || '(no name)';
+  if (objectType === 'task') return r.title || '(no title)';
+  return String(r.id);
+}
+
+function evaluateFilterCondition(record, cond) {
+  const raw = record[cond.field];
+  const val = (raw === null || raw === undefined) ? '' : String(raw).toLowerCase();
+  const target = (cond.value || '').toLowerCase();
+  switch (cond.operator) {
+    case 'equals': return val === target;
+    case 'not_equals': return val !== target;
+    case 'contains': return val.includes(target);
+    case 'is_empty': return val === '';
+    case 'is_not_empty': return val !== '';
+    case 'gt': return parseFloat(raw) > parseFloat(cond.value);
+    case 'lt': return parseFloat(raw) < parseFloat(cond.value);
+    default: return true;
+  }
+}
+
+function computeListMembers(list) {
+  const source = getObjectArray(list.objectType);
+  if (list.listType === 'static') {
+    const idSet = new Set((list.memberIds || []).map(String));
+    return source.filter(r => idSet.has(String(r.id)));
+  }
+  const conds = list.filters || [];
+  if (!conds.length) return source;
+  return source.filter(r => conds.every(c => evaluateFilterCondition(r, c)));
+}
+
+function mapListFromDb(row) {
+  return {
+    id: row.id,
+    name: row.name || '',
+    objectType: row.object_type || 'contact',
+    listType: row.list_type || 'static',
+    filters: row.filters || [],
+    memberIds: row.member_ids || [],
+    createdAt: row.created_at || null
+  };
+}
+
+function mapListToDb(data, userId) {
+  return {
+    name: data.name || null,
+    object_type: data.objectType || null,
+    list_type: data.listType || null,
+    filters: data.filters || [],
+    member_ids: data.memberIds || [],
+    user_id: userId
+  };
+}
+
+async function loadListsFromSupabase() {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const userId = session.user.id;
+    const { data, error } = await supabaseClient
+      .from('lists')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    if (error) { console.error('Could not load lists:', error); return; }
+    lists = (data || []).map(mapListFromDb);
+    renderLists();
+    updateBadges();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function renderLists() {
+  const tbody = document.getElementById('listsTable');
+  if (!tbody) return;
+  if (!lists.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-light);padding:20px">No lists yet. Create your first list!</td></tr>';
+    return;
+  }
+  tbody.innerHTML = lists.map(l => {
+    const count = computeListMembers(l).length;
+    const objDef = LIST_OBJECT_TYPES.find(o => o.key === l.objectType);
+    return `<tr>
+      <td style="font-weight:600;cursor:pointer;color:var(--primary)" onclick="openListDetail(${l.id})">${l.name}</td>
+      <td>${objDef ? objDef.icon + ' ' + objDef.label : l.objectType}</td>
+      <td><span class="badge ${l.listType === 'smart' ? 'badge-interested' : 'badge-new'}">${l.listType === 'smart' ? '⚡ Smart' : '📌 Static'}</span></td>
+      <td>${count}</td>
+      <td>${l.createdAt ? new Date(l.createdAt).toLocaleDateString() : '-'}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-outline btn-sm" onclick="openListDetail(${l.id})">👁️ View</button>
+        <button class="btn btn-outline btn-sm" onclick="editList(${l.id})">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteList(${l.id})">🗑️</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function onListObjectTypeChange() {
+  document.getElementById('l-filters-list').innerHTML = '';
+  if (document.getElementById('l-listtype').value === 'smart') addListFilterRow();
+}
+
+function onListTypeChange() {
+  const isSmart = document.getElementById('l-listtype').value === 'smart';
+  document.getElementById('l-smart-filters-wrap').style.display = isSmart ? 'block' : 'none';
+  document.getElementById('l-static-note').style.display = isSmart ? 'none' : 'block';
+  if (isSmart && !document.getElementById('l-filters-list').children.length) addListFilterRow();
+}
+
+function addListFilterRow(field, operator, value) {
+  const wrap = document.getElementById('l-filters-list');
+  const rowId = 'lf-' + Date.now() + Math.floor(Math.random() * 1000);
+  const objType = document.getElementById('l-objecttype').value;
+  const fieldDefs = LIST_FIELD_DEFS[objType] || [];
+  const div = document.createElement('div');
+  div.className = 'list-filter-row';
+  div.id = rowId;
+  div.style.cssText = 'display:flex;gap:6px;align-items:center';
+  div.innerHTML = `
+    <select class="form-control lf-field" style="flex:1.2;padding:6px 8px;font-size:12px">
+      ${fieldDefs.map(f => `<option value="${f.key}">${f.label}</option>`).join('')}
+    </select>
+    <select class="form-control lf-operator" style="flex:1;padding:6px 8px;font-size:12px">
+      <option value="equals">is</option>
+      <option value="not_equals">is not</option>
+      <option value="contains">contains</option>
+      <option value="gt">greater than</option>
+      <option value="lt">less than</option>
+      <option value="is_empty">is empty</option>
+      <option value="is_not_empty">is not empty</option>
+    </select>
+    <input class="form-control lf-value" style="flex:1.2;padding:6px 8px;font-size:12px" placeholder="Value">
+    <button class="btn btn-danger btn-sm" onclick="document.getElementById('${rowId}').remove()">✕</button>
+  `;
+  wrap.appendChild(div);
+  if (field) div.querySelector('.lf-field').value = field;
+  if (operator) div.querySelector('.lf-operator').value = operator;
+  if (value !== undefined && value !== null) div.querySelector('.lf-value').value = value;
+}
+
+function clearListForm() {
+  document.getElementById('l-edit-id').value = '';
+  document.getElementById('l-name').value = '';
+  document.getElementById('l-objecttype').value = 'contact';
+  document.getElementById('l-listtype').value = 'static';
+  document.getElementById('l-filters-list').innerHTML = '';
+  document.getElementById('l-smart-filters-wrap').style.display = 'none';
+  document.getElementById('l-static-note').style.display = 'block';
+  document.getElementById('listModalTitle').textContent = 'Create List';
+}
+
+async function saveList() {
+  const name = document.getElementById('l-name').value.trim();
+  if (!name) { alert('List name required!'); return; }
+  const editId = document.getElementById('l-edit-id').value;
+  const objectType = document.getElementById('l-objecttype').value;
+  const listType = document.getElementById('l-listtype').value;
+  let filters = [];
+  if (listType === 'smart') {
+    document.querySelectorAll('#l-filters-list .list-filter-row').forEach(row => {
+      const field = row.querySelector('.lf-field').value;
+      const operator = row.querySelector('.lf-operator').value;
+      const value = row.querySelector('.lf-value').value.trim();
+      if (field) filters.push({ field, operator, value });
+    });
+    if (!filters.length) { alert('Smart list ke liye kam az kam 1 filter add karein.'); return; }
+  }
+
+  try {
+    const session = window.__currentSession;
+    if (!session) { alert('Session expired. Please log in again.'); return; }
+    const userId = session.user.id;
+
+    if (editId) {
+      const existing = lists.find(l => l.id == editId);
+      const memberIds = existing ? existing.memberIds : [];
+      const dbRow = mapListToDb({ name, objectType, listType, filters, memberIds }, userId);
+      const { error } = await supabaseClient.from('lists').update(dbRow).eq('id', editId);
+      if (error) { alert('Could not update list: ' + error.message); return; }
+    } else {
+      const dbRow = mapListToDb({ name, objectType, listType, filters, memberIds: [] }, userId);
+      const { error } = await supabaseClient.from('lists').insert(dbRow);
+      if (error) { alert('Could not save list: ' + error.message); return; }
+    }
+    closeModal('listModal');
+    clearListForm();
+    await loadListsFromSupabase();
+    showToast('✅ List saved!');
+  } catch (err) {
+    alert('Something went wrong while saving the list.');
+    console.error(err);
+  }
+}
+
+function editList(id) {
+  const l = lists.find(x => x.id == id);
+  if (!l) return;
+  document.getElementById('listModalTitle').textContent = 'Edit List';
+  document.getElementById('l-edit-id').value = l.id;
+  document.getElementById('l-name').value = l.name;
+  document.getElementById('l-objecttype').value = l.objectType;
+  document.getElementById('l-listtype').value = l.listType;
+  onListTypeChange();
+  document.getElementById('l-filters-list').innerHTML = '';
+  if (l.listType === 'smart') {
+    (l.filters || []).forEach(f => addListFilterRow(f.field, f.operator, f.value));
+    if (!(l.filters || []).length) addListFilterRow();
+  }
+  openModal('listModal');
+}
+
+async function deleteList(id) {
+  if (!confirm('Delete this list? Ye sirf list delete karega, underlying records delete nahi honge.')) return;
+  try {
+    const { error } = await supabaseClient.from('lists').delete().eq('id', id);
+    if (error) { alert('Could not delete list: ' + error.message); return; }
+    await loadListsFromSupabase();
+  } catch (err) {
+    alert('Something went wrong while deleting the list.');
+    console.error(err);
+  }
+}
+
+let currentListDetailId = null;
+
+function openListDetail(id) {
+  currentListDetailId = id;
+  const l = lists.find(x => x.id == id);
+  if (!l) return;
+  const objDef = LIST_OBJECT_TYPES.find(o => o.key === l.objectType);
+  document.getElementById('listDetailTitle').textContent = l.name;
+  document.getElementById('listDetailMeta').innerHTML =
+    `${objDef ? objDef.icon + ' ' + objDef.label : l.objectType} &nbsp;•&nbsp; ${l.listType === 'smart' ? '⚡ Smart List (auto-updates)' : '📌 Static List'}`;
+  document.getElementById('listDetailAddBtn').style.display = l.listType === 'static' ? 'inline-flex' : 'none';
+  renderListDetailMembers();
+  openModal('listDetailModal');
+}
+
+function renderListDetailMembers() {
+  const l = lists.find(x => x.id == currentListDetailId);
+  if (!l) return;
+  const members = computeListMembers(l);
+  const cols = LIST_RECORD_COLUMNS[l.objectType] || [];
+  const thead = document.getElementById('listDetailTableHead');
+  const tbody = document.getElementById('listDetailTableBody');
+  thead.innerHTML = `<tr>${cols.map(c => `<th>${c.label}</th>`).join('')}<th>Action</th></tr>`;
+  if (!members.length) {
+    tbody.innerHTML = `<tr><td colspan="${cols.length + 1}" style="text-align:center;color:var(--text-light);padding:20px">No records match this list yet.</td></tr>`;
+  } else {
+    tbody.innerHTML = members.map(r => `<tr>
+      ${cols.map(c => `<td>${(r[c.key] !== null && r[c.key] !== undefined && r[c.key] !== '') ? r[c.key] : '-'}</td>`).join('')}
+      <td>${l.listType === 'static' ? `<button class="btn btn-danger btn-sm" onclick="removeFromStaticList(${r.id})">Remove</button>` : '<span style="font-size:11px;color:var(--text-light)">Auto</span>'}</td>
+    </tr>`).join('');
+  }
+  document.getElementById('listDetailCount').textContent = `${members.length} record${members.length === 1 ? '' : 's'}`;
+}
+
+async function persistListMembers(l) {
+  try {
+    const { error } = await supabaseClient.from('lists').update({ member_ids: l.memberIds || [] }).eq('id', l.id);
+    if (error) console.error('Could not update list members:', error);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function removeFromStaticList(recordId) {
+  const l = lists.find(x => x.id == currentListDetailId);
+  if (!l) return;
+  l.memberIds = (l.memberIds || []).filter(id => String(id) !== String(recordId));
+  await persistListMembers(l);
+  renderListDetailMembers();
+  renderLists();
+}
+
+function openListAddRecordsModal() {
+  document.getElementById('l-add-search').value = '';
+  renderListAddRecordsOptions();
+  openModal('listAddRecordsModal');
+}
+
+function renderListAddRecordsOptions() {
+  const l = lists.find(x => x.id == currentListDetailId);
+  if (!l) return;
+  const source = getObjectArray(l.objectType);
+  const existingIds = new Set((l.memberIds || []).map(String));
+  const q = (document.getElementById('l-add-search').value || '').toLowerCase();
+  const wrap = document.getElementById('listAddRecordsOptions');
+  const filtered = source.filter(r => !existingIds.has(String(r.id)) && getRecordLabel(l.objectType, r).toLowerCase().includes(q));
+  if (!filtered.length) {
+    wrap.innerHTML = '<div style="color:var(--text-light);font-size:12px;padding:10px">No matching records found.</div>';
+    return;
+  }
+  wrap.innerHTML = filtered.map(r => `
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;padding:7px 9px;border:1px solid var(--border);border-radius:6px;cursor:pointer">
+      <input type="checkbox" class="l-add-check" value="${r.id}"> ${getRecordLabel(l.objectType, r)}
+    </label>
+  `).join('');
+}
+
+async function confirmAddRecordsToList() {
+  const l = lists.find(x => x.id == currentListDetailId);
+  if (!l) return;
+  const checked = Array.from(document.querySelectorAll('.l-add-check:checked')).map(cb => cb.value);
+  if (!checked.length) { closeModal('listAddRecordsModal'); return; }
+  const existing = new Set((l.memberIds || []).map(String));
+  checked.forEach(id => existing.add(String(id)));
+  l.memberIds = Array.from(existing);
+  await persistListMembers(l);
+  closeModal('listAddRecordsModal');
+  renderListDetailMembers();
+  renderLists();
+  showToast(`✅ Added ${checked.length} record(s) to list`);
+}
+
 // ---- TASK ALERT SYSTEM ----
 function todayStr() {
   const d = new Date();
@@ -6968,6 +7463,8 @@ function renderDashboard() {
 function updateBadges() {
   document.getElementById('contactsBadge').textContent = contacts.length;
   document.getElementById('companiesBadge').textContent = companies.length;
+  const listsBadgeEl = document.getElementById('listsBadge');
+  if (listsBadgeEl) listsBadgeEl.textContent = lists.length;
   const overdueCount = tasks.filter(t => getTaskStatus(t) === 'overdue').length;
   const tasksBadgeEl = document.getElementById('tasksBadge');
   tasksBadgeEl.textContent = overdueCount > 0 ? overdueCount : tasks.filter(t=>!t.done).length;
@@ -8392,6 +8889,7 @@ if (remindersEnabled) checkTaskReminders();
       await loadCompaniesFromSupabase();
       await loadDealsFromSupabase();
       await loadTasksFromSupabase();
+      await loadListsFromSupabase();
       await loadPaymentMethodsFromSupabase();
       await loadInvoicesFromSupabase();
       await loadTicketsFromSupabase();

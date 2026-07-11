@@ -775,7 +775,7 @@
     <div class="topbar-title" id="pageTitle">Dashboard</div>
     <div class="search-bar">
       <span class="search-icon">🔍</span>
-      <input type="text" placeholder="Search..." id="globalSearch" oninput="globalSearch()" autocomplete="off" name="crm-global-search-nofill">
+      <input type="text" placeholder="Search..." id="globalSearch" oninput="globalSearch()" autocomplete="off" name="crm-global-search-nofill" readonly onfocus="this.removeAttribute('readonly')">
     </div>
     <div class="topbar-actions">
       <div class="user-menu-wrap">
@@ -8048,6 +8048,14 @@ if (remindersEnabled) checkTaskReminders();
   } catch (err) {
     console.error('Could not load user menu info:', err);
   }
+
+  // Safety net: clear globalSearch if the browser force-autofilled it with the saved email
+  setTimeout(() => {
+    const gs = document.getElementById('globalSearch');
+    if (gs && gs.value && gs.value.includes('@')) {
+      gs.value = '';
+    }
+  }, 400);
 })();
 
 function toggleUserMenu() {

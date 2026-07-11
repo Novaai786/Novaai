@@ -988,7 +988,7 @@
           <button class="btn btn-primary btn-sm" onclick="clearCompanyForm();openModal('companyModal')">+ Create Company</button>
         </div>
         <div class="table-wrap">
-          <table>
+          <table id="companiesTableEl">
             <thead><tr><th>Company</th><th>Industry</th><th>Website</th><th>CRM</th><th>Size</th><th>Country</th><th>Employees</th><th>Revenue</th><th>Tech Stack</th><th>Automation</th><th>Opportunity Score</th><th>Action</th></tr></thead>
             <tbody id="companiesTable"><tr><td colspan="11" style="text-align:center;color:var(--text-light);padding:20px">No companies yet.</td></tr></tbody>
           </table>
@@ -3070,6 +3070,7 @@ async function saveProperty() {
     closeModal('propertyModal');
     await loadCustomProperties();
     renderPropertiesManager();
+    refreshAllObjectViews();
     showToast('✅ Property saved');
   } catch (err) {
     console.error(err);
@@ -3084,6 +3085,7 @@ async function deleteProperty(id) {
     if (error) { alert('Could not delete property: ' + error.message); return; }
     await loadCustomProperties();
     renderPropertiesManager();
+    refreshAllObjectViews();
     showToast('🗑️ Property deleted');
   } catch (err) {
     console.error(err);
@@ -3133,6 +3135,61 @@ function collectCustomFieldsFrom(objectType, containerId) {
     result[key] = (input.type === 'checkbox') ? input.checked : input.value;
   });
   return result;
+}
+
+// Re-renders every list/kanban/card view that might show custom property columns
+function refreshAllObjectViews() {
+  if (typeof renderContacts === 'function' && document.getElementById('contactsTable')) renderContacts();
+  if (typeof renderCompanies === 'function' && document.getElementById('companiesTable')) renderCompanies();
+  if (typeof renderDeals === 'function' && document.getElementById('kanbanPipeline')) renderDeals();
+  if (typeof renderTasks === 'function' && document.getElementById('tasksList')) renderTasks();
+}
+
+// Injects one <th> per custom property into a table's header row (before the Action column)
+function injectCustomHeaderColumns(theadRowSelector, objectType) {
+  const tr = document.querySelector(theadRowSelector);
+  if (!tr) return;
+  tr.querySelectorAll('th[data-custom-col]').forEach(th => th.remove());
+  const props = propsFor(objectType);
+  if (!props.length) return;
+  const actionTh = Array.from(tr.children).find(th => th.textContent.trim() === 'Action');
+  props.forEach(p => {
+    const th = document.createElement('th');
+    th.setAttribute('data-custom-col', p.field_key);
+    th.textContent = p.label;
+    if (actionTh) tr.insertBefore(th, actionTh);
+    else tr.appendChild(th);
+  });
+}
+
+// Builds the <td> cells for a record's custom property values (for use inside table rows)
+function customCellsHtml(objectType, record) {
+  const props = propsFor(objectType);
+  if (!props.length) return '';
+  const values = (record && record.customFields) || {};
+  return props.map(p => {
+    let val = values[p.field_key];
+    if (p.field_type === 'checkbox') val = (val === true || val === 'true') ? '✅' : '—';
+    else if (val === undefined || val === null || val === '') val = '-';
+    return `<td style="font-size:12px" data-custom-col="${p.field_key}">${val}</td>`;
+  }).join('');
+}
+
+// Builds a small inline block of custom property values for card-based views (Deals kanban, Task cards)
+function customFieldsCardBlock(objectType, record) {
+  const props = propsFor(objectType);
+  if (!props.length) return '';
+  const values = (record && record.customFields) || {};
+  const filled = props.filter(p => {
+    const v = values[p.field_key];
+    return v !== undefined && v !== null && v !== '' && v !== false;
+  });
+  if (!filled.length) return '';
+  return `<div style="margin-top:4px;font-size:11px;color:var(--text-light)">${filled.map(p => {
+    let val = values[p.field_key];
+    if (p.field_type === 'checkbox') val = '✅';
+    return `${p.label}: <strong style="color:var(--text)">${val}</strong>`;
+  }).join(' · ')}</div>`;
 }
 
 // COLORS
@@ -3350,6 +3407,7 @@ function editContact(id) {
 
 function renderContacts() {
   const tbody = document.getElementById('contactsTable');
+  injectCustomHeaderColumns('#contactsTableEl thead tr', 'contact');
   const statusF = document.getElementById('filterStatus') ? document.getElementById('filterStatus').value : '';
   const sourceF = document.getElementById('filterSource') ? document.getElementById('filterSource').value : '';
   const icpF = document.getElementById('filterICP') ? document.getElementById('filterICP').value : '';
@@ -3390,6 +3448,7 @@ function renderContacts() {
       <td class="col-decisionMaker" style="font-size:12px">${c.decisionMaker||'-'}</td>
       <td class="col-budget" style="font-size:12px">${c.budget||'-'}</td>
       <td class="col-priority" style="font-size:12px">${c.priority ? `<span class="badge ${c.priority==='High'?'badge-high':c.priority==='Medium'?'badge-medium':'badge-low'}">${c.priority}</span>` : '-'}</td>
+      ${customCellsHtml('contact', c)}
       <td style="display:flex;gap:6px">
         <button class="btn btn-outline btn-sm" onclick="openContactProfile(${c.id})">👤 Profile</button>
         <button class="btn btn-outline btn-sm" onclick="editContact(${c.id})">✏️ Edit</button>
@@ -4526,6 +4585,7 @@ function editCompany(id) {
 
 function renderCompanies() {
   const tbody = document.getElementById('companiesTable');
+  injectCustomHeaderColumns('#companiesTableEl thead tr', 'company');
   if (!companies.length) { tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--text-light);padding:20px">No companies yet.</td></tr>'; return; }
   tbody.innerHTML = companies.map(c => {
     const opp = getOpportunityScore(c);
@@ -4542,6 +4602,7 @@ function renderCompanies() {
       <td style="font-size:12px">${c.techstack||'-'}</td>
       <td style="font-size:12px">${c.automation||'-'}</td>
       <td><span class="badge ${opp.cls}">${opp.icon} ${opp.label}</span></td>
+      ${customCellsHtml('company', c)}
       <td style="display:flex;gap:6px">
         <button class="btn btn-outline btn-sm" onclick="editCompany(${c.id})">✏️ Edit</button>
         <button class="btn btn-outline btn-sm" onclick="openTimeline('company', ${c.id})">🕒 Notes</button>
@@ -5231,6 +5292,7 @@ function renderDeals() {
               ${d.stage === 'Lost' && d.lostReason ? `<div class="deal-days-tag" style="color:#dc2626">❌ ${d.lostReason}</div>` : ''}
               ${d.owner ? `<div class="deal-owner">👤 ${d.owner}</div>` : ''}
               <div class="deal-days-tag">⏱️ ${daysInStage} day${daysInStage===1?'':'s'} in stage</div>
+              ${customFieldsCardBlock('deal', d)}
               <div class="deal-move-row">
                 <select class="deal-move-select" onchange="moveDeal(${d.id}, this.value)">
                   ${stageNames.map(st => `<option value="${st}" ${st===d.stage?'selected':''}>${st}</option>`).join('')}
@@ -5478,6 +5540,7 @@ function taskCardHtml(t) {
       <div class="task-info">
         <div class="task-title ${t.done?'done':''}">${t.title}${t.autoCreated ? ' <span style="font-size:10px;background:#ede9fe;color:#6d28d9;padding:2px 6px;border-radius:6px;font-weight:700">🤖 Auto</span>' : ''}</div>
         <div class="task-meta">${t.contact?'👤 '+t.contact+' · ':''}${t.date?'📅 '+t.date+' · ':''}${badge(t.priority)} ${taskStatusBadge(status)}</div>
+        ${customFieldsCardBlock('task', t)}
       </div>
       ${wa ? `<a class="btn btn-outline btn-sm" href="${wa}" target="_blank" rel="noopener" title="Send WhatsApp reminder">📱</a>` : ''}
       <button class="btn btn-danger btn-sm" onclick="deleteTask(${t.id})">✕</button>

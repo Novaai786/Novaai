@@ -775,7 +775,9 @@
     <div class="topbar-title" id="pageTitle">Dashboard</div>
     <div class="search-bar">
       <span class="search-icon">🔍</span>
+      <form autocomplete="off" onsubmit="return false;" style="display:contents">
       <input type="text" placeholder="Search..." id="globalSearch" oninput="globalSearch()" autocomplete="off" name="crm-global-search-nofill" readonly onfocus="this.removeAttribute('readonly')">
+      </form>
     </div>
     <div class="topbar-actions">
       <div class="user-menu-wrap">
@@ -1368,7 +1370,7 @@ Leadnovaai</textarea>
           </div>
           <div class="form-group" id="ai-key-group" style="display:none">
             <label class="form-label">API Key</label>
-            <input class="form-control" id="ai-api-key" type="password" placeholder="Paste your API key">
+            <input class="form-control" id="ai-api-key" type="password" placeholder="Paste your API key" autocomplete="new-password" name="crm-ai-api-key-nofill" data-lpignore="true" data-form-type="other">
             <div style="font-size:11.5px;color:var(--text-light);margin-top:4px" id="ai-key-hint">Your key is stored securely and only used for your own AI requests — never shared.</div>
           </div>
           <button class="btn btn-primary btn-sm" onclick="saveAIConfig()">💾 Save AI Settings</button>

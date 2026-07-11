@@ -1397,6 +1397,7 @@ Leadnovaai</textarea>
                     <input type="checkbox" id="scoring-select-all" onchange="toggleAllScoringLeads(this)"> Select all
                   </label>
                 </div>
+                <input type="text" id="scoring-lead-search" class="form-control" placeholder="🔍 Search leads by name..." style="margin-bottom:8px;font-size:12px;padding:6px 10px" oninput="filterScoringLeads()" autocomplete="off">
                 <div id="scoring-lead-list" style="max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--bg)"></div>
               </div>
               <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;margin-bottom:10px">
@@ -1411,6 +1412,7 @@ Leadnovaai</textarea>
               <div class="ai-card-desc">Short, personal, human-sounding emails — written from real pain points found on the lead's own website and tech stack. Never generic.</div>
               <div style="margin-bottom:10px">
                 <span style="font-size:12px;color:var(--text-light)">Select a contact</span>
+                <input type="text" id="email-writer-search" class="form-control" placeholder="🔍 Search by name..." style="margin-top:4px;margin-bottom:4px;font-size:12px;padding:6px 10px" oninput="filterEmailWriterContacts()" autocomplete="off">
                 <select class="form-control" id="email-writer-contact" style="margin-top:4px"></select>
               </div>
               <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;margin-bottom:10px">
@@ -1430,6 +1432,7 @@ Leadnovaai</textarea>
                     <input type="checkbox" id="followup-select-all" onchange="toggleAllFollowupLeads(this)"> Select all
                   </label>
                 </div>
+                <input type="text" id="followup-lead-search" class="form-control" placeholder="🔍 Search leads by name..." style="margin-bottom:8px;font-size:12px;padding:6px 10px" oninput="filterFollowupLeads()" autocomplete="off">
                 <div id="followup-lead-list" style="max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--bg)"></div>
               </div>
               <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;margin-bottom:10px">
@@ -7247,6 +7250,13 @@ async function callAI(prompt, feature, leads) {
 
 // ===== AI Automation: Lead/Contact Selectors =====
 function populateAIContactSelectors() {
+  const scoringSearch = document.getElementById('scoring-lead-search');
+  if (scoringSearch) scoringSearch.value = '';
+  const followupSearch = document.getElementById('followup-lead-search');
+  if (followupSearch) followupSearch.value = '';
+  const emailSearch = document.getElementById('email-writer-search');
+  if (emailSearch) emailSearch.value = '';
+
   // Lead scoring checklist
   const listEl = document.getElementById('scoring-lead-list');
   if (listEl) {
@@ -7298,6 +7308,33 @@ function toggleAllScoringLeads(checkbox) {
 
 function toggleAllFollowupLeads(checkbox) {
   document.querySelectorAll('.followup-lead-checkbox').forEach(cb => { cb.checked = checkbox.checked; });
+}
+
+function filterScoringLeads() {
+  const q = (document.getElementById('scoring-lead-search').value || '').toLowerCase().trim();
+  document.querySelectorAll('#scoring-lead-list label').forEach(label => {
+    label.style.display = label.textContent.toLowerCase().includes(q) ? 'flex' : 'none';
+  });
+}
+
+function filterFollowupLeads() {
+  const q = (document.getElementById('followup-lead-search').value || '').toLowerCase().trim();
+  document.querySelectorAll('#followup-lead-list label').forEach(label => {
+    label.style.display = label.textContent.toLowerCase().includes(q) ? 'flex' : 'none';
+  });
+}
+
+function filterEmailWriterContacts() {
+  const q = (document.getElementById('email-writer-search').value || '').toLowerCase().trim();
+  const selectEl = document.getElementById('email-writer-contact');
+  const options = selectEl.querySelectorAll('option');
+  let firstVisible = null;
+  options.forEach(opt => {
+    const match = opt.textContent.toLowerCase().includes(q);
+    opt.hidden = !match;
+    if (match && !firstVisible) firstVisible = opt;
+  });
+  if (firstVisible) selectEl.value = firstVisible.value;
 }
 
 async function runAI(type) {

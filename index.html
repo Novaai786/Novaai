@@ -759,6 +759,9 @@
     <div class="nav-item" onclick="showSection('importexport', this)">
       <span class="icon">📂</span> Import / Export
     </div>
+    <div class="nav-item" onclick="showSection('properties', this)">
+      <span class="icon">🧩</span> Properties
+    </div>
     <div class="nav-label">Admin</div>
     <div class="nav-item" onclick="showSection('team', this)">
       <span class="icon">🧑‍🤝‍🧑</span> Team & Roles
@@ -1072,7 +1075,7 @@
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn-outline btn-sm" id="reminderToggleBtn" onclick="toggleReminders()">🔔 Enable Browser Reminders</button>
             <button class="btn btn-outline btn-sm" onclick="openDailySummary()">📋 Daily Summary</button>
-            <button class="btn btn-primary btn-sm" onclick="openModal('taskModal')">+ Create Task</button>
+            <button class="btn btn-primary btn-sm" onclick="clearTaskForm();openModal('taskModal')">+ Create Task</button>
           </div>
         </div>
         <div class="task-filters" id="taskFilters">
@@ -1612,6 +1615,19 @@ Leadnovaai</textarea>
       </div>
     </div>
 
+    <!-- PROPERTIES -->
+    <div class="section" id="section-properties">
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header">
+          <div class="card-title">🧩 Custom Properties</div>
+        </div>
+        <div style="padding:16px 20px;font-size:13px;color:var(--text-light);border-bottom:1px solid var(--border)">
+          Create your own custom fields for Contacts, Companies, Deals, and Tasks — just like HubSpot's property manager. Once created, a property automatically appears in the Add/Edit form for that object and saves along with the record.
+        </div>
+        <div id="propertiesManagerBody" style="padding:20px"></div>
+      </div>
+    </div>
+
     <!-- TEAM & ROLES -->
     <div class="section" id="section-team">
       <div class="card" style="margin-bottom:20px">
@@ -1640,6 +1656,44 @@ Leadnovaai</textarea>
 </div>
 
 <!-- ===== MODALS ===== -->
+
+<!-- Property Modal -->
+<div class="modal-overlay" id="propertyModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="propModalTitle">Create Property</div>
+      <button class="modal-close" onclick="closeModal('propertyModal')">✕</button>
+    </div>
+    <input type="hidden" id="prop-object-type">
+    <input type="hidden" id="prop-edit-id">
+    <div class="form-group">
+      <label class="form-label">Property Label *</label>
+      <input class="form-control" id="prop-label" placeholder="e.g. Renewal Date" oninput="if(!document.getElementById('prop-key').disabled && !document.getElementById('prop-edit-id').value) document.getElementById('prop-key').value = slugifyPropKey(this.value)">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Field Name <span style="font-size:10px;color:var(--text-light)">(internal, auto-generated, used to store the value)</span></label>
+      <input class="form-control" id="prop-key" placeholder="e.g. renewal_date">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Field Type</label>
+      <select class="form-control" id="prop-type" onchange="togglePropOptionsField()">
+        <option value="text">Single-line text</option>
+        <option value="number">Number</option>
+        <option value="date">Date</option>
+        <option value="dropdown">Dropdown select</option>
+        <option value="checkbox">Checkbox (Yes/No)</option>
+      </select>
+    </div>
+    <div class="form-group" id="prop-options-group" style="display:none">
+      <label class="form-label">Dropdown Options <span style="font-size:10px;color:var(--text-light)">(comma-separated)</span></label>
+      <input class="form-control" id="prop-options" placeholder="e.g. Bronze, Silver, Gold">
+    </div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button class="btn btn-primary" style="flex:1" onclick="saveProperty()">Save Property</button>
+      <button class="btn btn-outline" onclick="closeModal('propertyModal')">Cancel</button>
+    </div>
+  </div>
+</div>
 
 <!-- Contact Modal -->
 <div class="modal-overlay" id="contactModal">
@@ -1822,6 +1876,7 @@ Leadnovaai</textarea>
       <label class="form-label">Notes</label>
       <textarea class="form-control" id="c-notes" rows="3" placeholder="Any notes about this contact..."></textarea>
     </div>
+    <div id="contact-custom-fields"></div>
     <div style="display:flex;gap:10px;margin-top:8px">
       <button class="btn btn-primary" style="flex:1" onclick="saveContact()">Save Contact</button>
       <button class="btn btn-outline" onclick="clearContactForm();closeModal('contactModal')">Cancel</button>
@@ -1932,6 +1987,7 @@ Leadnovaai</textarea>
       <label class="form-label">Notes</label>
       <textarea class="form-control" id="co-notes" rows="2" placeholder="BuiltWith result, observations..."></textarea>
     </div>
+    <div id="company-custom-fields"></div>
     <div style="display:flex;gap:10px;margin-top:8px">
       <button class="btn btn-primary" style="flex:1" onclick="saveCompany()">Save Company</button>
       <button class="btn btn-outline" onclick="clearCompanyForm();closeModal('companyModal')">Cancel</button>
@@ -2065,6 +2121,7 @@ Leadnovaai</textarea>
       <label class="form-label">Notes</label>
       <textarea class="form-control" id="d-notes" rows="2" placeholder="Deal details..."></textarea>
     </div>
+    <div id="deal-custom-fields"></div>
     <div style="display:flex;gap:10px;margin-top:8px">
       <button class="btn btn-primary" style="flex:1" onclick="saveDeal()">Save Deal</button>
       <button class="btn btn-outline" onclick="clearDealForm();closeModal('dealModal')">Cancel</button>
@@ -2140,6 +2197,7 @@ Leadnovaai</textarea>
       <label class="form-label">Notes</label>
       <textarea class="form-control" id="t-notes" rows="2" placeholder="Task details..."></textarea>
     </div>
+    <div id="task-custom-fields"></div>
     <div style="display:flex;gap:10px;margin-top:8px">
       <button class="btn btn-primary" style="flex:1" onclick="saveTask()">Save Task</button>
       <button class="btn btn-outline" onclick="closeModal('taskModal')">Cancel</button>
@@ -2859,7 +2917,7 @@ function showSection(id, el) {
     dashboard:'Dashboard', contacts:'Contacts', companies:'Companies',
     deals:'Deals & Pipeline', categories:'Service Categories & Pipelines', tasks:'Tasks', email:'Email Tracking',
     products:'Products', automation:'AI Automation', reports:'Reports', importexport:'Import / Export',
-    team:'Team & Roles'
+    team:'Team & Roles', properties:'Properties'
   };
   document.getElementById('pageTitle').textContent = titles[id] || id;
   closeSidebar();
@@ -2874,11 +2932,208 @@ function showSection(id, el) {
   if (id === 'products') renderProducts();
   if (id === 'reports') renderReports();
   if (id === 'team') renderTeam();
+  if (id === 'properties') renderPropertiesManager();
 }
 
 // MODAL
 function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+// ===== CUSTOM PROPERTIES ENGINE (HubSpot-style) =====
+let customProperties = []; // loaded from Supabase
+
+const PROPERTY_OBJECT_TYPES = [
+  { key: 'contact', label: 'Contact properties' },
+  { key: 'company', label: 'Company properties' },
+  { key: 'deal', label: 'Deal properties' },
+  { key: 'task', label: 'Task properties' }
+];
+
+async function loadCustomProperties() {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const userId = session.user.id;
+    const { data, error } = await supabaseClient
+      .from('properties')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true });
+    if (error) { console.error('Could not load properties:', error); return; }
+    customProperties = data || [];
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function propsFor(objectType) {
+  return customProperties.filter(p => p.object_type === objectType);
+}
+
+function slugifyPropKey(str) {
+  return (str || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+function renderPropertiesManager() {
+  const el = document.getElementById('propertiesManagerBody');
+  if (!el) return;
+  el.innerHTML = PROPERTY_OBJECT_TYPES.map(ot => {
+    const props = propsFor(ot.key);
+    return `
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header">
+          <div class="card-title">${ot.label}</div>
+          <button class="btn btn-primary btn-sm" onclick="openPropertyModal('${ot.key}')">+ Create property</button>
+        </div>
+        <div style="padding:8px 16px 16px">
+          ${props.length ? `<table style="width:100%;font-size:13px;border-collapse:collapse">
+            <thead><tr style="text-align:left;color:var(--text-light)"><th style="padding:6px 0">Label</th><th>Type</th><th>Field name</th><th></th></tr></thead>
+            <tbody>
+              ${props.map(p => `
+                <tr style="border-top:1px solid var(--border)">
+                  <td style="padding:8px 0">${p.label}</td>
+                  <td style="color:var(--text-light)">${p.field_type}</td>
+                  <td style="color:var(--text-light)">${p.field_key}</td>
+                  <td style="text-align:right">
+                    <button class="btn btn-outline btn-sm" onclick="openPropertyModal('${ot.key}','${p.id}')">Edit</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteProperty('${p.id}')">Delete</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>` : `<div style="color:var(--text-light);font-size:13px">No custom properties yet for this object.</div>`}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function openPropertyModal(objectType, propertyId) {
+  document.getElementById('prop-object-type').value = objectType;
+  document.getElementById('prop-edit-id').value = propertyId || '';
+  if (propertyId) {
+    const p = customProperties.find(p => p.id === propertyId);
+    if (!p) return;
+    document.getElementById('propModalTitle').textContent = 'Edit Property';
+    document.getElementById('prop-label').value = p.label || '';
+    document.getElementById('prop-key').value = p.field_key || '';
+    document.getElementById('prop-key').disabled = true;
+    document.getElementById('prop-type').value = p.field_type || 'text';
+    document.getElementById('prop-options').value = (p.options || []).join(', ');
+  } else {
+    document.getElementById('propModalTitle').textContent = 'Create Property';
+    document.getElementById('prop-label').value = '';
+    document.getElementById('prop-key').value = '';
+    document.getElementById('prop-key').disabled = false;
+    document.getElementById('prop-type').value = 'text';
+    document.getElementById('prop-options').value = '';
+  }
+  togglePropOptionsField();
+  openModal('propertyModal');
+}
+
+function togglePropOptionsField() {
+  const type = document.getElementById('prop-type').value;
+  document.getElementById('prop-options-group').style.display = (type === 'dropdown') ? 'block' : 'none';
+}
+
+async function saveProperty() {
+  const objectType = document.getElementById('prop-object-type').value;
+  const editId = document.getElementById('prop-edit-id').value;
+  const label = document.getElementById('prop-label').value.trim();
+  if (!label) { alert('Property label required!'); return; }
+  let fieldKey = slugifyPropKey(document.getElementById('prop-key').value.trim() || label);
+  if (!fieldKey) { alert('Could not generate a valid field name — try a different label.'); return; }
+  const fieldType = document.getElementById('prop-type').value;
+  const optionsRaw = document.getElementById('prop-options').value.trim();
+  const options = (fieldType === 'dropdown' && optionsRaw) ? optionsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+  if (!editId && customProperties.some(p => p.object_type === objectType && p.field_key === fieldKey)) {
+    alert('A property with this field name already exists for this object. Choose a different label/field name.');
+    return;
+  }
+
+  try {
+    const session = window.__currentSession;
+    if (!session) { alert('Session expired. Please log in again.'); return; }
+    const userId = session.user.id;
+    const row = { object_type: objectType, field_key: fieldKey, label, field_type: fieldType, options, user_id: userId };
+
+    if (editId) {
+      const { error } = await supabaseClient.from('properties').update(row).eq('id', editId);
+      if (error) { alert('Could not update property: ' + error.message); return; }
+    } else {
+      const { error } = await supabaseClient.from('properties').insert(row);
+      if (error) { alert('Could not create property: ' + error.message); return; }
+    }
+
+    closeModal('propertyModal');
+    await loadCustomProperties();
+    renderPropertiesManager();
+    showToast('✅ Property saved');
+  } catch (err) {
+    console.error(err);
+    alert('Something went wrong while saving the property.');
+  }
+}
+
+async function deleteProperty(id) {
+  if (!confirm('Delete this property? It will no longer appear in forms. Values already saved on records stay in the database but become hidden.')) return;
+  try {
+    const { error } = await supabaseClient.from('properties').delete().eq('id', id);
+    if (error) { alert('Could not delete property: ' + error.message); return; }
+    await loadCustomProperties();
+    renderPropertiesManager();
+    showToast('🗑️ Property deleted');
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+// Renders the dynamic custom-field inputs inside an object's Add/Edit modal
+function renderCustomFieldsInto(objectType, containerId, values) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const props = propsFor(objectType);
+  values = values || {};
+  if (!props.length) { container.innerHTML = ''; return; }
+  container.innerHTML = `
+    <div style="font-size:12px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.4px;margin:14px 0 8px">Custom Properties</div>
+    ${props.map(p => {
+      const val = values[p.field_key] != null ? values[p.field_key] : '';
+      const inputId = `cf-${objectType}-${p.field_key}`;
+      if (p.field_type === 'dropdown') {
+        return `<div class="form-group"><label class="form-label">${p.label}</label>
+          <select class="form-control" id="${inputId}" data-cfkey="${p.field_key}">
+            <option value="">Select...</option>
+            ${(p.options || []).map(o => `<option value="${o}" ${val === o ? 'selected' : ''}>${o}</option>`).join('')}
+          </select></div>`;
+      }
+      if (p.field_type === 'checkbox') {
+        return `<div class="form-group"><label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="${inputId}" data-cfkey="${p.field_key}" ${(val === true || val === 'true') ? 'checked' : ''}> ${p.label}</label></div>`;
+      }
+      if (p.field_type === 'date') {
+        return `<div class="form-group"><label class="form-label">${p.label}</label><input class="form-control" type="date" id="${inputId}" data-cfkey="${p.field_key}" value="${val}"></div>`;
+      }
+      if (p.field_type === 'number') {
+        return `<div class="form-group"><label class="form-label">${p.label}</label><input class="form-control" type="number" id="${inputId}" data-cfkey="${p.field_key}" value="${val}"></div>`;
+      }
+      return `<div class="form-group"><label class="form-label">${p.label}</label><input class="form-control" type="text" id="${inputId}" data-cfkey="${p.field_key}" value="${val}"></div>`;
+    }).join('')}
+  `;
+}
+
+// Reads the dynamic custom-field inputs back out of an object's modal
+function collectCustomFieldsFrom(objectType, containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return {};
+  const result = {};
+  container.querySelectorAll('[data-cfkey]').forEach(input => {
+    const key = input.dataset.cfkey;
+    result[key] = (input.type === 'checkbox') ? input.checked : input.value;
+  });
+  return result;
+}
 
 // COLORS
 const colors = ['#2563EB','#059669','#d97706','#7c3aed','#dc2626','#0891b2','#db2777'];
@@ -2928,6 +3183,7 @@ function mapLeadFromDb(row) {
     budget: row.budget || '',
     priority: row.priority || '',
     notes: row.notes || '',
+    customFields: row.custom_fields || {},
     date: row.created_at ? new Date(row.created_at).toLocaleDateString() : ''
   };
 }
@@ -2958,6 +3214,7 @@ function mapLeadToDb(data, userId) {
     budget: data.budget || null,
     priority: data.priority || null,
     notes: data.notes || null,
+    custom_fields: data.customFields || {},
     user_id: userId
   };
 }
@@ -3011,7 +3268,8 @@ async function saveContact() {
     decisionMaker: document.getElementById('c-decisionmaker').value,
     budget: document.getElementById('c-budget').value,
     priority: document.getElementById('c-priority').value,
-    notes: document.getElementById('c-notes').value.trim()
+    notes: document.getElementById('c-notes').value.trim(),
+    customFields: collectCustomFieldsFrom('contact', 'contact-custom-fields')
   };
 
   try {
@@ -3053,6 +3311,7 @@ function clearContactForm() {
   document.getElementById('c-priority').value = '';
   document.getElementById('c-edit-id').value = '';
   document.getElementById('contactModalTitle').textContent = 'Add Contact';
+  renderCustomFieldsInto('contact', 'contact-custom-fields', {});
 }
 
 function editContact(id) {
@@ -3085,6 +3344,7 @@ function editContact(id) {
   document.getElementById('c-notes').value = c.notes || '';
   document.getElementById('c-edit-id').value = c.id;
   document.getElementById('contactModalTitle').textContent = 'Edit Contact';
+  renderCustomFieldsInto('contact', 'contact-custom-fields', c.customFields || {});
   openModal('contactModal');
 }
 
@@ -4162,7 +4422,8 @@ function mapCompanyFromDb(row) {
     techstack: row.techstack || '',
     automation: row.automation || '',
     category: row.category || '',
-    notes: row.notes || ''
+    notes: row.notes || '',
+    customFields: row.custom_fields || {}
   };
 }
 
@@ -4202,14 +4463,16 @@ async function saveCompany() {
     techstack: document.getElementById('co-techstack').value.trim(),
     automation: document.getElementById('co-automation').value,
     category: document.getElementById('co-category').value,
-    notes: document.getElementById('co-notes').value.trim()
+    notes: document.getElementById('co-notes').value.trim(),
+    customFields: collectCustomFieldsFrom('company', 'company-custom-fields')
   };
 
   try {
     const session = window.__currentSession;
     if (!session) { alert('Session expired. Please log in again.'); return; }
     const userId = session.user.id;
-    const dbRow = Object.assign({}, data, { user_id: userId });
+    const { customFields, ...restData } = data;
+    const dbRow = Object.assign({}, restData, { custom_fields: customFields || {}, user_id: userId });
 
     if (editId) {
       const { error } = await supabaseClient.from('companies').update(dbRow).eq('id', editId);
@@ -4236,6 +4499,7 @@ function clearCompanyForm() {
   document.getElementById('co-category').value = '';
   document.getElementById('co-edit-id').value = '';
   document.getElementById('companyModalTitle').textContent = 'Add Company';
+  renderCustomFieldsInto('company', 'company-custom-fields', {});
 }
 
 function editCompany(id) {
@@ -4256,6 +4520,7 @@ function editCompany(id) {
   document.getElementById('co-notes').value = c.notes || '';
   document.getElementById('co-edit-id').value = c.id;
   document.getElementById('companyModalTitle').textContent = 'Edit Company';
+  renderCustomFieldsInto('company', 'company-custom-fields', c.customFields || {});
   openModal('companyModal');
 }
 
@@ -4553,7 +4818,8 @@ function mapDealFromDb(row) {
     notes: row.notes || '',
     stage: row.stage || 'New Lead',
     contactId: row.contactid || null,
-    pipelineHistory: row.pipelinehistory || []
+    pipelineHistory: row.pipelinehistory || [],
+    customFields: row.custom_fields || {}
   };
 }
 
@@ -4571,6 +4837,7 @@ function mapDealToDb(data, userId) {
     stage: data.stage || null,
     contactid: data.contactId || null,
     pipelinehistory: data.pipelineHistory || [],
+    custom_fields: data.customFields || {},
     user_id: userId
   };
 }
@@ -4609,7 +4876,8 @@ async function saveDeal() {
     date: document.getElementById('d-date').value,
     probability: document.getElementById('d-probability').value,
     lostReason: document.getElementById('d-lostreason').value,
-    notes: document.getElementById('d-notes').value.trim()
+    notes: document.getElementById('d-notes').value.trim(),
+    customFields: collectCustomFieldsFrom('deal', 'deal-custom-fields')
   };
 
   try {
@@ -4654,6 +4922,7 @@ function clearDealForm() {
   document.getElementById('d-edit-id').value = '';
   document.getElementById('dealModalTitle').textContent = 'Add Deal';
   autoFillProbability();
+  renderCustomFieldsInto('deal', 'deal-custom-fields', {});
 }
 
 function editDeal(id) {
@@ -4671,6 +4940,7 @@ function editDeal(id) {
   document.getElementById('d-notes').value = d.notes || '';
   document.getElementById('d-edit-id').value = d.id;
   document.getElementById('dealModalTitle').textContent = 'Edit Deal';
+  renderCustomFieldsInto('deal', 'deal-custom-fields', d.customFields || {});
   openModal('dealModal');
 }
 
@@ -5059,7 +5329,8 @@ function mapTaskFromDb(row) {
     contactId: row.contactid || null,
     notes: row.notes || '',
     done: !!row.done,
-    autoCreated: !!row.autocreated
+    autoCreated: !!row.autocreated,
+    customFields: row.custom_fields || {}
   };
 }
 
@@ -5073,6 +5344,7 @@ function mapTaskToDb(data, userId) {
     notes: data.notes || null,
     done: !!data.done,
     autocreated: !!data.autoCreated,
+    custom_fields: data.customFields || {},
     user_id: userId
   };
 }
@@ -5106,7 +5378,8 @@ async function saveTask() {
     priority: document.getElementById('t-priority').value,
     contact: document.getElementById('t-contact').value.trim(),
     notes: document.getElementById('t-notes').value.trim(),
-    done: false
+    done: false,
+    customFields: collectCustomFieldsFrom('task', 'task-custom-fields')
   };
   try {
     const session = window.__currentSession;
@@ -5115,12 +5388,18 @@ async function saveTask() {
     const { error } = await supabaseClient.from('tasks').insert(dbRow);
     if (error) { alert('Could not save task: ' + error.message); return; }
     closeModal('taskModal');
-    ['t-title','t-date','t-contact','t-notes'].forEach(id => document.getElementById(id).value = '');
+    clearTaskForm();
     await loadTasksFromSupabase();
   } catch (err) {
     alert('Something went wrong while saving the task.');
     console.error(err);
   }
+}
+
+function clearTaskForm() {
+  ['t-title','t-date','t-contact','t-notes'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('t-priority').value = 'High';
+  renderCustomFieldsInto('task', 'task-custom-fields', {});
 }
 
 async function toggleTask(id) {
@@ -8044,6 +8323,7 @@ if (remindersEnabled) checkTaskReminders();
       window.__currentSession = session;
     }
     if (session) {
+      await loadCustomProperties();
       await loadCategoriesFromSupabase();
       await loadContactsFromSupabase();
       await loadCompaniesFromSupabase();

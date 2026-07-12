@@ -8459,21 +8459,34 @@ async function runAI(type) {
       }
       const parsed = parseAIEmailDraft(draft);
       window.__lastAIEmailDraft = { contactId: topContact.id, subject: parsed.subject, body: parsed.body };
+      window.__lastAIFollowupPreview = null;
       body.innerHTML = `<strong>Generated for: ${topContact.name}</strong><br><br>
-        <div style="background:var(--bg);padding:16px;border-radius:8px;border-left:3px solid var(--primary);white-space:pre-wrap">${draft}</div>
-        <br><em style="color:var(--text-light)">${useDeep ? '🌐 Personalised using live research on their website & tech stack.' : (topContact.enrichmentNotes ? '🔍 Personalised using your saved AI + manual enrichment data.' : 'Personalise before sending.')}</em>
+        <div class="form-group">
+          <label class="form-label" style="font-size:11px">Subject (editable)</label>
+          <input class="form-control" id="ai-email-subject-edit" style="font-size:13px" value="${(parsed.subject || '').replace(/"/g, '&quot;')}">
+        </div>
+        <div class="form-group">
+          <label class="form-label" style="font-size:11px">Body (editable)</label>
+          <textarea class="form-control" id="ai-email-body-edit" rows="7" style="font-size:13px">${parsed.body || ''}</textarea>
+        </div>
+        <em style="color:var(--text-light)">${useDeep ? '🌐 Personalised using live research on their website & tech stack.' : (topContact.enrichmentNotes ? '🔍 Personalised using your saved AI + manual enrichment data.' : 'Personalise before sending.')} Feel free to edit anything above before sending.</em>
         <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
           <div style="font-weight:600;font-size:13px;margin-bottom:8px">📤 Send This Email</div>
           <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:8px">
             <input type="checkbox" id="ai-email-setup-followups" checked onchange="toggleAIEmailFollowupOptions()"> 🔁 Automatically set up AI follow-ups as soon as I Send/Schedule
           </label>
-          <div id="ai-email-followup-options" style="display:flex;gap:14px;align-items:center;margin-bottom:10px;flex-wrap:wrap;background:var(--bg);padding:8px 10px;border-radius:8px">
-            <label style="font-size:11.5px;color:var(--text-light);display:flex;align-items:center;gap:5px">How many follow-ups?
-              <input type="number" id="ai-email-followup-count" class="form-control" min="1" max="6" value="5" style="width:55px;padding:5px 8px;font-size:12px">
-            </label>
-            <label style="font-size:11.5px;color:var(--text-light);display:flex;align-items:center;gap:5px">Days between each follow-up
-              <input type="number" id="ai-email-followup-gap" class="form-control" min="1" value="3" style="width:55px;padding:5px 8px;font-size:12px">
-            </label>
+          <div id="ai-email-followup-options" style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px;background:var(--bg);padding:10px;border-radius:8px">
+            <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+              <label style="font-size:11.5px;color:var(--text-light);display:flex;align-items:center;gap:5px">How many follow-ups?
+                <input type="number" id="ai-email-followup-count" class="form-control" min="1" max="6" value="5" style="width:55px;padding:5px 8px;font-size:12px" onchange="window.__lastAIFollowupPreview=null">
+              </label>
+              <label style="font-size:11.5px;color:var(--text-light);display:flex;align-items:center;gap:5px">Days between each follow-up
+                <input type="number" id="ai-email-followup-gap" class="form-control" min="1" value="3" style="width:55px;padding:5px 8px;font-size:12px" onchange="window.__lastAIFollowupPreview=null">
+              </label>
+              <button class="btn btn-outline btn-sm" onclick="previewAIFollowups()">👁️ Preview &amp; Edit Follow-ups</button>
+            </div>
+            <div id="ai-followup-preview-status" style="font-size:11.5px;color:var(--text-light)"></div>
+            <div id="ai-followup-preview-list"></div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
             <button class="btn btn-primary btn-sm" onclick="sendAIEmailDraftNow()">🚀 Send Now</button>
@@ -8579,13 +8592,19 @@ async function sendAIEmailDraftNow() {
   if (!draft || !statusEl) return;
   const contact = contacts.find(c => String(c.id) === String(draft.contactId));
   if (!contact) { statusEl.style.color = '#dc2626'; statusEl.textContent = '⚠️ Contact not found.'; return; }
+  const subjectEl = document.getElementById('ai-email-subject-edit');
+  const bodyEl = document.getElementById('ai-email-body-edit');
+  const subject = subjectEl ? subjectEl.value.trim() : draft.subject;
+  const emailBody = bodyEl ? bodyEl.value.trim() : draft.body;
+  draft.subject = subject;
+  draft.body = emailBody;
   statusEl.style.color = 'var(--text-light)';
   statusEl.textContent = 'Sending...';
-  const result = await sendOrScheduleSingleEmail(contact, draft.subject, draft.body, null);
+  const result = await sendOrScheduleSingleEmail(contact, subject, emailBody, null);
   if (!result.success) { statusEl.style.color = '#dc2626'; statusEl.textContent = '⚠️ ' + result.error; return; }
   statusEl.style.color = 'var(--success)';
-  statusEl.textContent = `✅ Email ${contact.email} ko bhej diya gaya!`;
-  await maybeSetupAIFollowups(contact, draft.body, new Date());
+  statusEl.textContent = `✅ Email sent to ${contact.email}!`;
+  await maybeSetupAIFollowups(contact, emailBody, new Date());
 }
 
 async function scheduleAIEmailDraft() {
@@ -8599,14 +8618,83 @@ async function scheduleAIEmailDraft() {
   if (scheduledAt <= new Date()) { statusEl.style.color = '#dc2626'; statusEl.textContent = '⚠️ Please select a future time.'; return; }
   const contact = contacts.find(c => String(c.id) === String(draft.contactId));
   if (!contact) { statusEl.style.color = '#dc2626'; statusEl.textContent = '⚠️ Contact not found.'; return; }
+  const subjectEl = document.getElementById('ai-email-subject-edit');
+  const bodyEl = document.getElementById('ai-email-body-edit');
+  const subject = subjectEl ? subjectEl.value.trim() : draft.subject;
+  const emailBody = bodyEl ? bodyEl.value.trim() : draft.body;
+  draft.subject = subject;
+  draft.body = emailBody;
   statusEl.style.color = 'var(--text-light)';
   statusEl.textContent = 'Scheduling...';
-  const result = await sendOrScheduleSingleEmail(contact, draft.subject, draft.body, scheduledAt);
+  const result = await sendOrScheduleSingleEmail(contact, subject, emailBody, scheduledAt);
   if (!result.success) { statusEl.style.color = '#dc2626'; statusEl.textContent = '⚠️ ' + result.error; return; }
   statusEl.style.color = 'var(--success)';
   statusEl.textContent = `✅ Scheduled for ${scheduledAt.toLocaleString()}!`;
   if (typeof refreshScheduledQueue === 'function') refreshScheduledQueue();
-  await maybeSetupAIFollowups(contact, draft.body, scheduledAt);
+  await maybeSetupAIFollowups(contact, emailBody, scheduledAt);
+}
+
+// ===== AI Follow-up preview/edit before they're scheduled =====
+async function previewAIFollowups() {
+  const draft = window.__lastAIEmailDraft;
+  const statusEl = document.getElementById('ai-followup-preview-status');
+  if (!draft || !statusEl) return;
+  const contact = contacts.find(c => String(c.id) === String(draft.contactId));
+  if (!contact) { statusEl.style.color = '#dc2626'; statusEl.textContent = '⚠️ Contact not found.'; return; }
+  const bodyEl = document.getElementById('ai-email-body-edit');
+  const emailBody = bodyEl ? bodyEl.value.trim() : draft.body;
+  const count = Math.max(1, Math.min(6, Number(document.getElementById('ai-email-followup-count').value) || 3));
+  const gap = Math.max(1, Number(document.getElementById('ai-email-followup-gap').value) || 3);
+  statusEl.style.color = 'var(--text-light)';
+  statusEl.textContent = `🤖 Generating ${count} follow-up drafts...`;
+  document.getElementById('ai-followup-preview-list').innerHTML = '';
+  try {
+    const prompt = `You already sent this first cold outreach email to a lead named ${contact.name}${contact.company ? ' at ' + contact.company : ''}:\n"""\n${emailBody}\n"""\nWrite exactly ${count} short follow-up emails to send afterwards if they don't reply — each one with a different angle (value-add, social proof, direct ask, final breakup email, etc.), casual and human, under 60 words each, with its own subject line. Respond ONLY as a JSON array like [{"subject":"...","body":"..."}], nothing else, no markdown fences.`;
+    const raw = await callAI(prompt, 'followup-sequence');
+    const clean = raw.replace(/```json|```/g, '').trim();
+    const aiSteps = JSON.parse(clean);
+    if (!Array.isArray(aiSteps) || !aiSteps.length) throw new Error('AI did not return any follow-ups.');
+    window.__lastAIFollowupPreview = aiSteps.map(s => ({ subject: s.subject || 'Following up', body: s.body || '', delayDays: gap }));
+    statusEl.style.color = 'var(--success)';
+    statusEl.textContent = `✅ ${window.__lastAIFollowupPreview.length} follow-ups drafted — review/edit below, or add your own.`;
+    renderFollowupPreviewList();
+  } catch (err) {
+    statusEl.style.color = '#dc2626';
+    statusEl.textContent = '⚠️ ' + err.message;
+  }
+}
+
+function renderFollowupPreviewList() {
+  const wrap = document.getElementById('ai-followup-preview-list');
+  if (!wrap) return;
+  const steps = window.__lastAIFollowupPreview || [];
+  wrap.innerHTML = steps.map((s, i) => `
+    <div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;background:#fff">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <strong style="font-size:12px">Follow-up ${i + 1} — after ${s.delayDays} day${s.delayDays === 1 ? '' : 's'}</strong>
+        <button class="btn btn-danger btn-sm" onclick="removeFollowupPreviewStep(${i})">✕</button>
+      </div>
+      <input class="form-control" style="font-size:12px;margin-bottom:6px" value="${(s.subject || '').replace(/"/g, '&quot;')}" onchange="updateFollowupPreviewField(${i}, 'subject', this.value)">
+      <textarea class="form-control" rows="3" style="font-size:12px" onchange="updateFollowupPreviewField(${i}, 'body', this.value)">${s.body || ''}</textarea>
+    </div>`).join('') + `<button class="btn btn-outline btn-sm" onclick="addFollowupPreviewStep()">+ Add Another Follow-up</button>`;
+}
+
+function updateFollowupPreviewField(idx, field, value) {
+  if (!window.__lastAIFollowupPreview || !window.__lastAIFollowupPreview[idx]) return;
+  window.__lastAIFollowupPreview[idx][field] = value;
+}
+
+function removeFollowupPreviewStep(idx) {
+  if (!window.__lastAIFollowupPreview) return;
+  window.__lastAIFollowupPreview.splice(idx, 1);
+  renderFollowupPreviewList();
+}
+
+function addFollowupPreviewStep() {
+  if (!window.__lastAIFollowupPreview) window.__lastAIFollowupPreview = [];
+  const gap = Math.max(1, Number(document.getElementById('ai-email-followup-gap')?.value) || 3);
+  window.__lastAIFollowupPreview.push({ subject: 'Following up', body: '', delayDays: gap });
+  renderFollowupPreviewList();
 }
 
 async function maybeSetupAIFollowups(contact, firstEmailBody, baseDate) {
@@ -8616,18 +8704,24 @@ async function maybeSetupAIFollowups(contact, firstEmailBody, baseDate) {
   if (!campaignSettings.webAppUrl) { statusEl.innerHTML += '<br>⚠️ Could not set up follow-ups: please save your Web App URL in Sender Setup first.'; return; }
   const count = Math.max(1, Math.min(6, Number(document.getElementById('ai-email-followup-count').value) || 3));
   const gap = Math.max(1, Number(document.getElementById('ai-email-followup-gap').value) || 3);
-  statusEl.innerHTML += `<br>🤖 Generating ${count} follow-ups with AI...`;
   try {
     const session = window.__currentSession;
     if (!session) throw new Error('Session expired.');
     const userId = session.user.id;
 
-    const prompt = `You already sent this first cold outreach email to a lead named ${contact.name}${contact.company ? ' at ' + contact.company : ''}:\n"""\n${firstEmailBody}\n"""\nWrite exactly ${count} short follow-up emails to send afterwards if they don't reply — each one with a different angle (value-add, social proof, direct ask, final breakup email, etc.), casual and human, under 60 words each, with its own subject line. Respond ONLY as a JSON array like [{"subject":"...","body":"..."}], nothing else, no markdown fences.`;
-    const raw = await callAI(prompt, 'followup-sequence');
-    const clean = raw.replace(/```json|```/g, '').trim();
-    const aiSteps = JSON.parse(clean);
-    if (!Array.isArray(aiSteps) || !aiSteps.length) throw new Error('AI did not return any follow-ups.');
-    const steps = aiSteps.map(s => ({ subject: s.subject || 'Following up', body: s.body || '', delayDays: gap }));
+    let steps;
+    if (window.__lastAIFollowupPreview && window.__lastAIFollowupPreview.length) {
+      statusEl.innerHTML += `<br>✍️ Using your reviewed/edited ${window.__lastAIFollowupPreview.length} follow-up(s)...`;
+      steps = window.__lastAIFollowupPreview.map(s => ({ subject: s.subject || 'Following up', body: s.body || '', delayDays: Math.max(1, Number(s.delayDays) || gap) }));
+    } else {
+      statusEl.innerHTML += `<br>🤖 Generating ${count} follow-ups with AI...`;
+      const prompt = `You already sent this first cold outreach email to a lead named ${contact.name}${contact.company ? ' at ' + contact.company : ''}:\n"""\n${firstEmailBody}\n"""\nWrite exactly ${count} short follow-up emails to send afterwards if they don't reply — each one with a different angle (value-add, social proof, direct ask, final breakup email, etc.), casual and human, under 60 words each, with its own subject line. Respond ONLY as a JSON array like [{"subject":"...","body":"..."}], nothing else, no markdown fences.`;
+      const raw = await callAI(prompt, 'followup-sequence');
+      const clean = raw.replace(/```json|```/g, '').trim();
+      const aiSteps = JSON.parse(clean);
+      if (!Array.isArray(aiSteps) || !aiSteps.length) throw new Error('AI did not return any follow-ups.');
+      steps = aiSteps.map(s => ({ subject: s.subject || 'Following up', body: s.body || '', delayDays: gap }));
+    }
 
     const seqName = `AI Follow-ups — ${contact.name} — ${new Date().toLocaleDateString()}`;
     const seqDbRow = mapSequenceToDb({ name: seqName, steps }, userId);

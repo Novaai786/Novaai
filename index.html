@@ -1495,54 +1495,6 @@ Leadnovaai</textarea>
               <div class="ai-card-desc">Predict which deals are most likely to close this month. AI evaluates deal stage, value, and contact activity to give you a win probability score.</div>
               <button class="btn btn-primary btn-sm" onclick="runAI('deal-prediction')">Predict Deals</button>
             </div>
-            <div class="ai-card">
-              <div class="ai-card-icon">🔍</div>
-              <div><span class="ai-card-badge">AI ENRICHMENT</span></div>
-              <div class="ai-card-title">AI Lead Enrichment</div>
-              <div class="ai-card-desc">AI researches each selected lead (company size, likely industry, pain points) and <b>saves it permanently</b> to their profile — so every future email pulls from richer context, not a blank slate.</div>
-              <div style="margin-bottom:10px">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-                  <span style="font-size:12px;color:var(--text-light)">Select leads</span>
-                  <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer">
-                    <input type="checkbox" id="enrich-select-all" onchange="toggleAllEnrichLeads(this)"> Select all
-                  </label>
-                </div>
-                <input type="text" id="enrich-lead-search" class="form-control" placeholder="🔍 Search leads by name..." style="margin-bottom:8px;font-size:12px;padding:6px 10px" oninput="filterEnrichLeads()" autocomplete="off">
-                <div id="enrich-lead-list" style="max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--bg)"></div>
-              </div>
-              <button class="btn btn-primary btn-sm" onclick="runAI('enrichment')">Run AI Enrichment</button>
-            </div>
-            <div class="ai-card">
-              <div class="ai-card-icon">🧑‍💻</div>
-              <div><span class="ai-card-badge">MANUAL RESEARCH</span></div>
-              <div class="ai-card-title">Add Your Own Research</div>
-              <div class="ai-card-desc">Did your own digging on a lead — LinkedIn, their site, a Google search? Paste it here. It's saved to the same enrichment profile AI uses, so your emails get smarter too.</div>
-              <div style="margin-bottom:10px">
-                <span style="font-size:12px;color:var(--text-light)">Select a contact</span>
-                <input type="text" id="manual-enrich-search" class="form-control" placeholder="🔍 Search by name..." style="margin-top:4px;margin-bottom:4px;font-size:12px;padding:6px 10px" oninput="filterManualEnrichContacts()" autocomplete="off">
-                <select class="form-control" id="manual-enrich-contact" style="margin-top:4px"></select>
-              </div>
-              <div class="form-row" style="margin-bottom:10px">
-                <div class="form-group" style="margin-bottom:0">
-                  <label class="form-label" style="font-size:11px">Company Size / Industry</label>
-                  <input class="form-control" id="manual-enrich-size" style="font-size:12px;padding:6px 10px" placeholder="e.g. 20-50 employees, SaaS">
-                </div>
-                <div class="form-group" style="margin-bottom:0">
-                  <label class="form-label" style="font-size:11px">LinkedIn URL</label>
-                  <input class="form-control" id="manual-enrich-linkedin" style="font-size:12px;padding:6px 10px" placeholder="linkedin.com/in/...">
-                </div>
-              </div>
-              <div class="form-group">
-                <label class="form-label" style="font-size:11px">Pain Point / Opportunity</label>
-                <input class="form-control" id="manual-enrich-painpoint" style="font-size:12px;padding:6px 10px" placeholder="e.g. Still doing outreach manually in spreadsheets">
-              </div>
-              <div class="form-group">
-                <label class="form-label" style="font-size:11px">Your Research Notes</label>
-                <textarea class="form-control" id="manual-enrich-notes" rows="3" style="font-size:12px" placeholder="Paste whatever you found — LinkedIn bio, recent posts, news, anything useful..."></textarea>
-              </div>
-              <button class="btn btn-primary btn-sm" onclick="saveManualEnrichment()">💾 Save My Research</button>
-              <span id="manual-enrich-msg" style="font-size:12px;margin-left:8px;display:none"></span>
-            </div>
           </div>
         </div>
       </div>

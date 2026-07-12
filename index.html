@@ -3338,6 +3338,18 @@ const colors = ['#2563EB','#059669','#d97706','#7c3aed','#dc2626','#0891b2','#db
 function getColor(name) { let h=0; for(let c of name) h=c.charCodeAt(0)+((h<<5)-h); return colors[Math.abs(h)%colors.length]; }
 function initials(name) { return name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2); }
 
+// Security: escape user-entered text before inserting into innerHTML, so a contact/company/task
+// name, note, etc. can never be interpreted as HTML/JS (prevents stored XSS).
+function escapeHtml(value) {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // STATUS BADGE
 function badge(status) {
   const map = {'New':'badge-new','Contacted':'badge-contacted','Interested':'badge-interested','Closed':'badge-closed','Lost':'badge-lost','Won':'badge-won','Pending':'badge-pending','Sent':'badge-open','Opened':'badge-interested','Replied':'badge-closed','No Reply':'badge-lost','High':'badge-high','Medium':'badge-medium','Low':'badge-low'};
@@ -3568,28 +3580,28 @@ function renderContacts() {
     <tr>
       <td><div style="display:flex;align-items:center;gap:8px">
         <div class="contact-name-link" style="display:flex;align-items:center;gap:8px" onclick="openContactProfile(${c.id})">
-        <div style="width:30px;height:30px;border-radius:50%;background:${getColor(c.name)};color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0">${initials(c.name)}</div>
-        <div><div class="cp-name-text" style="font-weight:600;font-size:13px">${c.fname || (c.name||'').split(' ')[0] || ''}</div><div style="font-size:11px;color:var(--text-light)">${c.title||''}</div></div>
+        <div style="width:30px;height:30px;border-radius:50%;background:${getColor(c.name)};color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0">${escapeHtml(initials(c.name))}</div>
+        <div><div class="cp-name-text" style="font-weight:600;font-size:13px">${escapeHtml(c.fname || (c.name||'').split(' ')[0] || '')}</div><div style="font-size:11px;color:var(--text-light)">${escapeHtml(c.title||'')}</div></div>
         </div>
       </div></td>
-      <td style="font-size:12px">${c.lname !== undefined ? c.lname : (c.name||'').split(' ').slice(1).join(' ')}</td>
-      <td style="font-size:12px">${c.email||'-'}</td>
-      <td style="font-size:12px">${c.company||'-'}</td>
-      <td class="col-companySize" style="font-size:12px">${c.companySize||'-'}</td>
-      <td class="col-country" style="font-size:12px">${c.country||'-'}</td>
-      <td class="col-phone" style="font-size:12px">${c.phone||'-'}</td>
+      <td style="font-size:12px">${escapeHtml(c.lname !== undefined ? c.lname : (c.name||'').split(' ').slice(1).join(' '))}</td>
+      <td style="font-size:12px">${escapeHtml(c.email||'-')}</td>
+      <td style="font-size:12px">${escapeHtml(c.company||'-')}</td>
+      <td class="col-companySize" style="font-size:12px">${escapeHtml(c.companySize||'-')}</td>
+      <td class="col-country" style="font-size:12px">${escapeHtml(c.country||'-')}</td>
+      <td class="col-phone" style="font-size:12px">${escapeHtml(c.phone||'-')}</td>
       <td>${badge(c.status)}</td>
-      <td class="col-source" style="font-size:12px">${c.source||'-'}</td>
-      <td class="col-icp" style="font-size:12px">${c.icp||'-'}</td>
-      <td class="col-leadScore" style="font-size:12px">${c.leadScore||'-'}</td>
-      <td class="col-website" style="font-size:12px">${c.website ? `<a href="https://${c.website.replace(/^https?:\/\//,'')}" target="_blank" rel="noopener">${c.website}</a>` : '-'}</td>
-      <td class="col-linkedin" style="font-size:12px">${c.linkedin ? `<a href="https://${c.linkedin.replace(/^https?:\/\//,'')}" target="_blank" rel="noopener">View</a>` : '-'}</td>
-      <td class="col-painPoint" style="font-size:12px">${c.painPoint||'-'}</td>
-      <td class="col-lastContacted" style="font-size:12px">${c.lastContacted||'-'}</td>
-      <td class="col-nextFollowup" style="font-size:12px;${followupOverdue?'color:#dc2626;font-weight:700':''}">${c.nextFollowup||'-'}${followupOverdue?' ⚠️':''}</td>
-      <td class="col-decisionMaker" style="font-size:12px">${c.decisionMaker||'-'}</td>
-      <td class="col-budget" style="font-size:12px">${c.budget||'-'}</td>
-      <td class="col-priority" style="font-size:12px">${c.priority ? `<span class="badge ${c.priority==='High'?'badge-high':c.priority==='Medium'?'badge-medium':'badge-low'}">${c.priority}</span>` : '-'}</td>
+      <td class="col-source" style="font-size:12px">${escapeHtml(c.source||'-')}</td>
+      <td class="col-icp" style="font-size:12px">${escapeHtml(c.icp||'-')}</td>
+      <td class="col-leadScore" style="font-size:12px">${escapeHtml(c.leadScore||'-')}</td>
+      <td class="col-website" style="font-size:12px">${c.website ? `<a href="https://${escapeHtml(c.website.replace(/^https?:\/\//,''))}" target="_blank" rel="noopener">${escapeHtml(c.website)}</a>` : '-'}</td>
+      <td class="col-linkedin" style="font-size:12px">${c.linkedin ? `<a href="https://${escapeHtml(c.linkedin.replace(/^https?:\/\//,''))}" target="_blank" rel="noopener">View</a>` : '-'}</td>
+      <td class="col-painPoint" style="font-size:12px">${escapeHtml(c.painPoint||'-')}</td>
+      <td class="col-lastContacted" style="font-size:12px">${escapeHtml(c.lastContacted||'-')}</td>
+      <td class="col-nextFollowup" style="font-size:12px;${followupOverdue?'color:#dc2626;font-weight:700':''}">${escapeHtml(c.nextFollowup||'-')}${followupOverdue?' ⚠️':''}</td>
+      <td class="col-decisionMaker" style="font-size:12px">${escapeHtml(c.decisionMaker||'-')}</td>
+      <td class="col-budget" style="font-size:12px">${escapeHtml(c.budget||'-')}</td>
+      <td class="col-priority" style="font-size:12px">${c.priority ? `<span class="badge ${c.priority==='High'?'badge-high':c.priority==='Medium'?'badge-medium':'badge-low'}">${escapeHtml(c.priority)}</span>` : '-'}</td>
       ${customCellsHtml('contact', c)}
       <td style="display:flex;gap:6px">
         <button class="btn btn-outline btn-sm" onclick="openContactProfile(${c.id})">👤 Profile</button>
@@ -4733,17 +4745,17 @@ function renderCompanies() {
     const opp = getOpportunityScore(c);
     return `
     <tr>
-      <td><div style="font-weight:600">${c.name}</div><div style="font-size:11px;color:var(--text-light)">${c.location||''}</div></td>
-      <td style="font-size:12px">${c.industry||'-'}</td>
-      <td style="font-size:12px">${c.website ? `<a href="https://${c.website.replace(/^https?:\/\//,'')}" target="_blank" style="color:var(--primary)">${c.website}</a>` : '-'}</td>
-      <td>${(c.crm||'').includes('HubSpot') ? '<span style="color:#059669;font-weight:700">✅ HubSpot</span>' : (c.crm||'').includes('No CRM') ? '<span style="color:#dc2626;font-weight:700">❌ No CRM</span>' : (c.crm||'-')}</td>
-      <td style="font-size:12px">${c.size||'-'}</td>
-      <td style="font-size:12px">${c.country||'-'}</td>
-      <td style="font-size:12px">${c.employees||'-'}</td>
-      <td style="font-size:12px">${c.revenue||'-'}</td>
-      <td style="font-size:12px">${c.techstack||'-'}</td>
-      <td style="font-size:12px">${c.automation||'-'}</td>
-      <td><span class="badge ${opp.cls}">${opp.icon} ${opp.label}</span></td>
+      <td><div style="font-weight:600">${escapeHtml(c.name)}</div><div style="font-size:11px;color:var(--text-light)">${escapeHtml(c.location||'')}</div></td>
+      <td style="font-size:12px">${escapeHtml(c.industry||'-')}</td>
+      <td style="font-size:12px">${c.website ? `<a href="https://${escapeHtml(c.website.replace(/^https?:\/\//,''))}" target="_blank" style="color:var(--primary)">${escapeHtml(c.website)}</a>` : '-'}</td>
+      <td>${(c.crm||'').includes('HubSpot') ? '<span style="color:#059669;font-weight:700">✅ HubSpot</span>' : (c.crm||'').includes('No CRM') ? '<span style="color:#dc2626;font-weight:700">❌ No CRM</span>' : escapeHtml(c.crm||'-')}</td>
+      <td style="font-size:12px">${escapeHtml(c.size||'-')}</td>
+      <td style="font-size:12px">${escapeHtml(c.country||'-')}</td>
+      <td style="font-size:12px">${escapeHtml(c.employees||'-')}</td>
+      <td style="font-size:12px">${escapeHtml(c.revenue||'-')}</td>
+      <td style="font-size:12px">${escapeHtml(c.techstack||'-')}</td>
+      <td style="font-size:12px">${escapeHtml(c.automation||'-')}</td>
+      <td><span class="badge ${opp.cls}">${opp.icon} ${escapeHtml(opp.label)}</span></td>
       ${customCellsHtml('company', c)}
       <td style="display:flex;gap:6px">
         <button class="btn btn-outline btn-sm" onclick="editCompany(${c.id})">✏️ Edit</button>
@@ -5427,12 +5439,12 @@ function renderDeals() {
             const daysInStage = getCurrentStageDays(d);
             return `
             <div class="deal-card2 ${stuckClass}" draggable="true" id="deal-${d.id}" ondragstart="kanbanDragStart(event,${d.id})" ondragend="kanbanDragEnd(event)">
-              <div class="deal-name">${d.name} ${stuckBadge}</div>
-              ${d.company ? `<div class="deal-company">${d.company}</div>` : ''}
+              <div class="deal-name">${escapeHtml(d.name)} ${stuckBadge}</div>
+              ${d.company ? `<div class="deal-company">${escapeHtml(d.company)}</div>` : ''}
               ${d.value ? `<div class="deal-value">$${parseInt(d.value).toLocaleString()}</div>` : ''}
               ${d.value ? `<div class="deal-days-tag" style="margin-top:2px">📊 ${getCloseProbability(d)}% → Exp. $${getExpectedRevenue(d).toLocaleString()}</div>` : ''}
-              ${d.stage === 'Lost' && d.lostReason ? `<div class="deal-days-tag" style="color:#dc2626">❌ ${d.lostReason}</div>` : ''}
-              ${d.owner ? `<div class="deal-owner">👤 ${d.owner}</div>` : ''}
+              ${d.stage === 'Lost' && d.lostReason ? `<div class="deal-days-tag" style="color:#dc2626">❌ ${escapeHtml(d.lostReason)}</div>` : ''}
+              ${d.owner ? `<div class="deal-owner">👤 ${escapeHtml(d.owner)}</div>` : ''}
               <div class="deal-days-tag">⏱️ ${daysInStage} day${daysInStage===1?'':'s'} in stage</div>
               ${customFieldsCardBlock('deal', d)}
               <div class="deal-move-row">
@@ -5784,7 +5796,7 @@ function renderLists() {
     const count = computeListMembers(l).length;
     const objDef = LIST_OBJECT_TYPES.find(o => o.key === l.objectType);
     return `<tr>
-      <td style="font-weight:600;cursor:pointer;color:var(--primary)" onclick="openListDetail(${l.id})">${l.name}</td>
+      <td style="font-weight:600;cursor:pointer;color:var(--primary)" onclick="openListDetail(${l.id})">${escapeHtml(l.name)}</td>
       <td>${objDef ? objDef.icon + ' ' + objDef.label : l.objectType}</td>
       <td><span class="badge ${l.listType === 'smart' ? 'badge-interested' : 'badge-new'}">${l.listType === 'smart' ? '⚡ Smart' : '📌 Static'}</span></td>
       <td>${count}</td>
@@ -5951,7 +5963,7 @@ function renderListDetailMembers() {
     tbody.innerHTML = `<tr><td colspan="${cols.length + 1}" style="text-align:center;color:var(--text-light);padding:20px">No records match this list yet.</td></tr>`;
   } else {
     tbody.innerHTML = members.map(r => `<tr>
-      ${cols.map(c => `<td>${(r[c.key] !== null && r[c.key] !== undefined && r[c.key] !== '') ? r[c.key] : '-'}</td>`).join('')}
+      ${cols.map(c => `<td>${(r[c.key] !== null && r[c.key] !== undefined && r[c.key] !== '') ? escapeHtml(r[c.key]) : '-'}</td>`).join('')}
       <td>${l.listType === 'static' ? `<button class="btn btn-danger btn-sm" onclick="removeFromStaticList(${r.id})">Remove</button>` : '<span style="font-size:11px;color:var(--text-light)">Auto</span>'}</td>
     </tr>`).join('');
   }
@@ -5996,7 +6008,7 @@ function renderListAddRecordsOptions() {
   }
   wrap.innerHTML = filtered.map(r => `
     <label style="display:flex;align-items:center;gap:8px;font-size:13px;padding:7px 9px;border:1px solid var(--border);border-radius:6px;cursor:pointer">
-      <input type="checkbox" class="l-add-check" value="${r.id}"> ${getRecordLabel(l.objectType, r)}
+      <input type="checkbox" class="l-add-check" value="${r.id}"> ${escapeHtml(getRecordLabel(l.objectType, r))}
     </label>
   `).join('');
 }
@@ -6065,8 +6077,8 @@ function taskCardHtml(t) {
     <div class="task-item ${status}">
       <div class="task-check ${t.done?'done':''}" onclick="toggleTask(${t.id})"></div>
       <div class="task-info">
-        <div class="task-title ${t.done?'done':''}">${t.title}${t.autoCreated ? ' <span style="font-size:10px;background:#ede9fe;color:#6d28d9;padding:2px 6px;border-radius:6px;font-weight:700">🤖 Auto</span>' : ''}</div>
-        <div class="task-meta">${t.contact?'👤 '+t.contact+' · ':''}${t.date?'📅 '+t.date+' · ':''}${badge(t.priority)} ${taskStatusBadge(status)}</div>
+        <div class="task-title ${t.done?'done':''}">${escapeHtml(t.title)}${t.autoCreated ? ' <span style="font-size:10px;background:#ede9fe;color:#6d28d9;padding:2px 6px;border-radius:6px;font-weight:700">🤖 Auto</span>' : ''}</div>
+        <div class="task-meta">${t.contact?'👤 '+escapeHtml(t.contact)+' · ':''}${t.date?'📅 '+escapeHtml(t.date)+' · ':''}${badge(t.priority)} ${taskStatusBadge(status)}</div>
         ${customFieldsCardBlock('task', t)}
       </div>
       ${wa ? `<a class="btn btn-outline btn-sm" href="${wa}" target="_blank" rel="noopener" title="Send WhatsApp reminder">📱</a>` : ''}

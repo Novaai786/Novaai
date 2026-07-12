@@ -1003,7 +1003,7 @@
     <!-- LISTS -->
     <div class="section" id="section-lists">
       <div style="padding:12px 16px;font-size:12px;color:var(--text-light);background:#fff;border:1px solid var(--border);border-radius:10px;margin-bottom:14px">
-        📋 <b>Static Lists</b> mein aap records ko manually add karte hain (jaise HubSpot). ⚡ <b>Smart Lists</b> aapke set kiye gaye filters ke mutabiq khud-ba-khud update hoti rehti hain.
+        📋 <b>Static Lists</b> you manually add records (like HubSpot). ⚡ <b>Smart Lists</b> automatically update based on the filters you set.
       </div>
       <div class="card">
         <div class="card-header">
@@ -1078,7 +1078,7 @@
           <button class="btn btn-primary btn-sm" onclick="clearCategoryForm();openModal('categoryModal')">+ Add Category</button>
         </div>
         <div style="padding:14px 20px;font-size:12px;color:var(--text-light);border-bottom:1px solid var(--border)">
-          Har service ki apni category banao aur uska custom pipeline (stages) set karo. Contacts, Companies aur Deals ko category assign karo taake confusion na ho. Har pipeline "Won" aur "Lost" pe khatam hota hai taake Dashboard/Reports sahi rahein.
+          Create a category for each service and set its own custom pipeline (stages). Assign a category to Contacts, Companies and Deals to keep things organized. Every pipeline ends at "Won" or "Lost" so Dashboard/Reports stay accurate.
         </div>
         <div class="table-wrap">
           <table>
@@ -1376,9 +1376,9 @@ Leadnovaai</textarea>
           <div id="aiTrialBanner" style="display:none;align-items:flex-start;gap:10px;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;padding:12px 14px;margin-bottom:16px">
             <span style="font-size:18px">⚠️</span>
             <div style="font-size:13px;color:#991B1B">
-              <strong>Aapka 3-din ka free AI trial khatam ho gaya hai.</strong><br>
-              AI features dobara use karne ke liye neeche apna free provider select karein aur API key add karein.
-              Step-by-step guide ke liye upar <b>"Get Free Setup Guide"</b> button dabayein.
+              <strong>Your 3-day free AI trial has ended.</strong><br>
+              To keep using AI features, select a free provider below and add your API key.
+              For a step-by-step guide, click <b>"Get Free Setup Guide"</b> button dabayein.
             </div>
           </div>
           <div class="form-group">
@@ -1444,13 +1444,22 @@ Leadnovaai</textarea>
               <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;margin-bottom:10px">
                 <input type="checkbox" id="email-visit-website" checked> 🌐 Research their website &amp; tech stack for pain points
               </label>
+              <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;margin-bottom:8px">
+                <input type="checkbox" id="ai-email-setup-followups" onchange="toggleAIEmailFollowupOptions()"> 🔁 Bhejte hi automatic follow-ups bhi set kar dein
+              </label>
+              <div id="ai-email-followup-options" style="display:none;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+                <span style="font-size:11.5px;color:var(--text-light)">How many follow-ups:</span>
+                <input type="number" min="1" max="6" value="3" id="ai-email-followup-count" class="form-control" style="max-width:60px;padding:5px 8px;font-size:12px">
+                <span style="font-size:11.5px;color:var(--text-light)">Days between each:</span>
+                <input type="number" min="1" max="30" value="3" id="ai-email-followup-gap" class="form-control" style="max-width:60px;padding:5px 8px;font-size:12px">
+              </div>
               <button class="btn btn-primary btn-sm" onclick="runAI('email-writer')">Generate Email</button>
             </div>
             <div class="ai-card">
               <div class="ai-card-icon">🔍</div>
               <div><span class="ai-card-badge">AI ENRICHMENT</span></div>
               <div class="ai-card-title">AI Lead Enrichment</div>
-              <div class="ai-card-desc">Contact ki profile ko permanently enrich karein — AI research + <b>aapki apni manual research</b> dono ek hi jagah save hoti hain, aur Email Writer usay khud-ba-khud use karta hai.</div>
+              <div class="ai-card-desc">Permanently enrich a contact's profile — AI research + <b>your own manual research</b> are both saved in one place, and Email Writer automatically uses it.</div>
               <div style="margin-bottom:10px">
                 <span style="font-size:12px;color:var(--text-light)">Select a contact</span>
                 <input type="text" id="enrich-contact-search" class="form-control" placeholder="🔍 Search by name..." style="margin-top:4px;margin-bottom:4px;font-size:12px;padding:6px 10px" oninput="filterEnrichContacts()" autocomplete="off">
@@ -1462,8 +1471,8 @@ Leadnovaai</textarea>
               </div>
               <button class="btn btn-primary btn-sm" style="margin-bottom:10px" onclick="runLeadEnrichmentAI()">🤖 Run AI Enrichment</button>
               <div style="margin-bottom:8px">
-                <div style="font-size:12px;color:var(--text-light);margin-bottom:4px">✍️ Apni Research Yahan Add Karein</div>
-                <textarea id="enrich-manual-input" class="form-control" rows="3" placeholder="Jo bhi aapne khud LinkedIn, website ya kahin se research kiya hai wo yahan likhein..." style="font-size:12px"></textarea>
+                <div style="font-size:12px;color:var(--text-light);margin-bottom:4px">✍️ Add Your Own Research Here</div>
+                <textarea id="enrich-manual-input" class="form-control" rows="3" placeholder="Paste whatever you researched yourself — LinkedIn, their website, anywhere — here..." style="font-size:12px"></textarea>
               </div>
               <button class="btn btn-outline btn-sm" onclick="addManualEnrichmentNote()">+ Add My Notes</button>
               <div id="enrich-status-msg" style="font-size:11.5px;margin-top:6px;display:none"></div>
@@ -1592,7 +1601,7 @@ Leadnovaai</textarea>
       <div class="card" style="margin-bottom:18px;border:2px solid #16a34a">
         <div class="card-header"><div class="card-title">🤖 Clean AI-Ready Data Export</div></div>
         <div class="ie-card-desc" style="margin-bottom:12px">
-          Contacts, Companies, Deals, Tasks, aur Emails ko ek standard, clean JSON format mein export karta hai — har object mein consistent keys (<code>name, company, email, status, score</code> waghera) taake AI tools ko predictable, clean data mile. Aapke asal CRM data ko ye touch nahi karta, sirf ek clean copy banata hai.
+          Exports Contacts, Companies, Deals, Tasks, and Emails into a standard, clean JSON format — every object has consistent keys (<code>name, company, email, status, score</code> etc.) so AI tools get predictable, clean data. This doesn't touch your actual CRM data — it only creates a clean copy.
         </div>
         <button class="btn btn-primary" onclick="exportCleanAIData()">🤖 Download Clean AI Data (.json)</button>
         <div class="import-msg" id="cleanAIDataMsg"></div>
@@ -2234,7 +2243,7 @@ Leadnovaai</textarea>
       <button class="btn btn-outline btn-sm" onclick="addListFilterRow()">+ Add Filter</button>
     </div>
     <div id="l-static-note" style="font-size:12px;color:var(--text-light);margin:10px 0">
-      💡 List save karne ke baad, list detail page se records "+ Add Records" button se add kar sakte hain.
+      💡 After saving the list, you can add records from the list detail page using the "+ Add Records" button.
     </div>
     <div style="display:flex;gap:10px;margin-top:14px">
       <button class="btn btn-primary" style="flex:1" onclick="saveList()">💾 Save List</button>
@@ -5209,7 +5218,7 @@ function addCategoryStageInput(value) {
 
 function removeStageRow(btn) {
   const list = document.getElementById('cat-stages-list');
-  if (list.children.length <= 1) { alert('Kam az kam ek stage zaroori hai.'); return; }
+  if (list.children.length <= 1) { alert('At least one stage is required.'); return; }
   btn.closest('[data-stage-row]').remove();
 }
 
@@ -5280,7 +5289,7 @@ async function saveCategory() {
   if (!name) { alert('Category name required!'); return; }
   const rows = [...document.querySelectorAll('#cat-stages-list [data-stage-row] input')];
   const middleStages = rows.map(inp => inp.value.trim()).filter(Boolean);
-  if (!middleStages.length) { alert('Kam az kam ek pipeline stage add karo.'); return; }
+  if (!middleStages.length) { alert('Add at least one pipeline stage.'); return; }
   const stages = [...middleStages, 'Won', 'Lost'];
   const editId = document.getElementById('cat-edit-id').value;
 
@@ -5309,7 +5318,7 @@ async function saveCategory() {
 async function deleteCategory(id) {
   const inUse = contacts.some(c => c.category == id) || companies.some(c => c.category == id) || deals.some(d => d.category == id);
   const msg = inUse
-    ? 'Ye category kuch contacts/companies/deals mein use ho rahi hai. Delete karne se un par category "Unassigned" ho jayegi. Continue?'
+    ? 'This category is used by some contacts/companies/deals. Deleting it will set their category to "Unassigned". Continue?'
     : 'Delete this category?';
   if (!confirm(msg)) return;
 
@@ -5857,7 +5866,7 @@ async function saveList() {
       const value = row.querySelector('.lf-value').value.trim();
       if (field) filters.push({ field, operator, value });
     });
-    if (!filters.length) { alert('Smart list ke liye kam az kam 1 filter add karein.'); return; }
+    if (!filters.length) { alert('Add at least 1 filter for a smart list.'); return; }
   }
 
   try {
@@ -5904,7 +5913,7 @@ function editList(id) {
 }
 
 async function deleteList(id) {
-  if (!confirm('Delete this list? Ye sirf list delete karega, underlying records delete nahi honge.')) return;
+  if (!confirm('Delete this list? This will only delete the list, not the underlying records.')) return;
   try {
     const { error } = await supabaseClient.from('lists').delete().eq('id', id);
     if (error) { alert('Could not delete list: ' + error.message); return; }
@@ -6455,13 +6464,13 @@ function previewCampaign() {
 }
 
 async function sendCampaign() {
-  if (!campaignSettings.webAppUrl) { alert('Pehle Apps Script Web App URL save karo (Sender Setup mein).'); return; }
+  if (!campaignSettings.webAppUrl) { alert('First save your Apps Script Web App URL (in Sender Setup).'); return; }
   const subjectTpl = document.getElementById('campaignSubject').value.trim();
   const bodyTpl = document.getElementById('campaignBody').value.trim();
-  if (!subjectTpl || !bodyTpl) { alert('Subject aur Body required hain.'); return; }
+  if (!subjectTpl || !bodyTpl) { alert('Subject and Body are required.'); return; }
   const list = [...campaignSelectedIds].map(id => contacts.find(c => c.id === id)).filter(Boolean);
-  if (!list.length) { alert('Kam az kam ek contact select karo.'); return; }
-  if (!confirm(`${list.length} contact(s) ko email bhejna hai. Confirm karein?`)) return;
+  if (!list.length) { alert('Select at least one contact.'); return; }
+  if (!confirm(`Send email to ${list.length} contact(s)? Confirm?`)) return;
 
   const logEl = document.getElementById('campaignSendLog');
   logEl.innerHTML = '';
@@ -6527,18 +6536,18 @@ async function sendCampaign() {
 }
 
 async function scheduleCampaign() {
-  if (!campaignSettings.webAppUrl) { alert('Pehle Apps Script Web App URL save karo (Sender Setup mein).'); return; }
+  if (!campaignSettings.webAppUrl) { alert('First save your Apps Script Web App URL (in Sender Setup).'); return; }
   const dt = document.getElementById('scheduleDateTime').value;
-  if (!dt) { alert('Date/time select karo.'); return; }
+  if (!dt) { alert('Select a date/time.'); return; }
   const scheduledAt = new Date(dt);
-  if (scheduledAt <= new Date()) { alert('Future ka time select karo.'); return; }
+  if (scheduledAt <= new Date()) { alert('Select a future time.'); return; }
 
   const subjectTpl = document.getElementById('campaignSubject').value.trim();
   const bodyTpl = document.getElementById('campaignBody').value.trim();
-  if (!subjectTpl || !bodyTpl) { alert('Subject aur Body required hain.'); return; }
+  if (!subjectTpl || !bodyTpl) { alert('Subject and Body are required.'); return; }
   const list = [...campaignSelectedIds].map(id => contacts.find(c => c.id === id)).filter(Boolean);
-  if (!list.length) { alert('Kam az kam ek contact select karo.'); return; }
-  if (!confirm(`${list.length} contact(s) ko ${scheduledAt.toLocaleString()} pe schedule karna hai. Confirm?`)) return;
+  if (!list.length) { alert('Select at least one contact.'); return; }
+  if (!confirm(`Schedule for ${list.length} contact(s) at ${scheduledAt.toLocaleString()}? Confirm?`)) return;
 
   const logEl = document.getElementById('campaignSendLog');
   logEl.innerHTML = '';
@@ -6583,7 +6592,7 @@ async function scheduleCampaign() {
 async function refreshScheduledQueue() {
   const box = document.getElementById('scheduledQueueTable');
   if (!campaignSettings.webAppUrl) {
-    box.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-light)">Pehle Web App URL save karo Sender Setup mein.</div>';
+    box.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-light)">First save your Web App URL in Sender Setup.</div>';
     return;
   }
   try {
@@ -6631,7 +6640,7 @@ async function refreshScheduledQueue() {
 }
 
 async function cancelScheduledEmail(queueId) {
-  if (!confirm('Ye scheduled email cancel karni hai?')) return;
+  if (!confirm('Cancel this scheduled email?')) return;
   try {
     await fetch(campaignSettings.webAppUrl, {
       method: 'POST',
@@ -6645,7 +6654,7 @@ async function cancelScheduledEmail(queueId) {
 }
 
 async function deleteQueueItem(queueId) {
-  if (!confirm('Ye entry permanently delete karna hai? Ye undo nahi ho sakta.')) return;
+  if (!confirm('Permanently delete this entry? This cannot be undone.')) return;
   try {
     await fetch(campaignSettings.webAppUrl, {
       method: 'POST',
@@ -6660,7 +6669,7 @@ async function deleteQueueItem(queueId) {
 
 function openEditQueueModalIdx(idx) {
   const q = (window._scheduledQueueCache || [])[idx];
-  if (!q) { alert('Item not found — list ko refresh karke dobara try karo.'); return; }
+  if (!q) { alert('Item not found — refresh the list and try again.'); return; }
   openEditQueueModal(q.queueId, q.to, q.subject, q.body, q.scheduledAt);
 }
 
@@ -6685,7 +6694,7 @@ async function saveEditedQueueItem() {
   if (!subject) { alert('Subject required.'); return; }
   if (!dt) { alert('Scheduled date/time required.'); return; }
   const scheduledAt = new Date(dt);
-  if (scheduledAt <= new Date()) { alert('Future ka time select karo.'); return; }
+  if (scheduledAt <= new Date()) { alert('Select a future time.'); return; }
   const msg = document.getElementById('eqSaveMsg');
   msg.textContent = 'Saving...';
   try {
@@ -6794,7 +6803,7 @@ async function saveSequence() {
   const name = document.getElementById('seq-name').value.trim();
   if (!name) { alert('Sequence name required!'); return; }
   if (!seqBuilderSteps.length || seqBuilderSteps.some(s => !s.subject.trim() || !s.body.trim())) {
-    alert('Har email step mein Subject aur Body required hai!'); return;
+    alert('Subject and Body are required for every email step!'); return;
   }
   const editId = document.getElementById('seq-edit-id').value;
   const steps = JSON.parse(JSON.stringify(seqBuilderSteps));
@@ -6850,7 +6859,7 @@ function editSequence(id) {
 }
 
 async function deleteSequence(id) {
-  if (!confirm('Ye sequence delete karni hai? (Already enrolled contacts par asar nahi padega)')) return;
+  if (!confirm('Delete this sequence? (Already enrolled contacts will not be affected)')) return;
   try {
     const { error } = await supabaseClient.from('sequences').delete().eq('id', id);
     if (error) { alert('Could not delete sequence: ' + error.message); return; }
@@ -6966,13 +6975,13 @@ function toggleAllSeqContacts(checkbox) {
 }
 
 async function enrollContactsInSequence() {
-  if (!campaignSettings.webAppUrl) { alert('Pehle Apps Script Web App URL save karo (Campaigns tab → Sender Setup).'); return; }
+  if (!campaignSettings.webAppUrl) { alert('First save your Apps Script Web App URL (Campaigns tab → Sender Setup).'); return; }
   const sequenceId = Number(document.getElementById('seq-enroll-id').value);
   const seq = sequences.find(s => s.id === sequenceId);
   if (!seq) return;
   const list = [...seqSelectedIds].map(id => contacts.find(c => c.id === id)).filter(Boolean);
-  if (!list.length) { alert('Kam az kam ek contact select karo.'); return; }
-  if (!confirm(`${list.length} contact(s) ko "${seq.name}" sequence mein enroll karna hai (${seq.steps.length} emails)?`)) return;
+  if (!list.length) { alert('Select at least one contact.'); return; }
+  if (!confirm(`Enroll ${list.length} contact(s) in "${seq.name}" sequence (${seq.steps.length} emails)?`)) return;
 
   const logEl = document.getElementById('seqEnrollLog');
   logEl.innerHTML = '';
@@ -7154,18 +7163,18 @@ function openFollowupModal(trackId) {
 }
 
 async function scheduleFollowupFromCampaign() {
-  if (!campaignSettings.webAppUrl) { alert('Pehle Apps Script Web App URL save karo (Sender Setup mein).'); return; }
+  if (!campaignSettings.webAppUrl) { alert('First save your Apps Script Web App URL (in Sender Setup).'); return; }
   const trackId = document.getElementById('fu-track-id').value;
   const log = campaignLogs.find(l => l.trackId === trackId);
-  if (!log) { alert('Original campaign log nahi mila.'); return; }
+  if (!log) { alert('Original campaign log not found.'); return; }
   const subjectTpl = document.getElementById('fu-subject').value.trim();
   const bodyTpl = document.getElementById('fu-body').value.trim();
   const dateVal = document.getElementById('fu-date').value;
   const timeVal = document.getElementById('fu-time').value;
-  if (!subjectTpl || !bodyTpl) { alert('Subject aur Body required hain.'); return; }
-  if (!dateVal || !timeVal) { alert('Date aur Time select karo.'); return; }
+  if (!subjectTpl || !bodyTpl) { alert('Subject and Body are required.'); return; }
+  if (!dateVal || !timeVal) { alert('Select a date and time.'); return; }
   const scheduledAt = new Date(`${dateVal}T${timeVal}`);
-  if (scheduledAt <= new Date()) { alert('Future ka date/time select karo.'); return; }
+  if (scheduledAt <= new Date()) { alert('Select a future date/time.'); return; }
 
   const contact = contacts.find(c => c.id === log.contactId) || { name: log.name, company: log.company, email: log.email };
   const subject = mergeTags(subjectTpl, contact);
@@ -7185,7 +7194,7 @@ async function scheduleFollowupFromCampaign() {
       })
     });
     const data = await res.json();
-    if (!data.success) { alert('Follow-up schedule nahi ho saka: ' + (data.error || 'unknown error')); return; }
+    if (!data.success) { alert('Could not schedule follow-up: ' + (data.error || 'unknown error')); return; }
 
     // Track this as a 1-step "sequence enrollment" so it shows in Active Enrollments with Stop/Delete options
     const enrollment = {
@@ -7227,7 +7236,7 @@ let repliedTrackIds = new Set(JSON.parse(localStorage.getItem('crm_replied_track
 async function refreshCampaignTracking() {
   const box = document.getElementById('campaignTrackingTable');
   if (!campaignSettings.webAppUrl) {
-    box.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-light)">Pehle Web App URL save karo Sender Setup mein.</div>';
+    box.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-light)">First save your Web App URL in Sender Setup.</div>';
     return;
   }
   try {
@@ -7272,7 +7281,7 @@ function markCampaignReplied(trackId) {
 }
 
 async function deleteCampaignLog(trackId) {
-  if (!confirm('Ye email log permanently delete karna hai? Ye undo nahi ho sakta.')) return;
+  if (!confirm('Permanently delete this email log? This cannot be undone.')) return;
   try {
     await fetch(campaignSettings.webAppUrl, {
       method: 'POST',
@@ -7791,7 +7800,7 @@ async function deleteRole(id) {
   if (!r) return;
   const inUse = team.some(m => m.role === r.name);
   const msg = inUse
-    ? `"${r.name}" role kuch team members ko assign hai. Delete karne se unka role "Unassigned" ho jayega. Continue?`
+    ? `The "${r.name}" role is assigned to some team members. Deleting it will set their role to "Unassigned". Continue?`
     : 'Delete this role?';
   if (!confirm(msg)) return;
 
@@ -8076,6 +8085,50 @@ async function saveAIConfig() {
 }
 
 // Core function — every real AI feature calls this. Routes to free or BYOK automatically via the edge function.
+// ===== Shared helper: send or schedule a single AI-written email via Campaign infrastructure =====
+async function sendOrScheduleSingleEmail(contact, subject, body, scheduledAt) {
+  if (!campaignSettings.webAppUrl) return { success: false, error: 'First save your Apps Script Web App URL in the Email Campaigns tab under "Sender Setup".' };
+  if (!contact || !contact.email) return { success: false, error: 'No email address found for this contact.' };
+  try {
+    const res = await fetch(campaignSettings.webAppUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(Object.assign({
+        action: scheduledAt ? 'scheduleEmail' : 'sendEmail',
+        to: contact.email,
+        subject: subject,
+        body: body,
+        fromName: campaignSettings.fromName || 'NovaAICRM'
+      }, scheduledAt ? { scheduledAt: scheduledAt.toISOString() } : {}))
+    });
+    const data = await res.json();
+    if (!data.success) return { success: false, error: data.error || 'Unknown error' };
+    if (!scheduledAt) {
+      campaignLogs.push({
+        id: Date.now() + Math.random(), contactId: contact.id, name: contact.name || contact.fname,
+        email: contact.email, company: contact.company, subject: subject, trackId: data.trackId,
+        status: 'Sent', repliedManually: false, date: new Date().toLocaleString()
+      });
+      emails.push({
+        id: Date.now() + Math.random(), contact: contact.name || contact.fname, email: contact.email,
+        subject: subject, type: 'Sent', status: 'Sent', notes: 'Sent via AI Automation', date: new Date().toLocaleDateString()
+      });
+      save();
+      renderEmails();
+      renderCampaignTrackingTable();
+    }
+    return { success: true, data };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+function parseAIEmailDraft(raw) {
+  const m = (raw || '').match(/^\s*Subject:\s*(.+?)\r?\n+([\s\S]*)$/i);
+  if (m) return { subject: m[1].trim(), body: m[2].trim() };
+  return { subject: 'Quick question', body: (raw || '').trim() };
+}
+
 async function callAI(prompt, feature, leads) {
   const session = window.__currentSession;
   if (!session) throw new Error('Session expired. Please log in again.');
@@ -8233,7 +8286,7 @@ function onEnrichContactChange() {
   const statusMsg = document.getElementById('enrich-status-msg');
   if (statusMsg) statusMsg.style.display = 'none';
   if (!c) { display.textContent = 'Select a contact to see saved research.'; return; }
-  display.textContent = (c.enrichmentNotes && c.enrichmentNotes.trim()) ? c.enrichmentNotes : 'Abhi tak koi enrichment data save nahi hua. AI Enrichment chalayein ya manually apni research add karein.';
+  display.textContent = (c.enrichmentNotes && c.enrichmentNotes.trim()) ? c.enrichmentNotes : 'No enrichment data saved yet. Run AI Enrichment or add your own research manually.';
 }
 
 async function persistEnrichmentNotes(contactId, notes) {
@@ -8260,10 +8313,10 @@ function showEnrichStatus(text, isError) {
 async function addManualEnrichmentNote() {
   const id = document.getElementById('enrich-contact').value;
   const c = contacts.find(x => String(x.id) === String(id));
-  if (!c) { showEnrichStatus('⚠️ Pehle koi contact select karein.', true); return; }
+  if (!c) { showEnrichStatus('⚠️ Please select a contact first.', true); return; }
   const box = document.getElementById('enrich-manual-input');
   const text = box.value.trim();
-  if (!text) { showEnrichStatus('⚠️ Notes likhna zaroori hai.', true); return; }
+  if (!text) { showEnrichStatus('⚠️ Please write some notes.', true); return; }
   const dateStr = new Date().toLocaleDateString();
   const entry = `✍️ Manual — ${dateStr}\n${text}`;
   const updated = (c.enrichmentNotes && c.enrichmentNotes.trim()) ? (c.enrichmentNotes + '\n\n' + entry) : entry;
@@ -8272,17 +8325,17 @@ async function addManualEnrichmentNote() {
   if (ok) {
     box.value = '';
     onEnrichContactChange();
-    showEnrichStatus('✅ Aapki research save ho gayi!', false);
+    showEnrichStatus('✅ Your research has been saved!', false);
   } else {
-    showEnrichStatus('⚠️ Save nahi ho saka, dobara try karein.', true);
+    showEnrichStatus('⚠️ Could not save, please try again.', true);
   }
 }
 
 async function runLeadEnrichmentAI() {
   const id = document.getElementById('enrich-contact').value;
   const c = contacts.find(x => String(x.id) === String(id));
-  if (!c) { showEnrichStatus('⚠️ Pehle koi contact select karein.', true); return; }
-  showEnrichStatus('🤖 AI research kar raha hai...', false);
+  if (!c) { showEnrichStatus('⚠️ Please select a contact first.', true); return; }
+  showEnrichStatus('🤖 AI is researching...', false);
   const prompt = `You are a B2B sales research assistant enriching a CRM contact so future outreach emails can be more personalised. Based on the known info below (and general knowledge of the company/industry if the name is recognisable), produce a concise enrichment summary a salesperson can use. Keep it under 100 words, plain text, no markdown headers — just short labelled lines like "Likely Industry:", "Possible Pain Points:", "Talking Point:". Do not invent fake specific facts (like exact revenue numbers) — keep suggestions realistic and general where unsure.\n\nContact: ${c.name}\nCompany: ${c.company || 'unknown'}\nTitle: ${c.title || 'unknown'}\nWebsite: ${c.website || 'unknown'}\nExisting notes: ${c.enrichmentNotes ? c.enrichmentNotes.slice(-500) : 'none'}`;
   try {
     const raw = await callAI(prompt, 'lead-enrichment');
@@ -8292,9 +8345,9 @@ async function runLeadEnrichmentAI() {
     const ok = await persistEnrichmentNotes(id, updated);
     if (ok) {
       onEnrichContactChange();
-      showEnrichStatus('✅ AI enrichment save ho gaya!', false);
+      showEnrichStatus('✅ AI enrichment saved!', false);
     } else {
-      showEnrichStatus('⚠️ AI ne data diya lekin save nahi ho saka.', true);
+      showEnrichStatus('⚠️ AI returned data but it could not be saved.', true);
     }
   } catch (err) {
     showEnrichStatus('⚠️ ' + err.message, true);
@@ -8404,9 +8457,31 @@ async function runAI(type) {
         const prompt = `Write a short (under 90 words), casual, human-sounding cold outreach email from a sales agency to a lead named ${topContact.name}${topContact.company ? ' at ' + topContact.company : ''}. No corporate buzzwords, no "I hope this finds you well". Include a subject line. Format as:\nSubject: ...\n\n[email body]${enrichmentBlock}`;
         draft = await callAI(prompt, 'email-writer');
       }
+      const parsed = parseAIEmailDraft(draft);
+      window.__lastAIEmailDraft = { contactId: topContact.id, subject: parsed.subject, body: parsed.body };
       body.innerHTML = `<strong>Generated for: ${topContact.name}</strong><br><br>
         <div style="background:var(--bg);padding:16px;border-radius:8px;border-left:3px solid var(--primary);white-space:pre-wrap">${draft}</div>
-        <br><em style="color:var(--text-light)">${useDeep ? '🌐 Personalised using live research on their website & tech stack.' : (topContact.enrichmentNotes ? '🔍 Personalised using your saved AI + manual enrichment data.' : 'Personalise before sending.')}</em>`;
+        <br><em style="color:var(--text-light)">${useDeep ? '🌐 Personalised using live research on their website & tech stack.' : (topContact.enrichmentNotes ? '🔍 Personalised using your saved AI + manual enrichment data.' : 'Personalise before sending.')}</em>
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+          <div style="font-weight:600;font-size:13px;margin-bottom:8px">📤 Send This Email</div>
+          <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:8px">
+            <input type="checkbox" id="ai-email-setup-followups" checked onchange="toggleAIEmailFollowupOptions()"> 🔁 Automatically set up AI follow-ups as soon as I Send/Schedule
+          </label>
+          <div id="ai-email-followup-options" style="display:flex;gap:14px;align-items:center;margin-bottom:10px;flex-wrap:wrap;background:var(--bg);padding:8px 10px;border-radius:8px">
+            <label style="font-size:11.5px;color:var(--text-light);display:flex;align-items:center;gap:5px">How many follow-ups?
+              <input type="number" id="ai-email-followup-count" class="form-control" min="1" max="6" value="5" style="width:55px;padding:5px 8px;font-size:12px">
+            </label>
+            <label style="font-size:11.5px;color:var(--text-light);display:flex;align-items:center;gap:5px">Days between each follow-up
+              <input type="number" id="ai-email-followup-gap" class="form-control" min="1" value="3" style="width:55px;padding:5px 8px;font-size:12px">
+            </label>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+            <button class="btn btn-primary btn-sm" onclick="sendAIEmailDraftNow()">🚀 Send Now</button>
+            <input type="datetime-local" id="ai-email-schedule-dt" class="form-control" style="max-width:200px;padding:6px 8px;font-size:12px">
+            <button class="btn btn-outline btn-sm" onclick="scheduleAIEmailDraft()">⏰ Schedule</button>
+          </div>
+          <div id="ai-email-send-status" style="font-size:12px"></div>
+        </div>`;
     } catch (err) {
       body.innerHTML = `<div style="color:#dc2626">⚠️ ${err.message}</div>`;
     }
@@ -8435,10 +8510,21 @@ async function runAI(type) {
       const raw = await callAI('', 'followup-deep', leadsPayload);
       const clean = raw.replace(/```json|```/g, '').trim();
       const results = JSON.parse(clean);
-      body.innerHTML = results.map((r) => `
+      window.__lastFollowupResults = results.map((r, i) => {
+        const contact = selected[i] || selected.find(c => (c.name || '').trim().toLowerCase() === (r.name || '').trim().toLowerCase());
+        return { contact, message: r.message, name: r.name };
+      });
+      body.innerHTML = results.map((r, i) => `
         <div style="margin-bottom:10px;padding:10px;background:var(--bg);border-radius:8px">
           <strong>${r.name}</strong><br>
           <span style="color:var(--primary)">→</span> ${r.message}
+          <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+            <input class="form-control followup-subject-${i}" style="max-width:170px;padding:5px 8px;font-size:11.5px" value="Just following up, {{name}}!">
+            <button class="btn btn-primary btn-sm" onclick="sendFollowupResultNow(${i})">🚀 Send</button>
+            <input type="datetime-local" class="form-control followup-schedule-${i}" style="max-width:170px;padding:5px 8px;font-size:11.5px">
+            <button class="btn btn-outline btn-sm" onclick="scheduleFollowupResult(${i})">⏰ Schedule</button>
+            <span class="followup-status-${i}" style="font-size:11.5px"></span>
+          </div>
         </div>`).join('') + `<br><em style="color:var(--text-light)">${visitWebsite ? '🌐 Each message grounded in real research on their website & tech stack.' : 'Follow up within 48 hours for best response rates.'}</em>`;
     } catch (err) {
       body.innerHTML = `<div style="color:#dc2626">⚠️ ${err.message}</div>`;
@@ -8478,6 +8564,148 @@ async function runAI(type) {
   const out = outputs[type];
   title.textContent = out.t;
   body.innerHTML = out.b;
+}
+
+// ===== AI Email Writer: send / schedule the generated draft, plus optional auto-followup sequence =====
+function toggleAIEmailFollowupOptions() {
+  const cb = document.getElementById('ai-email-setup-followups');
+  const box = document.getElementById('ai-email-followup-options');
+  if (cb && box) box.style.display = cb.checked ? 'flex' : 'none';
+}
+
+async function sendAIEmailDraftNow() {
+  const draft = window.__lastAIEmailDraft;
+  const statusEl = document.getElementById('ai-email-send-status');
+  if (!draft || !statusEl) return;
+  const contact = contacts.find(c => String(c.id) === String(draft.contactId));
+  if (!contact) { statusEl.style.color = '#dc2626'; statusEl.textContent = '⚠️ Contact not found.'; return; }
+  statusEl.style.color = 'var(--text-light)';
+  statusEl.textContent = 'Sending...';
+  const result = await sendOrScheduleSingleEmail(contact, draft.subject, draft.body, null);
+  if (!result.success) { statusEl.style.color = '#dc2626'; statusEl.textContent = '⚠️ ' + result.error; return; }
+  statusEl.style.color = 'var(--success)';
+  statusEl.textContent = `✅ Email ${contact.email} ko bhej diya gaya!`;
+  await maybeSetupAIFollowups(contact, draft.body, new Date());
+}
+
+async function scheduleAIEmailDraft() {
+  const draft = window.__lastAIEmailDraft;
+  const statusEl = document.getElementById('ai-email-send-status');
+  if (!draft || !statusEl) return;
+  const dtEl = document.getElementById('ai-email-schedule-dt');
+  const dt = dtEl ? dtEl.value : '';
+  if (!dt) { statusEl.style.color = '#dc2626'; statusEl.textContent = '⚠️ Please select a date/time first.'; return; }
+  const scheduledAt = new Date(dt);
+  if (scheduledAt <= new Date()) { statusEl.style.color = '#dc2626'; statusEl.textContent = '⚠️ Please select a future time.'; return; }
+  const contact = contacts.find(c => String(c.id) === String(draft.contactId));
+  if (!contact) { statusEl.style.color = '#dc2626'; statusEl.textContent = '⚠️ Contact not found.'; return; }
+  statusEl.style.color = 'var(--text-light)';
+  statusEl.textContent = 'Scheduling...';
+  const result = await sendOrScheduleSingleEmail(contact, draft.subject, draft.body, scheduledAt);
+  if (!result.success) { statusEl.style.color = '#dc2626'; statusEl.textContent = '⚠️ ' + result.error; return; }
+  statusEl.style.color = 'var(--success)';
+  statusEl.textContent = `✅ Scheduled for ${scheduledAt.toLocaleString()}!`;
+  if (typeof refreshScheduledQueue === 'function') refreshScheduledQueue();
+  await maybeSetupAIFollowups(contact, draft.body, scheduledAt);
+}
+
+async function maybeSetupAIFollowups(contact, firstEmailBody, baseDate) {
+  const cb = document.getElementById('ai-email-setup-followups');
+  const statusEl = document.getElementById('ai-email-send-status');
+  if (!cb || !cb.checked || !statusEl) return;
+  if (!campaignSettings.webAppUrl) { statusEl.innerHTML += '<br>⚠️ Could not set up follow-ups: please save your Web App URL in Sender Setup first.'; return; }
+  const count = Math.max(1, Math.min(6, Number(document.getElementById('ai-email-followup-count').value) || 3));
+  const gap = Math.max(1, Number(document.getElementById('ai-email-followup-gap').value) || 3);
+  statusEl.innerHTML += `<br>🤖 Generating ${count} follow-ups with AI...`;
+  try {
+    const session = window.__currentSession;
+    if (!session) throw new Error('Session expired.');
+    const userId = session.user.id;
+
+    const prompt = `You already sent this first cold outreach email to a lead named ${contact.name}${contact.company ? ' at ' + contact.company : ''}:\n"""\n${firstEmailBody}\n"""\nWrite exactly ${count} short follow-up emails to send afterwards if they don't reply — each one with a different angle (value-add, social proof, direct ask, final breakup email, etc.), casual and human, under 60 words each, with its own subject line. Respond ONLY as a JSON array like [{"subject":"...","body":"..."}], nothing else, no markdown fences.`;
+    const raw = await callAI(prompt, 'followup-sequence');
+    const clean = raw.replace(/```json|```/g, '').trim();
+    const aiSteps = JSON.parse(clean);
+    if (!Array.isArray(aiSteps) || !aiSteps.length) throw new Error('AI did not return any follow-ups.');
+    const steps = aiSteps.map(s => ({ subject: s.subject || 'Following up', body: s.body || '', delayDays: gap }));
+
+    const seqName = `AI Follow-ups — ${contact.name} — ${new Date().toLocaleDateString()}`;
+    const seqDbRow = mapSequenceToDb({ name: seqName, steps }, userId);
+    const { error: seqErr } = await supabaseClient.from('sequences').insert(seqDbRow);
+    if (seqErr) throw new Error(seqErr.message);
+    await loadSequencesFromSupabase();
+    const newSeq = sequences.find(s => s.name === seqName) || sequences[0];
+
+    const enrollment = {
+      id: Date.now() + Math.random(), sequenceId: newSeq ? newSeq.id : null, sequenceName: seqName,
+      contactId: contact.id, contactName: contact.name || contact.email, contactEmail: contact.email,
+      enrolledDate: new Date().toLocaleString(), status: 'active', steps: []
+    };
+
+    let cumulativeDays = 0;
+    for (let i = 0; i < steps.length; i++) {
+      cumulativeDays += gap;
+      const scheduledAt = new Date(baseDate);
+      scheduledAt.setDate(scheduledAt.getDate() + cumulativeDays);
+      const subject = mergeTags(steps[i].subject, contact);
+      const stepBody = mergeTags(steps[i].body, contact);
+      try {
+        const res = await fetch(campaignSettings.webAppUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'scheduleEmail', to: contact.email, subject: subject, body: stepBody, fromName: campaignSettings.fromName || 'NovaAICRM', scheduledAt: scheduledAt.toISOString() })
+        });
+        const data = await res.json();
+        enrollment.steps.push({ stepIndex: i, subject, scheduledAt: scheduledAt.toISOString(), queueId: data.queueId || null, status: data.success ? 'pending' : 'failed' });
+      } catch (err) {
+        enrollment.steps.push({ stepIndex: i, subject, scheduledAt: scheduledAt.toISOString(), queueId: null, status: 'failed' });
+      }
+    }
+    const enrollDbRow = mapEnrollmentToDb(enrollment, userId);
+    const { error: enrollErr } = await supabaseClient.from('sequence_enrollments').insert(enrollDbRow);
+    if (enrollErr) console.error('Could not save enrollment:', enrollErr);
+
+    await loadSequenceEnrollmentsFromSupabase();
+    if (typeof refreshScheduledQueue === 'function') refreshScheduledQueue();
+    statusEl.innerHTML += `<br>✅ ${steps.length} follow-ups have been set up — you'll find them under "${seqName}" in the "Email Sequences" tab.`;
+  } catch (err) {
+    statusEl.innerHTML += `<br>⚠️ Could not set up follow-ups: ${err.message}`;
+  }
+}
+
+// ===== AI Follow-up Generator: send / schedule an individual generated follow-up =====
+async function sendFollowupResultNow(i) {
+  const item = (window.__lastFollowupResults || [])[i];
+  const statusEl = document.querySelector('.followup-status-' + i);
+  if (!item || !item.contact) { if (statusEl) statusEl.textContent = '⚠️ Could not match the contact.'; return; }
+  const subjectInput = document.querySelector('.followup-subject-' + i);
+  const subjectRaw = (subjectInput ? subjectInput.value : '').trim() || 'Just following up';
+  const subject = mergeTags(subjectRaw, item.contact);
+  if (statusEl) { statusEl.style.color = 'var(--text-light)'; statusEl.textContent = 'Sending...'; }
+  const result = await sendOrScheduleSingleEmail(item.contact, subject, item.message, null);
+  if (!statusEl) return;
+  statusEl.style.color = result.success ? 'var(--success)' : '#dc2626';
+  statusEl.textContent = result.success ? '✅ Sent!' : '⚠️ ' + result.error;
+}
+
+async function scheduleFollowupResult(i) {
+  const item = (window.__lastFollowupResults || [])[i];
+  const statusEl = document.querySelector('.followup-status-' + i);
+  if (!item || !item.contact) { if (statusEl) statusEl.textContent = '⚠️ Could not match the contact.'; return; }
+  const dtInput = document.querySelector('.followup-schedule-' + i);
+  const dt = dtInput ? dtInput.value : '';
+  if (!dt) { if (statusEl) { statusEl.style.color = '#dc2626'; statusEl.textContent = '⚠️ Please select a time.'; } return; }
+  const scheduledAt = new Date(dt);
+  if (scheduledAt <= new Date()) { if (statusEl) { statusEl.style.color = '#dc2626'; statusEl.textContent = '⚠️ Please select a future time.'; } return; }
+  const subjectInput = document.querySelector('.followup-subject-' + i);
+  const subjectRaw = (subjectInput ? subjectInput.value : '').trim() || 'Just following up';
+  const subject = mergeTags(subjectRaw, item.contact);
+  if (statusEl) { statusEl.style.color = 'var(--text-light)'; statusEl.textContent = 'Scheduling...'; }
+  const result = await sendOrScheduleSingleEmail(item.contact, subject, item.message, scheduledAt);
+  if (!statusEl) return;
+  statusEl.style.color = result.success ? 'var(--success)' : '#dc2626';
+  statusEl.textContent = result.success ? `✅ Scheduled for ${scheduledAt.toLocaleString()}` : '⚠️ ' + result.error;
+  if (result.success && typeof refreshScheduledQueue === 'function') refreshScheduledQueue();
 }
 
 // ===================== REPORTS =====================
@@ -8842,7 +9070,7 @@ async function importFullBackup(event) {
   reader.onload = async function(e) {
     try {
       const data = JSON.parse(e.target.result);
-      if (!confirm('Yeh aapka current CRM database OVERWRITE kar dega backup file ke data se. Continue karein?')) return;
+      if (!confirm('This will OVERWRITE your current CRM database with the backup file data. Continue?')) return;
 
       const session = window.__currentSession;
       if (!session) { alert('Session expired. Please log in again.'); return; }
@@ -9324,9 +9552,9 @@ function copyScriptCode() {
   const text = codeEl.textContent;
 
   navigator.clipboard.writeText(text).then(() => {
-    alert('Code copied! Ab Apps Script editor mein paste kar dein.');
+    alert('Code copied! Now paste it into the Apps Script editor.');
   }).catch(() => {
-    alert('Copy nahi ho saka. Code ko manually select karke copy kar lein.');
+    alert('Could not copy. Please select the code manually and copy it.');
   });
 }
 </script>

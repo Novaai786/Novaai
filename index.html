@@ -935,6 +935,12 @@
               <option>Warm 🟡</option>
               <option>Cold ❄️</option>
             </select>
+            <select class="form-control" style="width:150px;padding:6px 10px;font-size:12px" onchange="onContactPipelineFilterChange()" id="filterPipeline">
+              <option value="">All Pipelines</option>
+            </select>
+            <select class="form-control" style="width:140px;padding:6px 10px;font-size:12px" onchange="filterContacts()" id="filterStage">
+              <option value="">All Stages</option>
+            </select>
             <button class="btn btn-outline btn-sm" onclick="document.getElementById('contactColumnsPanel').classList.toggle('open')" style="position:relative">⚙️ Columns</button>
             <button class="btn btn-outline btn-sm" onclick="document.getElementById('contactImportFile').click()">⬆️ Import CSV</button>
             <input type="file" id="contactImportFile" accept=".csv" style="display:none" onchange="importContactsCSV(event)">
@@ -957,6 +963,7 @@
           <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" checked data-col="decisionMaker" onchange="toggleContactColumn(this)"> Decision Maker?</label>
           <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" checked data-col="budget" onchange="toggleContactColumn(this)"> Budget Range</label>
           <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" checked data-col="priority" onchange="toggleContactColumn(this)"> Priority Level</label>
+          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" checked data-col="pipelineStage" onchange="toggleContactColumn(this)"> Pipeline / Stage</label>
         </div>
         <style>
           #contactColumnsPanel.open{display:flex !important}
@@ -974,11 +981,12 @@
           table.hide-decisionMaker .col-decisionMaker{display:none}
           table.hide-budget .col-budget{display:none}
           table.hide-priority .col-priority{display:none}
+          table.hide-pipelineStage .col-pipelineStage{display:none}
         </style>
         <div class="table-wrap">
           <table id="contactsTableEl">
-            <thead><tr><th>First Name</th><th>Last Name</th><th>Email</th><th>Company</th><th class="col-companySize">Company Size</th><th class="col-country">Country</th><th class="col-phone">Phone</th><th>Status</th><th class="col-source">Lead Source</th><th class="col-icp">ICP Tag</th><th class="col-leadScore">Lead Score</th><th class="col-website">Company Website</th><th class="col-linkedin">LinkedIn</th><th class="col-painPoint">Pain Point</th><th class="col-lastContacted">Last Contacted</th><th class="col-nextFollowup">Next Follow-up</th><th class="col-decisionMaker">Decision Maker?</th><th class="col-budget">Budget Range</th><th class="col-priority">Priority</th><th>Action</th></tr></thead>
-            <tbody id="contactsTable"><tr><td colspan="20" style="text-align:center;color:var(--text-light);padding:20px">No contacts yet. Add your first lead!</td></tr></tbody>
+            <thead><tr><th>First Name</th><th>Last Name</th><th>Email</th><th>Company</th><th class="col-companySize">Company Size</th><th class="col-country">Country</th><th class="col-phone">Phone</th><th>Status</th><th class="col-source">Lead Source</th><th class="col-icp">ICP Tag</th><th class="col-leadScore">Lead Score</th><th class="col-website">Company Website</th><th class="col-linkedin">LinkedIn</th><th class="col-painPoint">Pain Point</th><th class="col-lastContacted">Last Contacted</th><th class="col-nextFollowup">Next Follow-up</th><th class="col-decisionMaker">Decision Maker?</th><th class="col-budget">Budget Range</th><th class="col-priority">Priority</th><th class="col-pipelineStage">Pipeline / Stage</th><th>Action</th></tr></thead>
+            <tbody id="contactsTable"><tr><td colspan="21" style="text-align:center;color:var(--text-light);padding:20px">No contacts yet. Add your first lead!</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -1396,7 +1404,10 @@ Leadnovaai</textarea>
           </div>
           <div class="form-group" id="ai-key-group" style="display:none">
             <label class="form-label">API Key</label>
-            <input class="form-control" id="ai-api-key" type="password" placeholder="Paste your API key" autocomplete="new-password" name="crm-ai-api-key-nofill" data-lpignore="true" data-form-type="other">
+            <div style="position:relative">
+              <input class="form-control" id="ai-api-key" type="text" style="-webkit-text-security:disc;padding-right:38px" placeholder="Paste your API key" autocomplete="off" name="crm-ai-api-key-nofill" data-lpignore="true" data-form-type="other">
+              <button type="button" onclick="toggleApiKeyVisibility()" id="ai-api-key-toggle" title="Show/hide key" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:15px;padding:4px">👁️</button>
+            </div>
             <div style="font-size:11.5px;color:var(--text-light);margin-top:4px" id="ai-key-hint">Your key is stored securely and only used for your own AI requests — never shared.</div>
           </div>
           <button class="btn btn-primary btn-sm" onclick="saveAIConfig()">💾 Save AI Settings</button>
@@ -1445,7 +1456,7 @@ Leadnovaai</textarea>
                 <input type="checkbox" id="email-visit-website" checked> 🌐 Research their website &amp; tech stack for pain points
               </label>
               <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;margin-bottom:8px">
-                <input type="checkbox" id="ai-email-setup-followups" onchange="toggleAIEmailFollowupOptions()"> 🔁 Bhejte hi automatic follow-ups bhi set kar dein
+                <input type="checkbox" id="ai-email-setup-followups" onchange="toggleAIEmailFollowupOptions()"> 🔁 Automatically set up follow-ups as soon as I send
               </label>
               <div id="ai-email-followup-options" style="display:none;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
                 <span style="font-size:11.5px;color:var(--text-light)">How many follow-ups:</span>
@@ -3350,6 +3361,15 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+function toggleApiKeyVisibility() {
+  const input = document.getElementById('ai-api-key');
+  const btn = document.getElementById('ai-api-key-toggle');
+  if (!input || !btn) return;
+  const isMasked = input.style.webkitTextSecurity !== 'none';
+  input.style.webkitTextSecurity = isMasked ? 'none' : 'disc';
+  btn.textContent = isMasked ? '🙈' : '👁️';
+}
+
 // STATUS BADGE
 function badge(status) {
   const map = {'New':'badge-new','Contacted':'badge-contacted','Interested':'badge-interested','Closed':'badge-closed','Lost':'badge-lost','Won':'badge-won','Pending':'badge-pending','Sent':'badge-open','Opened':'badge-interested','Replied':'badge-closed','No Reply':'badge-lost','High':'badge-high','Medium':'badge-medium','Low':'badge-low'};
@@ -3566,13 +3586,17 @@ function renderContacts() {
   const sourceF = document.getElementById('filterSource') ? document.getElementById('filterSource').value : '';
   const icpF = document.getElementById('filterICP') ? document.getElementById('filterICP').value : '';
   const scoreF = document.getElementById('filterLeadScore') ? document.getElementById('filterLeadScore').value : '';
+  const pipelineF = document.getElementById('filterPipeline') ? document.getElementById('filterPipeline').value : '';
+  const stageF = document.getElementById('filterStage') ? document.getElementById('filterStage').value : '';
   let list = contacts.filter(c =>
     (!statusF || c.status === statusF) &&
     (!sourceF || c.source === sourceF) &&
     (!icpF || c.icp === icpF) &&
-    (!scoreF || c.leadScore === scoreF)
+    (!scoreF || c.leadScore === scoreF) &&
+    (!pipelineF || String(c.category) === String(pipelineF)) &&
+    (!stageF || c.stage === stageF)
   );
-  if (!list.length) { tbody.innerHTML = '<tr><td colspan="20" style="text-align:center;color:var(--text-light);padding:20px">No contacts yet.</td></tr>'; return; }
+  if (!list.length) { tbody.innerHTML = '<tr><td colspan="21" style="text-align:center;color:var(--text-light);padding:20px">No contacts yet.</td></tr>'; return; }
   tbody.innerHTML = list.map(c => {
     const today = new Date().toISOString().slice(0,10);
     const followupOverdue = c.nextFollowup && c.nextFollowup < today;
@@ -3602,6 +3626,7 @@ function renderContacts() {
       <td class="col-decisionMaker" style="font-size:12px">${escapeHtml(c.decisionMaker||'-')}</td>
       <td class="col-budget" style="font-size:12px">${escapeHtml(c.budget||'-')}</td>
       <td class="col-priority" style="font-size:12px">${c.priority ? `<span class="badge ${c.priority==='High'?'badge-high':c.priority==='Medium'?'badge-medium':'badge-low'}">${escapeHtml(c.priority)}</span>` : '-'}</td>
+      <td class="col-pipelineStage" style="font-size:12px">${c.category ? `<div>${escapeHtml((categories.find(cat=>cat.id==c.category)||{}).name||'-')}</div><div style="font-size:11px;color:var(--text-light)">${escapeHtml(c.stage||'-')}</div>` : '<span style="color:var(--text-light)">-</span>'}</td>
       ${customCellsHtml('contact', c)}
       <td style="display:flex;gap:6px">
         <button class="btn btn-outline btn-sm" onclick="openContactProfile(${c.id})">👤 Profile</button>
@@ -5204,8 +5229,8 @@ function renderCategories() {
   if (!categories.length) { tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-light);padding:20px">No categories yet. Add your first service category.</td></tr>'; return; }
   tbody.innerHTML = categories.map(cat => `
     <tr>
-      <td><strong>${cat.name}</strong></td>
-      <td style="font-size:12px;color:var(--text-light)">${cat.stages.join(' → ')}</td>
+      <td><strong>${escapeHtml(cat.name)}</strong></td>
+      <td style="font-size:12px;color:var(--text-light)">${cat.stages.map(escapeHtml).join(' → ')}</td>
       <td>
         <button class="btn btn-outline btn-sm" onclick="editCategory(${cat.id})">✏️ Edit</button>
         <button class="btn btn-outline btn-sm" style="color:#dc2626;border-color:#dc2626" onclick="deleteCategory(${cat.id})">🗑️ Delete</button>
@@ -5367,6 +5392,34 @@ function populateCategoryDropdowns() {
     kanbanFilter.innerHTML = '<option value="">Default Pipeline (All)</option>' + categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
     kanbanFilter.value = v;
   }
+  const contactPipelineFilter = document.getElementById('filterPipeline');
+  if (contactPipelineFilter) {
+    const v = contactPipelineFilter.value;
+    contactPipelineFilter.innerHTML = '<option value="">All Pipelines</option>' + categories.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+    contactPipelineFilter.value = v;
+    onContactPipelineFilterChange(true);
+  }
+}
+
+function onContactPipelineFilterChange(keepStage) {
+  const pipelineSel = document.getElementById('filterPipeline');
+  const stageSel = document.getElementById('filterStage');
+  if (!pipelineSel || !stageSel) return;
+  const catId = pipelineSel.value;
+  const current = keepStage ? stageSel.value : '';
+  let stageList = [];
+  if (catId) {
+    const cat = categories.find(c => c.id == catId);
+    stageList = cat ? cat.stages : [];
+  } else {
+    // No specific pipeline selected — offer every distinct stage used across all pipelines
+    const seen = new Set();
+    categories.forEach(cat => (cat.stages || []).forEach(s => seen.add(s)));
+    stageList = Array.from(seen);
+  }
+  stageSel.innerHTML = '<option value="">All Stages</option>' + stageList.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+  if (current && stageList.includes(current)) stageSel.value = current;
+  filterContacts();
 }
 
 function renderDeals() {

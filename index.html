@@ -2441,7 +2441,11 @@ Leadnovaai</textarea>
       <div class="modal-title">Add Records to List</div>
       <button class="modal-close" onclick="closeModal('listAddRecordsModal')">✕</button>
     </div>
-    <input class="form-control" id="l-add-search" placeholder="Search..." oninput="renderListAddRecordsOptions()" style="margin-bottom:10px">
+    <div id="l-add-filters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>
+    <input class="form-control" id="l-add-search" placeholder="Search..." oninput="renderListAddRecordsOptions()" style="margin-bottom:8px">
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:10px;cursor:pointer">
+      <input type="checkbox" id="l-add-hide-listed" checked onchange="renderListAddRecordsOptions()"> Hide records already in another list
+    </label>
     <div id="listAddRecordsOptions" style="display:flex;flex-direction:column;gap:6px;max-height:340px;overflow-y:auto"></div>
     <div style="display:flex;gap:10px;margin-top:14px">
       <button class="btn btn-primary" style="flex:1" onclick="confirmAddRecordsToList()">Add Selected</button>
@@ -5919,8 +5923,17 @@ const LIST_FIELD_DEFS = {
 const LIST_RECORD_COLUMNS = {
   contact: [
     { key: 'fname', label: 'First Name' }, { key: 'lname', label: 'Last Name' },
-    { key: 'email', label: 'Email' }, { key: 'company', label: 'Company' },
-    { key: 'status', label: 'Status' }
+    { key: 'email', label: 'Email' }, { key: 'phone', label: 'Phone' },
+    { key: 'company', label: 'Company' }, { key: 'companySize', label: 'Company Size' },
+    { key: 'country', label: 'Country' }, { key: 'title', label: 'Title' },
+    { key: 'status', label: 'Status' }, { key: 'source', label: 'Lead Source' },
+    { key: 'icp', label: 'ICP Tag' }, { key: 'leadScore', label: 'Lead Score' },
+    { key: 'website', label: 'Website' }, { key: 'linkedin', label: 'LinkedIn' },
+    { key: 'painPoint', label: 'Pain Point' }, { key: 'lastContacted', label: 'Last Contacted' },
+    { key: 'nextFollowup', label: 'Next Follow-up' }, { key: 'decisionMaker', label: 'Decision Maker?' },
+    { key: 'budget', label: 'Budget Range' }, { key: 'priority', label: 'Priority' },
+    { key: 'stage', label: 'Pipeline / Stage' }, { key: 'owner', label: 'Owner' },
+    { key: 'category', label: 'Category' }
   ],
   company: [
     { key: 'name', label: 'Company' }, { key: 'industry', label: 'Industry' },
@@ -6054,17 +6067,42 @@ function onListTypeChange() {
   if (isSmart && !document.getElementById('l-filters-list').children.length) addListFilterRow();
 }
 
+function getListFieldDef(objType, fieldKey) {
+  return (LIST_FIELD_DEFS[objType] || []).find(f => f.key === fieldKey);
+}
+
+function listFilterValueInputHtml(objType, fieldKey, presetValue) {
+  const def = getListFieldDef(objType, fieldKey);
+  if (def && def.type === 'select' && def.options) {
+    return `<select class="form-control lf-value" style="flex:1;padding:6px 8px;font-size:12px;width:100%">
+      <option value="">Any</option>
+      ${def.options.map(o => `<option value="${escapeHtml(o)}" ${presetValue === o ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('')}
+    </select>`;
+  }
+  return `<input class="form-control lf-value" style="flex:1;padding:6px 8px;font-size:12px;width:100%" placeholder="Value" value="${presetValue ? escapeHtml(presetValue) : ''}">`;
+}
+
+function onListFilterFieldChange(rowId) {
+  const row = document.getElementById(rowId);
+  if (!row) return;
+  const objType = document.getElementById('l-objecttype').value;
+  const fieldKey = row.querySelector('.lf-field').value;
+  const valueWrap = row.querySelector('.lf-value-wrap');
+  if (valueWrap) valueWrap.innerHTML = listFilterValueInputHtml(objType, fieldKey, '');
+}
+
 function addListFilterRow(field, operator, value) {
   const wrap = document.getElementById('l-filters-list');
   const rowId = 'lf-' + Date.now() + Math.floor(Math.random() * 1000);
   const objType = document.getElementById('l-objecttype').value;
   const fieldDefs = LIST_FIELD_DEFS[objType] || [];
+  const initialField = field || (fieldDefs[0] && fieldDefs[0].key) || '';
   const div = document.createElement('div');
   div.className = 'list-filter-row';
   div.id = rowId;
   div.style.cssText = 'display:flex;gap:6px;align-items:center';
   div.innerHTML = `
-    <select class="form-control lf-field" style="flex:1.2;padding:6px 8px;font-size:12px">
+    <select class="form-control lf-field" style="flex:1.2;padding:6px 8px;font-size:12px" onchange="onListFilterFieldChange('${rowId}')">
       ${fieldDefs.map(f => `<option value="${f.key}">${f.label}</option>`).join('')}
     </select>
     <select class="form-control lf-operator" style="flex:1;padding:6px 8px;font-size:12px">
@@ -6076,13 +6114,12 @@ function addListFilterRow(field, operator, value) {
       <option value="is_empty">is empty</option>
       <option value="is_not_empty">is not empty</option>
     </select>
-    <input class="form-control lf-value" style="flex:1.2;padding:6px 8px;font-size:12px" placeholder="Value">
+    <span class="lf-value-wrap" style="flex:1.2;display:flex">${listFilterValueInputHtml(objType, initialField, value)}</span>
     <button class="btn btn-danger btn-sm" onclick="document.getElementById('${rowId}').remove()">✕</button>
   `;
   wrap.appendChild(div);
   if (field) div.querySelector('.lf-field').value = field;
   if (operator) div.querySelector('.lf-operator').value = operator;
-  if (value !== undefined && value !== null) div.querySelector('.lf-value').value = value;
 }
 
 function clearListForm() {
@@ -6222,8 +6259,22 @@ async function removeFromStaticList(recordId) {
 
 function openListAddRecordsModal() {
   document.getElementById('l-add-search').value = '';
+  document.getElementById('l-add-hide-listed').checked = true;
+  renderListAddFilters();
   renderListAddRecordsOptions();
   openModal('listAddRecordsModal');
+}
+
+function renderListAddFilters() {
+  const l = lists.find(x => x.id == currentListDetailId);
+  const wrap = document.getElementById('l-add-filters');
+  if (!l || !wrap) return;
+  const fieldDefs = (LIST_FIELD_DEFS[l.objectType] || []).filter(f => f.type === 'select');
+  wrap.innerHTML = fieldDefs.map(f => `
+    <select class="form-control l-add-filter" data-field="${f.key}" style="flex:1;min-width:130px;padding:6px 8px;font-size:12px" onchange="renderListAddRecordsOptions()">
+      <option value="">${escapeHtml(f.label)}: Any</option>
+      ${f.options.map(o => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join('')}
+    </select>`).join('');
 }
 
 function renderListAddRecordsOptions() {
@@ -6231,16 +6282,35 @@ function renderListAddRecordsOptions() {
   if (!l) return;
   const source = getObjectArray(l.objectType);
   const existingIds = new Set((l.memberIds || []).map(String));
+  const hideListed = document.getElementById('l-add-hide-listed')?.checked;
+  const excludedByOtherLists = new Set();
+  if (hideListed) {
+    lists.forEach(other => {
+      if (other.id === l.id || other.objectType !== l.objectType) return;
+      (other.memberIds || []).forEach(id => excludedByOtherLists.add(String(id)));
+      if (other.listType === 'smart') {
+        computeListMembers(other).forEach(r => excludedByOtherLists.add(String(r.id)));
+      }
+    });
+  }
   const q = (document.getElementById('l-add-search').value || '').toLowerCase();
+  const activeFilters = [...document.querySelectorAll('.l-add-filter')]
+    .map(sel => ({ field: sel.dataset.field, value: sel.value }))
+    .filter(f => f.value);
   const wrap = document.getElementById('listAddRecordsOptions');
-  const filtered = source.filter(r => !existingIds.has(String(r.id)) && getRecordLabel(l.objectType, r).toLowerCase().includes(q));
+  const filtered = source.filter(r => {
+    if (existingIds.has(String(r.id))) return false;
+    if (excludedByOtherLists.has(String(r.id))) return false;
+    if (q && !getRecordLabel(l.objectType, r).toLowerCase().includes(q)) return false;
+    return activeFilters.every(f => String(r[f.field] || '').toLowerCase() === f.value.toLowerCase());
+  });
   if (!filtered.length) {
     wrap.innerHTML = '<div style="color:var(--text-light);font-size:12px;padding:10px">No matching records found.</div>';
     return;
   }
   wrap.innerHTML = filtered.map(r => `
     <label style="display:flex;align-items:center;gap:8px;font-size:13px;padding:7px 9px;border:1px solid var(--border);border-radius:6px;cursor:pointer">
-      <input type="checkbox" class="l-add-check" value="${r.id}"> ${escapeHtml(getRecordLabel(l.objectType, r))}
+      <input type="checkbox" class="l-add-check" value="${r.id}"> ${escapeHtml(getRecordLabel(l.objectType, r))}${r.company ? ` <span style="color:var(--text-light);font-size:11px">— ${escapeHtml(r.company)}</span>` : ''}
     </label>
   `).join('');
 }

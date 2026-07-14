@@ -1515,6 +1515,63 @@ Leadnovaai</textarea>
               <div class="ai-card-desc">Predict which deals are most likely to close this month. AI evaluates deal stage, value, and contact activity to give you a win probability score.</div>
               <button class="btn btn-primary btn-sm" onclick="runAI('deal-prediction')">Predict Deals</button>
             </div>
+            <div class="ai-card">
+              <div class="ai-card-icon">📄</div>
+              <div><span class="ai-card-badge">AI WRITER</span></div>
+              <div class="ai-card-title">AI Proposal Writer</div>
+              <div class="ai-card-desc">Generate a polished, personalized sales proposal from a deal's real details — stage, value, and company.</div>
+              <div style="margin-bottom:10px">
+                <span style="font-size:12px;color:var(--text-light)">Select a deal</span>
+                <select class="form-control" id="proposal-deal-select" style="margin-top:4px"></select>
+              </div>
+              <textarea class="form-control" id="proposal-extra-notes" rows="2" placeholder="Anything specific to include? (optional)" style="margin-bottom:10px;font-size:12px"></textarea>
+              <button class="btn btn-primary btn-sm" onclick="runAI('proposal-writer')">Generate Proposal</button>
+            </div>
+            <div class="ai-card">
+              <div class="ai-card-icon">📝</div>
+              <div><span class="ai-card-badge">AI SUMMARY</span></div>
+              <div class="ai-card-title">AI Meeting Summary</div>
+              <div class="ai-card-desc">Paste raw meeting notes or a transcript — AI extracts the key points, decisions, and action items.</div>
+              <textarea class="form-control" id="meeting-notes-input" rows="4" placeholder="Paste your meeting notes or transcript here..." style="margin-bottom:10px;font-size:12px"></textarea>
+              <button class="btn btn-primary btn-sm" onclick="runAI('meeting-summary')">Summarize Meeting</button>
+            </div>
+            <div class="ai-card">
+              <div class="ai-card-icon">💰</div>
+              <div><span class="ai-card-badge">AI FORECAST</span></div>
+              <div class="ai-card-title">AI Revenue Prediction</div>
+              <div class="ai-card-desc">AI analyzes your live pipeline value, stage mix, and recent close rate to project revenue for the next 30 days.</div>
+              <button class="btn btn-primary btn-sm" onclick="runAI('revenue-prediction')">Predict Revenue</button>
+            </div>
+            <div class="ai-card">
+              <div class="ai-card-icon">📉</div>
+              <div><span class="ai-card-badge">AI ANALYSIS</span></div>
+              <div class="ai-card-title">AI Lost Deal Analysis</div>
+              <div class="ai-card-desc">AI reviews your lost deals for patterns — common stages where deals die, and what to fix going forward.</div>
+              <button class="btn btn-primary btn-sm" onclick="runAI('lost-deal-analysis')">Analyze Lost Deals</button>
+            </div>
+            <div class="ai-card">
+              <div class="ai-card-icon">⏰</div>
+              <div><span class="ai-card-badge">AI TIMING</span></div>
+              <div class="ai-card-title">AI Best Contact Time</div>
+              <div class="ai-card-desc">AI suggests the best day and time window to reach out to a specific contact, based on their role, company, and status.</div>
+              <div style="margin-bottom:10px">
+                <span style="font-size:12px;color:var(--text-light)">Select a contact</span>
+                <select class="form-control" id="bct-contact-select" style="margin-top:4px"></select>
+              </div>
+              <button class="btn btn-primary btn-sm" onclick="runAI('best-contact-time')">Suggest Best Time</button>
+            </div>
+            <div class="ai-card">
+              <div class="ai-card-icon">💬</div>
+              <div><span class="ai-card-badge">AI SENTIMENT</span></div>
+              <div class="ai-card-title">AI Customer Sentiment</div>
+              <div class="ai-card-desc">Paste an email, chat log, or notes — AI reads the tone and tells you how the customer is really feeling.</div>
+              <div style="margin-bottom:8px">
+                <span style="font-size:12px;color:var(--text-light)">Related contact (optional)</span>
+                <select class="form-control" id="sentiment-contact-select" style="margin-top:4px"></select>
+              </div>
+              <textarea class="form-control" id="sentiment-text-input" rows="3" placeholder="Paste the email, message, or notes to analyze..." style="margin-bottom:10px;font-size:12px"></textarea>
+              <button class="btn btn-primary btn-sm" onclick="runAI('sentiment-analysis')">Analyze Sentiment</button>
+            </div>
           </div>
         </div>
       </div>
@@ -1580,6 +1637,35 @@ Leadnovaai</textarea>
           <button class="btn btn-outline btn-sm" onclick="saveAutomationSettings()">💾 Save Rotation</button>
         </div>
       </div>
+
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header">
+          <div class="card-title">📚 AI Knowledge Base & FAQ Chatbot</div>
+        </div>
+        <div style="padding:20px">
+          <div style="font-size:12.5px;color:var(--text-light);margin-bottom:14px">
+            Paste in product info, SOPs, pricing, or FAQs — then ask the assistant questions and it answers grounded in what you've saved here.
+          </div>
+          <div style="display:flex;gap:16px;flex-wrap:wrap">
+            <div style="flex:1;min-width:260px">
+              <div style="font-weight:600;font-size:13px;margin-bottom:8px">📄 Documents</div>
+              <input class="form-control" id="kb-doc-title" placeholder="Title — e.g. Pricing FAQ" style="margin-bottom:6px">
+              <textarea class="form-control" id="kb-doc-content" rows="4" placeholder="Paste the content here..." style="margin-bottom:6px;font-size:12px"></textarea>
+              <button class="btn btn-primary btn-sm" onclick="saveKnowledgeDoc()">+ Add Document</button>
+              <div id="kbDocsList" style="margin-top:12px;display:flex;flex-direction:column;gap:8px;max-height:220px;overflow-y:auto"></div>
+            </div>
+            <div style="flex:1;min-width:260px">
+              <div style="font-weight:600;font-size:13px;margin-bottom:8px">💬 Ask the Assistant</div>
+              <div id="kbChatLog" style="border:1px solid var(--border);border-radius:8px;padding:10px;background:var(--bg);height:220px;overflow-y:auto;margin-bottom:8px;font-size:12.5px"></div>
+              <div style="display:flex;gap:8px">
+                <input class="form-control" id="kbChatInput" placeholder="Ask a question..." onkeydown="if(event.key==='Enter')askKnowledgeBase()">
+                <button class="btn btn-primary btn-sm" onclick="askKnowledgeBase()">Ask</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="card" id="aiOutputCard" style="display:none">
         <div class="card-header">
           <div class="card-title" id="aiOutputTitle">AI Result</div>
@@ -3155,7 +3241,7 @@ function showSection(id, el) {
   document.getElementById('pageTitle').textContent = titles[id] || id;
   closeSidebar();
   if (id === 'dashboard') renderDashboard();
-  if (id === 'automation') populateAIContactSelectors();
+  if (id === 'automation') { populateAIContactSelectors(); loadKnowledgeDocsFromSupabase(); }
   if (id === 'contacts') renderContacts();
   if (id === 'companies') renderCompanies();
   if (id === 'lists') renderLists();
@@ -6806,6 +6892,105 @@ async function autoAssignLeadRoundRobin(leadId) {
   }
 }
 
+// ===================== AI KNOWLEDGE BASE + FAQ CHATBOT =====================
+let knowledgeDocs = []; // now loaded from Supabase (see loadKnowledgeDocsFromSupabase)
+let kbChatHistory = [];
+
+function mapKnowledgeDocFromDb(row) {
+  return { id: row.id, title: row.title || '', content: row.content || '' };
+}
+
+async function loadKnowledgeDocsFromSupabase() {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const userId = session.user.id;
+    const { data, error } = await supabaseClient
+      .from('knowledge_base')
+      .select('*')
+      .eq('user_id', userId)
+      .order('id', { ascending: false });
+    if (error) { console.error('Could not load knowledge base:', error); return; }
+    knowledgeDocs = (data || []).map(mapKnowledgeDocFromDb);
+    renderKnowledgeDocs();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function renderKnowledgeDocs() {
+  const el = document.getElementById('kbDocsList');
+  if (!el) return;
+  if (!knowledgeDocs.length) { el.innerHTML = '<div style="font-size:12px;color:var(--text-light)">No documents yet — add one above.</div>'; return; }
+  el.innerHTML = knowledgeDocs.map(d => `
+    <div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+      <div style="min-width:0">
+        <div style="font-weight:600;font-size:12.5px">${escapeHtml(d.title)}</div>
+        <div style="font-size:11.5px;color:var(--text-light);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml((d.content || '').slice(0, 80))}</div>
+      </div>
+      <button class="btn btn-outline btn-sm" style="color:#dc2626;border-color:#dc2626;flex-shrink:0" onclick="deleteKnowledgeDoc(${d.id})">🗑️</button>
+    </div>`).join('');
+}
+
+async function saveKnowledgeDoc() {
+  const title = document.getElementById('kb-doc-title').value.trim();
+  const content = document.getElementById('kb-doc-content').value.trim();
+  if (!title || !content) { alert('Please enter both a title and content.'); return; }
+  try {
+    const session = window.__currentSession;
+    if (!session) { alert('Session expired. Please log in again.'); return; }
+    const { error } = await supabaseClient.from('knowledge_base').insert({ title, content, user_id: session.user.id });
+    if (error) { alert('Could not save: ' + error.message); return; }
+    document.getElementById('kb-doc-title').value = '';
+    document.getElementById('kb-doc-content').value = '';
+    await loadKnowledgeDocsFromSupabase();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function deleteKnowledgeDoc(id) {
+  if (!confirm('Delete this document?')) return;
+  try {
+    const { error } = await supabaseClient.from('knowledge_base').delete().eq('id', id);
+    if (error) { alert('Could not delete: ' + error.message); return; }
+    await loadKnowledgeDocsFromSupabase();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function renderKbChatLog() {
+  const el = document.getElementById('kbChatLog');
+  if (!el) return;
+  if (!kbChatHistory.length) { el.innerHTML = '<div style="color:var(--text-light)">Ask a question about anything you\'ve saved in your documents.</div>'; return; }
+  el.innerHTML = kbChatHistory.map(m => `
+    <div style="margin-bottom:8px">
+      <div style="font-weight:600;color:${m.role === 'user' ? 'var(--primary)' : 'var(--success)'}">${m.role === 'user' ? 'You' : 'Assistant'}</div>
+      <div>${aiTextToHtml(m.text)}</div>
+    </div>`).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+async function askKnowledgeBase() {
+  const input = document.getElementById('kbChatInput');
+  const question = input.value.trim();
+  if (!question) return;
+  if (!knowledgeDocs.length) { alert('Add at least one document first, so the assistant has something to answer from.'); return; }
+  kbChatHistory.push({ role: 'user', text: question });
+  input.value = '';
+  renderKbChatLog();
+  const context = knowledgeDocs.map(d => `### ${d.title}\n${d.content}`).join('\n\n').slice(0, 6000);
+  const prompt = `You are a helpful internal assistant. Answer the question using ONLY the knowledge base content below. If the answer isn't in there, say you don't have that information yet. Be concise.\n\nKnowledge base:\n${context}\n\nQuestion: ${question}`;
+  try {
+    const answer = await callAI(prompt, 'faq-chatbot');
+    kbChatHistory.push({ role: 'assistant', text: answer });
+  } catch (err) {
+    kbChatHistory.push({ role: 'assistant', text: '⚠️ ' + err.message });
+  }
+  renderKbChatLog();
+}
+
 // ===== DAILY SUMMARY =====
 function buildDailySummaryText() {
   const overdue = tasks.filter(t => getTaskStatus(t) === 'overdue');
@@ -8783,6 +8968,10 @@ function parseAIEmailDraft(raw) {
   return { subject: 'Quick question', body: (raw || '').trim() };
 }
 
+function aiTextToHtml(t) {
+  return escapeHtml(t || '').replace(/\n/g, '<br>');
+}
+
 async function callAI(prompt, feature, leads) {
   const session = window.__currentSession;
   if (!session) throw new Error('Session expired. Please log in again.');
@@ -8881,6 +9070,24 @@ function populateAIContactSelectors() {
     }
     const followupSelectAll = document.getElementById('followup-select-all');
     if (followupSelectAll) followupSelectAll.checked = false;
+  }
+
+  // Proposal Writer — deal dropdown
+  const proposalSelectEl = document.getElementById('proposal-deal-select');
+  if (proposalSelectEl) {
+    proposalSelectEl.innerHTML = deals.length ? deals.map(d => `<option value="${d.id}">${escapeHtml(d.name)}${d.value ? ' — $' + parseInt(d.value).toLocaleString() : ''}</option>`).join('') : '<option value="">No deals yet</option>';
+  }
+
+  // Best Contact Time — contact dropdown
+  const bctSelectEl = document.getElementById('bct-contact-select');
+  if (bctSelectEl) {
+    bctSelectEl.innerHTML = contacts.length ? contacts.map(c => `<option value="${c.id}">${escapeHtml(c.name)}${c.company ? ' — ' + escapeHtml(c.company) : ''}</option>`).join('') : '<option value="">No contacts yet</option>';
+  }
+
+  // Sentiment Analysis — optional contact dropdown
+  const sentContactEl = document.getElementById('sentiment-contact-select');
+  if (sentContactEl) {
+    sentContactEl.innerHTML = '<option value="">(no specific contact)</option>' + contacts.map(c => `<option value="${c.id}">${escapeHtml(c.name)}${c.company ? ' — ' + escapeHtml(c.company) : ''}</option>`).join('');
   }
 }
 
@@ -9193,6 +9400,111 @@ async function runAI(type) {
             <span class="followup-status-${i}" style="font-size:11.5px"></span>
           </div>
         </div>`).join('') + `<br><em style="color:var(--text-light)">${visitWebsite ? '🌐 Each message grounded in real research on their website & tech stack.' : 'Follow up within 48 hours for best response rates.'}</em>`;
+    } catch (err) {
+      body.innerHTML = `<div style="color:#dc2626">⚠️ ${err.message}</div>`;
+    }
+    return;
+  }
+
+  // ===== REAL AI: Proposal Writer =====
+  if (type === 'proposal-writer') {
+    title.textContent = '📄 AI Sales Proposal';
+    const dealId = document.getElementById('proposal-deal-select')?.value;
+    const deal = deals.find(d => String(d.id) === String(dealId));
+    if (!deal) { body.innerHTML = '<div style="color:#dc2626">⚠️ Select a deal first — add one in the Deals section if you don\'t have any yet.</div>'; return; }
+    const extra = document.getElementById('proposal-extra-notes')?.value.trim() || '';
+    body.innerHTML = '<div style="color:var(--text-light)">🤖 AI writing your proposal…</div>';
+    const prompt = `Write a short, professional sales proposal for this deal. Deal name: ${deal.name}. Value: ${deal.value ? '$' + deal.value : 'not specified'}. Stage: ${deal.stage}. Company: ${deal.company || 'not specified'}.${extra ? ' Additional requirements: ' + extra : ''} Structure it with a brief intro, what's included, pricing, and a clear next step. Keep it concise and confident, no fluff.`;
+    try {
+      const raw = await callAI(prompt, 'proposal-writer');
+      body.innerHTML = aiTextToHtml(raw) + `<div style="margin-top:14px"><button class="btn btn-outline btn-sm" onclick="navigator.clipboard.writeText(window.__lastProposalText)">📋 Copy</button></div>`;
+      window.__lastProposalText = raw;
+    } catch (err) {
+      body.innerHTML = `<div style="color:#dc2626">⚠️ ${err.message}</div>`;
+    }
+    return;
+  }
+
+  // ===== REAL AI: Meeting Summary =====
+  if (type === 'meeting-summary') {
+    title.textContent = '📝 AI Meeting Summary';
+    const notes = document.getElementById('meeting-notes-input')?.value.trim();
+    if (!notes) { body.innerHTML = '<div style="color:#dc2626">⚠️ Paste your meeting notes or transcript first.</div>'; return; }
+    body.innerHTML = '<div style="color:var(--text-light)">🤖 AI summarizing…</div>';
+    const prompt = `Summarize these meeting notes into: 1) a short summary paragraph, 2) key decisions made (bulleted), 3) action items with owner if mentioned (bulleted). Notes:\n\n${notes}`;
+    try {
+      const raw = await callAI(prompt, 'meeting-summary');
+      body.innerHTML = aiTextToHtml(raw);
+    } catch (err) {
+      body.innerHTML = `<div style="color:#dc2626">⚠️ ${err.message}</div>`;
+    }
+    return;
+  }
+
+  // ===== REAL AI: Revenue Prediction =====
+  if (type === 'revenue-prediction') {
+    title.textContent = '💰 AI Revenue Prediction';
+    if (!deals.length) { body.innerHTML = '<div style="color:var(--text-light)">No deals found. Add deals to get a revenue prediction.</div>'; return; }
+    body.innerHTML = '<div style="color:var(--text-light)">🤖 AI analyzing your pipeline…</div>';
+    const pipelineSummary = openDeals.map(d => `${d.name}: $${d.value || 0}, stage ${d.stage}`).join('; ');
+    const wonValue = deals.filter(d => d.stage === 'Won').reduce((s, d) => s + (parseFloat(d.value) || 0), 0);
+    const openValue = openDeals.reduce((s, d) => s + (parseFloat(d.value) || 0), 0);
+    const prompt = `Based on this CRM pipeline data, project likely revenue for the next 30 days. Total won revenue so far: $${wonValue}. Total open pipeline value: $${openValue}. Overall conversion rate: ${conversion}%. Open deals: ${pipelineSummary || 'none'}. Give a single realistic revenue range, then briefly explain your reasoning and 2-3 concrete actions to hit the higher end of that range.`;
+    try {
+      const raw = await callAI(prompt, 'revenue-prediction');
+      body.innerHTML = aiTextToHtml(raw);
+    } catch (err) {
+      body.innerHTML = `<div style="color:#dc2626">⚠️ ${err.message}</div>`;
+    }
+    return;
+  }
+
+  // ===== REAL AI: Lost Deal Analysis =====
+  if (type === 'lost-deal-analysis') {
+    title.textContent = '📉 AI Lost Deal Analysis';
+    const lostDeals = deals.filter(d => d.stage === 'Lost');
+    if (!lostDeals.length) { body.innerHTML = '<div style="color:var(--text-light)">No lost deals found yet — nothing to analyze.</div>'; return; }
+    body.innerHTML = '<div style="color:var(--text-light)">🤖 AI analyzing lost deals…</div>';
+    const lostSummary = lostDeals.map(d => `${d.name}: $${d.value || 0}, lost at last stage before Lost, company ${d.company || 'unknown'}`).join('; ');
+    const prompt = `Analyze these lost deals from a CRM and identify patterns — common company types, deal sizes, or characteristics that tend to lose. Give 3-5 concrete, actionable recommendations to reduce future losses. Lost deals: ${lostSummary}`;
+    try {
+      const raw = await callAI(prompt, 'lost-deal-analysis');
+      body.innerHTML = aiTextToHtml(raw);
+    } catch (err) {
+      body.innerHTML = `<div style="color:#dc2626">⚠️ ${err.message}</div>`;
+    }
+    return;
+  }
+
+  // ===== REAL AI: Best Contact Time =====
+  if (type === 'best-contact-time') {
+    title.textContent = '⏰ AI Best Contact Time';
+    const contactId = document.getElementById('bct-contact-select')?.value;
+    const contact = contacts.find(c => String(c.id) === String(contactId));
+    if (!contact) { body.innerHTML = '<div style="color:#dc2626">⚠️ Select a contact first — add one in Contacts if you don\'t have any yet.</div>'; return; }
+    body.innerHTML = '<div style="color:var(--text-light)">🤖 AI thinking…</div>';
+    const prompt = `Suggest the best day(s) of the week and time window to contact this person for a sales follow-up, and briefly explain why. Contact: ${contact.name}, role/title: ${contact.title || 'unknown'}, company: ${contact.company || 'unknown'}, status: ${contact.status || 'unknown'}, country/location: ${contact.country || contact.location || 'unknown'}. Keep it to a few sentences.`;
+    try {
+      const raw = await callAI(prompt, 'best-contact-time');
+      body.innerHTML = aiTextToHtml(raw);
+    } catch (err) {
+      body.innerHTML = `<div style="color:#dc2626">⚠️ ${err.message}</div>`;
+    }
+    return;
+  }
+
+  // ===== REAL AI: Customer Sentiment =====
+  if (type === 'sentiment-analysis') {
+    title.textContent = '💬 AI Customer Sentiment';
+    const text = document.getElementById('sentiment-text-input')?.value.trim();
+    if (!text) { body.innerHTML = '<div style="color:#dc2626">⚠️ Paste some text to analyze first.</div>'; return; }
+    const contactId = document.getElementById('sentiment-contact-select')?.value;
+    const contact = contacts.find(c => String(c.id) === String(contactId));
+    body.innerHTML = '<div style="color:var(--text-light)">🤖 AI reading the tone…</div>';
+    const prompt = `Analyze the sentiment of this customer communication${contact ? ' from ' + contact.name : ''}. Give: 1) overall sentiment (Positive / Neutral / Negative / Mixed), 2) a one-line explanation, 3) one suggested next step for the sales rep. Text:\n\n${text}`;
+    try {
+      const raw = await callAI(prompt, 'sentiment-analysis');
+      body.innerHTML = aiTextToHtml(raw);
     } catch (err) {
       body.innerHTML = `<div style="color:#dc2626">⚠️ ${err.message}</div>`;
     }

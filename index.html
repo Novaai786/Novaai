@@ -1518,6 +1518,18 @@ Leadnovaai</textarea>
           </div>
         </div>
       </div>
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header">
+          <div class="card-title">🔀 Workflow Automation</div>
+          <button class="btn btn-primary btn-sm" onclick="openWorkflowModal()">+ Create Workflow</button>
+        </div>
+        <div style="padding:20px">
+          <div style="font-size:12.5px;color:var(--text-light);margin-bottom:14px">
+            Set up "when X happens, do Y" rules — e.g. when a deal reaches "Won", automatically send a thank-you email and create an onboarding task. Runs while this CRM tab is open (or via the same background timer used for scheduled emails).
+          </div>
+          <div id="workflowsList"><div style="padding:20px;text-align:center;color:var(--text-light)">No workflows yet. Create your first one above.</div></div>
+        </div>
+      </div>
       <div class="card" id="aiOutputCard" style="display:none">
         <div class="card-header">
           <div class="card-title" id="aiOutputTitle">AI Result</div>
@@ -2976,6 +2988,20 @@ let campaignSelectedIds = new Set();
 let products = []; // now loaded from Supabase (see loadProductsFromSupabase)
 let team = []; // now loaded from Supabase (see loadTeamFromSupabase)
 
+// ===== WORKFLOW AUTOMATION =====
+let workflows = []; // now loaded from Supabase (see loadWorkflowsFromSupabase)
+let wfActionDraft = []; // temp working array while building/editing a workflow in the modal
+let firedOverdueWorkflowTaskIds = new Set(); // prevents a task_overdue workflow from firing more than once per task
+const WF_TRIGGER_LABELS = {
+  deal_stage_changed: 'Deal reaches stage',
+  deal_won: 'Deal is marked Won',
+  deal_lost: 'Deal is marked Lost',
+  deal_created: 'New deal is created',
+  contact_created: 'New contact is created',
+  task_overdue: 'A task becomes overdue'
+};
+const WF_ACTION_LABELS = { send_email: '✉️ Send Email', create_task: '✅ Create Task', notify: '🔔 Notification', assign_owner: '👤 Assign Owner' };
+
 const PERMISSION_MODULES = [
   { key: 'contacts', label: 'Contacts' },
   { key: 'companies', label: 'Companies' },
@@ -3513,8 +3539,11 @@ async function saveContact() {
       const { error } = await supabaseClient.from('leads').update(dbRow).eq('id', editId);
       if (error) { alert('Could not update lead: ' + error.message); return; }
     } else {
-      const { error } = await supabaseClient.from('leads').insert(dbRow);
+      const { data: insertedRows, error } = await supabaseClient.from('leads').insert(dbRow).select();
       if (error) { alert('Could not save lead: ' + error.message); return; }
+      if (insertedRows && insertedRows[0]) data.id = insertedRows[0].id;
+      data.name = fn + (lnameVal ? ' ' + lnameVal : '');
+      runWorkflows('contact_created', data);
     }
 
     closeModal('contactModal');
@@ -5140,10 +5169,12 @@ async function saveDeal() {
         pipelineHistory: [{ stage: newStage, date: new Date().toISOString() }]
       }, data);
       const dbRow = mapDealToDb(newDeal, userId);
-      const { error } = await supabaseClient.from('deals').insert(dbRow);
+      const { data: insertedRows, error } = await supabaseClient.from('deals').insert(dbRow).select();
       if (error) { alert('Could not save deal: ' + error.message); return; }
+      if (insertedRows && insertedRows[0]) newDeal.id = insertedRows[0].id;
       await autoCreateTaskForDeal(newDeal);
       showToast(`✅ Deal added — follow-up task auto-created for 2 days from now`);
+      runWorkflows('deal_created', newDeal);
     }
 
     closeModal('dealModal'); clearDealForm();
@@ -5206,6 +5237,9 @@ async function moveDeal(id, newStage) {
     if (reason) d.lostReason = reason;
   }
   renderDeals(); renderDashboard();
+  runWorkflows('deal_stage_changed', d);
+  if (newStage === 'Won') runWorkflows('deal_won', d);
+  if (newStage === 'Lost') runWorkflows('deal_lost', d);
   try {
     const session = window.__currentSession;
     if (!session) return;
@@ -6227,6 +6261,357 @@ function checkTaskReminders() {
 
 // Check every 5 minutes while the tab is open, plus once on load
 setInterval(checkTaskReminders, 5 * 60 * 1000);
+
+// ===================== WORKFLOW AUTOMATION =====================
+function mapWorkflowFromDb(row) {
+  return {
+    id: row.id,
+    name: row.name || '',
+    triggerType: row.trigger_type || '',
+    triggerConfig: row.trigger_config || {},
+    actions: row.actions || [],
+    active: row.active !== false
+  };
+}
+
+function mapWorkflowToDb(w, userId) {
+  return {
+    name: w.name || null,
+    trigger_type: w.triggerType || null,
+    trigger_config: w.triggerConfig || {},
+    actions: w.actions || [],
+    active: !!w.active,
+    user_id: userId
+  };
+}
+
+async function loadWorkflowsFromSupabase() {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const userId = session.user.id;
+    const { data, error } = await supabaseClient
+      .from('workflows')
+      .select('*')
+      .eq('user_id', userId)
+      .order('id', { ascending: false });
+    if (error) { console.error('Could not load workflows:', error); return; }
+    workflows = (data || []).map(mapWorkflowFromDb);
+    renderWorkflows();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function renderWorkflows() {
+  const el = document.getElementById('workflowsList');
+  if (!el) return;
+  if (!workflows.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-light)">No workflows yet. Create your first one above.</div>'; return; }
+  el.innerHTML = workflows.map(w => {
+    let trigDesc = WF_TRIGGER_LABELS[w.triggerType] || w.triggerType;
+    if (w.triggerType === 'deal_stage_changed' && w.triggerConfig.toStage) trigDesc += ` "${escapeHtml(w.triggerConfig.toStage)}"`;
+    const actionsDesc = (w.actions || []).map(a => WF_ACTION_LABELS[a.type] || a.type).join(', ') || 'no actions';
+    return `<div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <div>
+        <div style="font-weight:600;font-size:13.5px">${escapeHtml(w.name)}${w.active ? '' : ' <span style="color:var(--text-light);font-weight:500;font-size:11px">(paused)</span>'}</div>
+        <div style="font-size:12px;color:var(--text-light);margin-top:2px">When: ${trigDesc} &nbsp;→&nbsp; Do: ${escapeHtml(actionsDesc)}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        <button class="btn btn-outline btn-sm" onclick="toggleWorkflowActive(${w.id})">${w.active ? '⏸ Pause' : '▶️ Activate'}</button>
+        <button class="btn btn-outline btn-sm" onclick="openWorkflowModal(${w.id})">✏️ Edit</button>
+        <button class="btn btn-outline btn-sm" style="color:#dc2626;border-color:#dc2626" onclick="deleteWorkflow(${w.id})">🗑️</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function onWorkflowTriggerChange() {
+  const trig = document.getElementById('wf-trigger').value;
+  document.getElementById('wf-stage-group').style.display = trig === 'deal_stage_changed' ? '' : 'none';
+  if (trig === 'deal_stage_changed') {
+    const stageSet = new Set((typeof PIPELINE_STAGES !== 'undefined' ? PIPELINE_STAGES.map(s => s.name) : []));
+    categories.forEach(c => (c.stages || []).forEach(s => stageSet.add(s)));
+    document.getElementById('wf-stage-options').innerHTML = [...stageSet].map(s => `<option value="${escapeHtml(s)}">`).join('');
+  }
+}
+
+function renderWfActionDraft() {
+  const el = document.getElementById('wf-actions-list');
+  if (!el) return;
+  if (!wfActionDraft.length) { el.innerHTML = '<div style="font-size:12px;color:var(--text-light)">No actions added yet — pick one below and click "Add Action".</div>'; return; }
+  el.innerHTML = wfActionDraft.map((a, idx) => {
+    let fields = '';
+    if (a.type === 'send_email') {
+      fields = `
+        <input class="form-control" style="margin-bottom:6px" placeholder="Subject" value="${escapeHtml(a.subject || '')}" oninput="updateWfAction(${idx},'subject',this.value)">
+        <textarea class="form-control" rows="2" style="margin-bottom:6px" placeholder="Body — use {{name}}, {{company}}, {{title}}" oninput="updateWfAction(${idx},'body',this.value)">${escapeHtml(a.body || '')}</textarea>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span style="font-size:11.5px;color:var(--text-light)">Send after (days):</span>
+          <input type="number" min="0" max="60" class="form-control" style="max-width:70px" value="${a.delayDays !== undefined ? a.delayDays : 0}" oninput="updateWfAction(${idx},'delayDays',this.value)">
+        </div>`;
+    } else if (a.type === 'create_task') {
+      fields = `
+        <input class="form-control" style="margin-bottom:6px" placeholder="Task title — use {{name}}, {{company}}" value="${escapeHtml(a.title || '')}" oninput="updateWfAction(${idx},'title',this.value)">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:11.5px;color:var(--text-light)">Due in (days):</span>
+          <input type="number" min="0" max="60" class="form-control" style="max-width:70px" value="${a.delayDays !== undefined ? a.delayDays : 2}" oninput="updateWfAction(${idx},'delayDays',this.value)">
+          <select class="form-control" style="max-width:110px" onchange="updateWfAction(${idx},'priority',this.value)">
+            <option ${a.priority === 'Low' ? 'selected' : ''}>Low</option>
+            <option ${(!a.priority || a.priority === 'Medium') ? 'selected' : ''}>Medium</option>
+            <option ${a.priority === 'High' ? 'selected' : ''}>High</option>
+          </select>
+        </div>`;
+    } else if (a.type === 'notify') {
+      fields = `<input class="form-control" placeholder="Notification message — use {{name}}, {{company}}" value="${escapeHtml(a.message || '')}" oninput="updateWfAction(${idx},'message',this.value)">`;
+    } else if (a.type === 'assign_owner') {
+      fields = `<select class="form-control" onchange="updateWfAction(${idx},'owner',this.value)">
+        <option value="">Select team member</option>
+        ${team.map(t => `<option value="${escapeHtml(t.name)}" ${a.owner === t.name ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}
+      </select>`;
+    }
+    return `<div style="border:1px solid var(--border);border-radius:8px;padding:10px;background:var(--bg)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <strong style="font-size:12.5px">${WF_ACTION_LABELS[a.type] || a.type}</strong>
+        <button class="btn btn-outline btn-sm" style="color:#dc2626;border-color:#dc2626;padding:2px 8px" onclick="removeWfAction(${idx})">✕</button>
+      </div>
+      ${fields}
+    </div>`;
+  }).join('');
+}
+
+function updateWfAction(idx, field, value) { if (wfActionDraft[idx]) wfActionDraft[idx][field] = value; }
+function removeWfAction(idx) { wfActionDraft.splice(idx, 1); renderWfActionDraft(); }
+function addWorkflowActionRow() {
+  const type = document.getElementById('wf-new-action-type').value;
+  const defaults = {
+    send_email: { type, subject: '', body: '', delayDays: 0 },
+    create_task: { type, title: '', delayDays: 2, priority: 'Medium' },
+    notify: { type, message: '' },
+    assign_owner: { type, owner: '' }
+  };
+  wfActionDraft.push(defaults[type]);
+  renderWfActionDraft();
+}
+
+function openWorkflowModal(id) {
+  document.getElementById('wf-edit-id').value = '';
+  document.getElementById('wf-name').value = '';
+  document.getElementById('wf-trigger').value = 'deal_stage_changed';
+  document.getElementById('wf-stage').value = '';
+  document.getElementById('wf-error').style.display = 'none';
+  wfActionDraft = [];
+  if (id) {
+    const w = workflows.find(w => w.id === id);
+    if (w) {
+      document.getElementById('wf-edit-id').value = w.id;
+      document.getElementById('wf-name').value = w.name;
+      document.getElementById('wf-trigger').value = w.triggerType;
+      document.getElementById('wf-stage').value = (w.triggerConfig || {}).toStage || '';
+      wfActionDraft = JSON.parse(JSON.stringify(w.actions || []));
+      document.getElementById('workflowModalTitle').textContent = 'Edit Workflow';
+    }
+  } else {
+    document.getElementById('workflowModalTitle').textContent = 'Create Workflow';
+  }
+  onWorkflowTriggerChange();
+  renderWfActionDraft();
+  openModal('workflowModal');
+}
+
+async function saveWorkflow() {
+  const name = document.getElementById('wf-name').value.trim();
+  const errEl = document.getElementById('wf-error');
+  errEl.style.display = 'none';
+  if (!name) { errEl.textContent = 'Workflow name is required.'; errEl.style.display = 'block'; return; }
+  if (!wfActionDraft.length) { errEl.textContent = 'Add at least one action.'; errEl.style.display = 'block'; return; }
+  const triggerType = document.getElementById('wf-trigger').value;
+  const triggerConfig = {};
+  if (triggerType === 'deal_stage_changed') {
+    const stage = document.getElementById('wf-stage').value.trim();
+    if (!stage) { errEl.textContent = 'Enter a target stage.'; errEl.style.display = 'block'; return; }
+    triggerConfig.toStage = stage;
+  }
+  const editId = document.getElementById('wf-edit-id').value;
+  try {
+    const session = window.__currentSession;
+    if (!session) { alert('Session expired. Please log in again.'); return; }
+    const userId = session.user.id;
+    const existing = editId ? workflows.find(x => x.id == editId) : null;
+    const w = { name, triggerType, triggerConfig, actions: wfActionDraft, active: existing ? existing.active : true };
+    const dbRow = mapWorkflowToDb(w, userId);
+    if (editId) {
+      const { error } = await supabaseClient.from('workflows').update(dbRow).eq('id', editId);
+      if (error) { errEl.textContent = 'Could not save: ' + error.message; errEl.style.display = 'block'; return; }
+    } else {
+      const { error } = await supabaseClient.from('workflows').insert(dbRow);
+      if (error) { errEl.textContent = 'Could not save: ' + error.message; errEl.style.display = 'block'; return; }
+    }
+    closeModal('workflowModal');
+    await loadWorkflowsFromSupabase();
+    showToast('✅ Workflow saved');
+  } catch (err) {
+    console.error(err);
+    errEl.textContent = 'Something went wrong.';
+    errEl.style.display = 'block';
+  }
+}
+
+async function deleteWorkflow(id) {
+  if (!confirm('Delete this workflow?')) return;
+  try {
+    const { error } = await supabaseClient.from('workflows').delete().eq('id', id);
+    if (error) { alert('Could not delete: ' + error.message); return; }
+    await loadWorkflowsFromSupabase();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function toggleWorkflowActive(id) {
+  const w = workflows.find(w => w.id === id);
+  if (!w) return;
+  w.active = !w.active;
+  renderWorkflows();
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const { error } = await supabaseClient.from('workflows').update({ active: w.active }).eq('id', id);
+    if (error) console.error('Could not toggle workflow:', error);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+// ----- Engine: called whenever a trigger event happens elsewhere in the app -----
+async function runWorkflows(triggerType, record) {
+  if (!record) return;
+  const matches = workflows.filter(w => w.active && w.triggerType === triggerType);
+  for (const w of matches) {
+    if (!workflowConditionMatches(w, record)) continue;
+    for (const action of (w.actions || [])) {
+      await executeWorkflowAction(action, record);
+    }
+  }
+}
+
+function workflowConditionMatches(w, record) {
+  const cfg = w.triggerConfig || {};
+  if (w.triggerType === 'deal_stage_changed' && cfg.toStage) {
+    return (record.stage || '') === cfg.toStage;
+  }
+  return true;
+}
+
+async function executeWorkflowAction(action, record) {
+  try {
+    if (action.type === 'send_email') await wfSendEmail(action, record);
+    else if (action.type === 'create_task') await wfCreateTask(action, record);
+    else if (action.type === 'notify') wfNotify(action, record);
+    else if (action.type === 'assign_owner') await wfAssignOwner(action, record);
+  } catch (err) {
+    console.error('Workflow action failed:', err);
+  }
+}
+
+function wfResolveContact(record) {
+  if (record.email) return record; // record is already a contact/lead
+  if (record.company) return contacts.find(c => (c.company || '').toLowerCase() === record.company.toLowerCase());
+  return null;
+}
+
+async function wfSendEmail(action, record) {
+  const contact = wfResolveContact(record);
+  if (!contact || !contact.email) { console.warn('Workflow: no matching contact email found, skipping email action'); return; }
+  if (!campaignSettings.webAppUrl) { console.warn('Workflow: no Apps Script URL configured in Sender Setup, skipping email action'); return; }
+  const subject = mergeTags(action.subject || '', contact);
+  const body = mergeTags(action.body || '', contact);
+  const delayDays = Number(action.delayDays) || 0;
+  const scheduledAt = new Date(Date.now() + delayDays * 24 * 60 * 60 * 1000);
+  try {
+    await fetch(campaignSettings.webAppUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'scheduleEmail', to: contact.email, subject, body, fromName: campaignSettings.fromName || 'NovaAICRM', scheduledAt: scheduledAt.toISOString() })
+    });
+  } catch (err) {
+    console.error('Workflow send_email failed:', err);
+  }
+}
+
+async function wfCreateTask(action, record) {
+  const session = window.__currentSession;
+  if (!session) return;
+  const contact = wfResolveContact(record);
+  const mergeSource = contact || record;
+  const newTask = {
+    title: mergeTags(action.title || 'Follow up', mergeSource) || 'Follow up',
+    date: addDays(null, Number(action.delayDays) || 0),
+    priority: action.priority || 'Medium',
+    contact: contact ? contact.name : (record.name || ''),
+    contactId: contact ? contact.id : null,
+    notes: 'Auto-created by Workflow Automation.',
+    done: false,
+    autoCreated: true
+  };
+  try {
+    const dbRow = mapTaskToDb(newTask, session.user.id);
+    const { error } = await supabaseClient.from('tasks').insert(dbRow);
+    if (error) { console.error('Workflow create_task failed:', error); return; }
+    await loadTasksFromSupabase();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function wfNotify(action, record) {
+  const contact = wfResolveContact(record) || record;
+  const msg = mergeTags(action.message || 'Workflow triggered', contact);
+  showToast('🔀 ' + msg);
+  if ('Notification' in window && Notification.permission === 'granted') {
+    new Notification('Workflow Automation', { body: msg });
+  }
+}
+
+async function wfAssignOwner(action, record) {
+  if (!action.owner) return;
+  const session = window.__currentSession;
+  if (!session) return;
+  try {
+    if (record.stage !== undefined && deals.some(d => d.id === record.id)) {
+      // record is a deal
+      const d = deals.find(d => d.id === record.id);
+      if (!d) return;
+      d.owner = action.owner;
+      const dbRow = mapDealToDb(d, session.user.id);
+      const { error } = await supabaseClient.from('deals').update(dbRow).eq('id', d.id);
+      if (error) console.error('Workflow assign_owner (deal) failed:', error);
+      renderDeals();
+    } else if (record.id != null) {
+      // record is a contact/lead
+      const c = contacts.find(c => c.id === record.id);
+      const target = c || record;
+      target.owner = action.owner;
+      const dbRow = mapLeadToDb(target, session.user.id);
+      const { error } = await supabaseClient.from('leads').update(dbRow).eq('id', target.id);
+      if (error) console.error('Workflow assign_owner (contact) failed:', error);
+    }
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+// task_overdue trigger check — separate from browser notification reminders so it works even if those are off
+function checkOverdueTaskWorkflows() {
+  if (!workflows.some(w => w.active && w.triggerType === 'task_overdue')) return;
+  tasks.forEach(t => {
+    if (t.done) return;
+    if (getTaskStatus(t) === 'overdue' && !firedOverdueWorkflowTaskIds.has(t.id)) {
+      firedOverdueWorkflowTaskIds.add(t.id);
+      runWorkflows('task_overdue', t);
+    }
+  });
+}
+setInterval(checkOverdueTaskWorkflows, 5 * 60 * 1000);
 
 // ===== DAILY SUMMARY =====
 function buildDailySummaryText() {
@@ -9415,6 +9800,8 @@ if (remindersEnabled) checkTaskReminders();
       await loadCampaignSettingsFromSupabase();
       await loadSequencesFromSupabase();
       await loadSequenceEnrollmentsFromSupabase();
+      await loadWorkflowsFromSupabase();
+      checkOverdueTaskWorkflows();
     }
   } catch (err) {
     console.error('Could not initialize leads:', err);
@@ -9745,6 +10132,55 @@ function copyScriptCode() {
     <div style="display:flex;gap:10px;margin-top:8px">
       <button class="btn btn-primary" style="flex:1" onclick="saveEditedQueueItem()">💾 Save Changes</button>
       <button class="btn btn-outline" onclick="closeModal('editQueueModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Workflow Automation Modal -->
+<div class="modal-overlay" id="workflowModal">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-header">
+      <div class="modal-title" id="workflowModalTitle">Create Workflow</div>
+      <button class="modal-close" onclick="closeModal('workflowModal')">✕</button>
+    </div>
+    <input type="hidden" id="wf-edit-id">
+    <div class="form-group">
+      <label class="form-label">Workflow Name *</label>
+      <input class="form-control" id="wf-name" placeholder="e.g. Deal Won → Thank You">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Trigger — When... *</label>
+      <select class="form-control" id="wf-trigger" onchange="onWorkflowTriggerChange()">
+        <option value="deal_stage_changed">Deal moves to a specific stage</option>
+        <option value="deal_won">Deal is marked Won</option>
+        <option value="deal_lost">Deal is marked Lost</option>
+        <option value="deal_created">New deal is created</option>
+        <option value="contact_created">New contact/lead is created</option>
+        <option value="task_overdue">A task becomes overdue</option>
+      </select>
+    </div>
+    <div class="form-group" id="wf-stage-group" style="display:none">
+      <label class="form-label">Target Stage</label>
+      <input class="form-control" id="wf-stage" list="wf-stage-options" placeholder="e.g. Proposal Sent">
+      <datalist id="wf-stage-options"></datalist>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Actions — Do... *</label>
+      <div id="wf-actions-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px"></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select class="form-control" id="wf-new-action-type" style="max-width:220px">
+          <option value="send_email">✉️ Send an email</option>
+          <option value="create_task">✅ Create a task</option>
+          <option value="notify">🔔 Show a notification</option>
+          <option value="assign_owner">👤 Assign owner</option>
+        </select>
+        <button class="btn btn-outline btn-sm" onclick="addWorkflowActionRow()">+ Add Action</button>
+      </div>
+    </div>
+    <div id="wf-error" style="display:none;color:#dc2626;font-size:12px;margin-bottom:8px"></div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button class="btn btn-primary" style="flex:1" onclick="saveWorkflow()">💾 Save Workflow</button>
+      <button class="btn btn-outline" onclick="closeModal('workflowModal')">Cancel</button>
     </div>
   </div>
 </div>

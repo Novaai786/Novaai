@@ -1530,6 +1530,56 @@ Leadnovaai</textarea>
           <div id="workflowsList"><div style="padding:20px;text-align:center;color:var(--text-light)">No workflows yet. Create your first one above.</div></div>
         </div>
       </div>
+
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header">
+          <div class="card-title">📱 WhatsApp & SMS Automation</div>
+          <button class="btn btn-outline btn-sm" onclick="openModal('twilioGuideModal')">📘 Setup Guide</button>
+        </div>
+        <div style="padding:20px">
+          <div style="font-size:12.5px;color:var(--text-light);margin-bottom:14px">
+            Connect your own Twilio account once, then use "Send WhatsApp" / "Send SMS" actions inside Workflow Automation, or send a one-off message below.
+          </div>
+          <div class="form-group"><label class="form-label">Twilio Proxy Web App URL</label><input class="form-control" id="twilioProxyUrl" placeholder="Paste the Apps Script Web App URL — see Setup Guide"></div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <div class="form-group" style="flex:1;min-width:180px"><label class="form-label">Twilio Account SID</label><input class="form-control" id="twilioAccountSid" placeholder="ACxxxxxxxxxxxxxxxx"></div>
+            <div class="form-group" style="flex:1;min-width:180px"><label class="form-label">Twilio Auth Token</label><input class="form-control" id="twilioAuthToken" type="password" placeholder="Auth Token"></div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <div class="form-group" style="flex:1;min-width:180px"><label class="form-label">WhatsApp From Number</label><input class="form-control" id="twilioWhatsappFrom" placeholder="whatsapp:+14155238886"></div>
+            <div class="form-group" style="flex:1;min-width:180px"><label class="form-label">SMS From Number</label><input class="form-control" id="twilioSmsFrom" placeholder="+1XXXXXXXXXX"></div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px">
+            <button class="btn btn-primary btn-sm" onclick="saveAutomationSettings()">💾 Save Settings</button>
+            <span id="automationSettingsSaved" style="font-size:12px;color:#16a34a"></span>
+          </div>
+          <div style="border-top:1px solid var(--border);padding-top:14px">
+            <div style="font-weight:600;font-size:13px;margin-bottom:8px">Send a quick test message</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <input class="form-control" id="twilioTestTo" placeholder="+92300xxxxxxx" style="flex:1;min-width:140px">
+              <input class="form-control" id="twilioTestMsg" placeholder="Message text" style="flex:2;min-width:180px">
+              <select class="form-control" id="twilioTestChannel" style="max-width:130px"><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option></select>
+              <button class="btn btn-outline btn-sm" onclick="sendTestTwilioMessage()">Send Test</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header">
+          <div class="card-title">👥 Auto Lead Assignment (Round Robin)</div>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer">
+            <input type="checkbox" id="roundRobinEnabled" onchange="toggleRoundRobinEnabled()"> Enabled
+          </label>
+        </div>
+        <div style="padding:20px">
+          <div style="font-size:12.5px;color:var(--text-light);margin-bottom:14px">
+            When enabled, every new contact/lead is automatically assigned to the next checked team member below, in rotation.
+          </div>
+          <div id="roundRobinTeamList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"></div>
+          <button class="btn btn-outline btn-sm" onclick="saveAutomationSettings()">💾 Save Rotation</button>
+        </div>
+      </div>
       <div class="card" id="aiOutputCard" style="display:none">
         <div class="card-header">
           <div class="card-title" id="aiOutputTitle">AI Result</div>
@@ -3000,7 +3050,13 @@ const WF_TRIGGER_LABELS = {
   contact_created: 'New contact is created',
   task_overdue: 'A task becomes overdue'
 };
-const WF_ACTION_LABELS = { send_email: '✉️ Send Email', create_task: '✅ Create Task', notify: '🔔 Notification', assign_owner: '👤 Assign Owner' };
+const WF_ACTION_LABELS = { send_email: '✉️ Send Email', create_task: '✅ Create Task', notify: '🔔 Notification', assign_owner: '👤 Assign Owner', send_whatsapp: '💬 Send WhatsApp', send_sms: '📩 Send SMS' };
+
+// ===== WHATSAPP / SMS + LEAD ASSIGNMENT SETTINGS =====
+let automationSettings = {
+  twilioProxyUrl: '', twilioAccountSid: '', twilioAuthToken: '', twilioWhatsappFrom: '', twilioSmsFrom: '',
+  roundRobinEnabled: false, roundRobinTeamIds: [], roundRobinIndex: 0
+}; // now loaded from Supabase (see loadCampaignSettingsFromSupabase)
 
 const PERMISSION_MODULES = [
   { key: 'contacts', label: 'Contacts' },
@@ -3544,6 +3600,9 @@ async function saveContact() {
       if (insertedRows && insertedRows[0]) data.id = insertedRows[0].id;
       data.name = fn + (lnameVal ? ' ' + lnameVal : '');
       runWorkflows('contact_created', data);
+      if (automationSettings.roundRobinEnabled && (automationSettings.roundRobinTeamIds || []).length) {
+        await autoAssignLeadRoundRobin(data.id);
+      }
     }
 
     closeModal('contactModal');
@@ -6363,6 +6422,8 @@ function renderWfActionDraft() {
         </div>`;
     } else if (a.type === 'notify') {
       fields = `<input class="form-control" placeholder="Notification message — use {{name}}, {{company}}" value="${escapeHtml(a.message || '')}" oninput="updateWfAction(${idx},'message',this.value)">`;
+    } else if (a.type === 'send_whatsapp' || a.type === 'send_sms') {
+      fields = `<textarea class="form-control" rows="2" placeholder="Message — use {{name}}, {{company}}" oninput="updateWfAction(${idx},'body',this.value)">${escapeHtml(a.body || '')}</textarea>`;
     } else if (a.type === 'assign_owner') {
       fields = `<select class="form-control" onchange="updateWfAction(${idx},'owner',this.value)">
         <option value="">Select team member</option>
@@ -6385,6 +6446,8 @@ function addWorkflowActionRow() {
   const type = document.getElementById('wf-new-action-type').value;
   const defaults = {
     send_email: { type, subject: '', body: '', delayDays: 0 },
+    send_whatsapp: { type, body: '' },
+    send_sms: { type, body: '' },
     create_task: { type, title: '', delayDays: 2, priority: 'Medium' },
     notify: { type, message: '' },
     assign_owner: { type, owner: '' }
@@ -6505,6 +6568,8 @@ function workflowConditionMatches(w, record) {
 async function executeWorkflowAction(action, record) {
   try {
     if (action.type === 'send_email') await wfSendEmail(action, record);
+    else if (action.type === 'send_whatsapp') await wfSendMessage('whatsapp', action, record);
+    else if (action.type === 'send_sms') await wfSendMessage('sms', action, record);
     else if (action.type === 'create_task') await wfCreateTask(action, record);
     else if (action.type === 'notify') wfNotify(action, record);
     else if (action.type === 'assign_owner') await wfAssignOwner(action, record);
@@ -6612,6 +6677,134 @@ function checkOverdueTaskWorkflows() {
   });
 }
 setInterval(checkOverdueTaskWorkflows, 5 * 60 * 1000);
+
+// ===================== WHATSAPP / SMS (Twilio) =====================
+function loadAutomationSettingsUI() {
+  document.getElementById('twilioProxyUrl').value = automationSettings.twilioProxyUrl || '';
+  document.getElementById('twilioAccountSid').value = automationSettings.twilioAccountSid || '';
+  document.getElementById('twilioAuthToken').value = automationSettings.twilioAuthToken || '';
+  document.getElementById('twilioWhatsappFrom').value = automationSettings.twilioWhatsappFrom || '';
+  document.getElementById('twilioSmsFrom').value = automationSettings.twilioSmsFrom || '';
+  document.getElementById('roundRobinEnabled').checked = !!automationSettings.roundRobinEnabled;
+  renderRoundRobinTeamList();
+}
+
+async function saveAutomationSettings() {
+  automationSettings.twilioProxyUrl = document.getElementById('twilioProxyUrl').value.trim();
+  automationSettings.twilioAccountSid = document.getElementById('twilioAccountSid').value.trim();
+  automationSettings.twilioAuthToken = document.getElementById('twilioAuthToken').value.trim();
+  automationSettings.twilioWhatsappFrom = document.getElementById('twilioWhatsappFrom').value.trim();
+  automationSettings.twilioSmsFrom = document.getElementById('twilioSmsFrom').value.trim();
+  automationSettings.roundRobinEnabled = document.getElementById('roundRobinEnabled').checked;
+  const msg = document.getElementById('automationSettingsSaved');
+  try {
+    const session = window.__currentSession;
+    if (!session) { alert('Session expired. Please log in again.'); return; }
+    const userId = session.user.id;
+    const { error } = await supabaseClient.from('campaign_settings').upsert({
+      user_id: userId,
+      web_app_url: campaignSettings.webAppUrl || null,
+      from_name: campaignSettings.fromName || null,
+      campaign_goal: campaignSettings.campaignGoal || null,
+      twilio_proxy_url: automationSettings.twilioProxyUrl || null,
+      twilio_account_sid: automationSettings.twilioAccountSid || null,
+      twilio_auth_token: automationSettings.twilioAuthToken || null,
+      twilio_whatsapp_from: automationSettings.twilioWhatsappFrom || null,
+      twilio_sms_from: automationSettings.twilioSmsFrom || null,
+      round_robin_enabled: automationSettings.roundRobinEnabled,
+      round_robin_team_ids: automationSettings.roundRobinTeamIds || [],
+      round_robin_index: automationSettings.roundRobinIndex || 0
+    }, { onConflict: 'user_id' });
+    if (error) { alert('Could not save: ' + error.message); return; }
+    if (msg) { msg.textContent = '✓ Saved'; setTimeout(() => msg.textContent = '', 2000); }
+  } catch (err) {
+    alert('Something went wrong while saving.');
+    console.error(err);
+  }
+}
+
+async function twilioSend(channel, to, body) {
+  if (!automationSettings.twilioProxyUrl) { console.warn('Twilio: no proxy URL configured'); return { success: false, error: 'No Twilio Proxy Web App URL configured — see Setup Guide.' }; }
+  try {
+    const res = await fetch(automationSettings.twilioProxyUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: channel === 'whatsapp' ? 'sendWhatsApp' : 'sendSMS',
+        accountSid: automationSettings.twilioAccountSid,
+        authToken: automationSettings.twilioAuthToken,
+        from: channel === 'whatsapp' ? automationSettings.twilioWhatsappFrom : automationSettings.twilioSmsFrom,
+        to: channel === 'whatsapp' ? ('whatsapp:' + String(to).replace(/^whatsapp:/, '')) : to,
+        body
+      })
+    });
+    return await res.json();
+  } catch (err) {
+    console.error('Twilio send failed:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+async function sendTestTwilioMessage() {
+  const to = document.getElementById('twilioTestTo').value.trim();
+  const msg = document.getElementById('twilioTestMsg').value.trim();
+  const channel = document.getElementById('twilioTestChannel').value;
+  if (!to || !msg) { alert('Enter a phone number and message.'); return; }
+  const result = await twilioSend(channel, to, msg);
+  if (result && result.success) showToast(`✅ ${channel === 'whatsapp' ? 'WhatsApp' : 'SMS'} sent to ${to}`);
+  else alert('Failed: ' + ((result && result.error) || 'Unknown error'));
+}
+
+async function wfSendMessage(channel, action, record) {
+  const contact = wfResolveContact(record);
+  if (!contact || !contact.phone) { console.warn(`Workflow: no matching contact phone found, skipping ${channel} action`); return; }
+  const body = mergeTags(action.body || '', contact);
+  await twilioSend(channel, contact.phone, body);
+}
+
+// ===================== AUTO LEAD ASSIGNMENT (ROUND ROBIN) =====================
+function renderRoundRobinTeamList() {
+  const el = document.getElementById('roundRobinTeamList');
+  if (!el) return;
+  if (!team.length) { el.innerHTML = '<div style="font-size:12px;color:var(--text-light)">Add team members first (Team section) to build a rotation.</div>'; return; }
+  const included = new Set(automationSettings.roundRobinTeamIds || []);
+  el.innerHTML = team.map(t => `
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px">
+      <input type="checkbox" ${included.has(t.id) ? 'checked' : ''} onchange="toggleRoundRobinMember(${t.id}, this.checked)">
+      ${escapeHtml(t.name)} <span style="color:var(--text-light);font-size:11px">${escapeHtml(t.role || '')}</span>
+    </label>`).join('');
+}
+
+function toggleRoundRobinMember(id, checked) {
+  const set = new Set(automationSettings.roundRobinTeamIds || []);
+  if (checked) set.add(id); else set.delete(id);
+  automationSettings.roundRobinTeamIds = [...set];
+}
+
+function toggleRoundRobinEnabled() {
+  automationSettings.roundRobinEnabled = document.getElementById('roundRobinEnabled').checked;
+}
+
+async function autoAssignLeadRoundRobin(leadId) {
+  const ids = automationSettings.roundRobinTeamIds || [];
+  if (!ids.length || leadId == null) return;
+  const idx = (automationSettings.roundRobinIndex || 0) % ids.length;
+  const memberId = ids[idx];
+  const member = team.find(t => t.id === memberId);
+  if (!member) return;
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const { error } = await supabaseClient.from('leads').update({ owner: member.name }).eq('id', leadId);
+    if (error) { console.error('Round robin assignment failed:', error); return; }
+    automationSettings.roundRobinIndex = (idx + 1) % ids.length;
+    await supabaseClient.from('campaign_settings').update({ round_robin_index: automationSettings.roundRobinIndex }).eq('user_id', session.user.id);
+    await loadContactsFromSupabase();
+    showToast(`👥 Auto-assigned to ${member.name}`);
+  } catch (err) {
+    console.error(err);
+  }
+}
 
 // ===== DAILY SUMMARY =====
 function buildDailySummaryText() {
@@ -6792,7 +6985,18 @@ async function loadCampaignSettingsFromSupabase() {
       .maybeSingle();
     if (error) { console.error('Could not load campaign settings:', error); return; }
     campaignSettings = data ? { webAppUrl: data.web_app_url || '', fromName: data.from_name || '', campaignGoal: data.campaign_goal || null } : {};
+    automationSettings = {
+      twilioProxyUrl: (data && data.twilio_proxy_url) || '',
+      twilioAccountSid: (data && data.twilio_account_sid) || '',
+      twilioAuthToken: (data && data.twilio_auth_token) || '',
+      twilioWhatsappFrom: (data && data.twilio_whatsapp_from) || '',
+      twilioSmsFrom: (data && data.twilio_sms_from) || '',
+      roundRobinEnabled: !!(data && data.round_robin_enabled),
+      roundRobinTeamIds: (data && data.round_robin_team_ids) || [],
+      roundRobinIndex: (data && data.round_robin_index) || 0
+    };
     if (document.getElementById('campaignWebAppUrl')) loadCampaignSettings();
+    if (document.getElementById('twilioProxyUrl')) loadAutomationSettingsUI();
   } catch (err) {
     console.error(err);
   }
@@ -10136,6 +10340,62 @@ function copyScriptCode() {
   </div>
 </div>
 
+<!-- Twilio WhatsApp/SMS Setup Guide Modal -->
+<div class="modal-overlay" id="twilioGuideModal">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-header">
+      <div class="modal-title">📘 WhatsApp & SMS Setup Guide</div>
+      <button class="modal-close" onclick="closeModal('twilioGuideModal')">✕</button>
+    </div>
+    <div style="max-height:70vh;overflow-y:auto">
+      <p style="font-size:13px;line-height:1.6">This uses your own <strong>Twilio</strong> account. Twilio's free trial gives you a WhatsApp Sandbox and a trial SMS number to test with.</p>
+      <h4 style="margin:14px 0 6px">Step 1: Get Twilio credentials</h4>
+      <p style="font-size:13px;line-height:1.6">Sign up at <strong>twilio.com</strong> → Console Dashboard → copy your <strong>Account SID</strong> and <strong>Auth Token</strong>. For WhatsApp, join your Sandbox (Messaging → Try it out → Send a WhatsApp message) to get a sandbox number like <code>whatsapp:+14155238886</code>. For SMS, use a Twilio phone number.</p>
+      <h4 style="margin:14px 0 6px">Step 2: Create the proxy script</h4>
+      <p style="font-size:13px;line-height:1.6">Go to <strong>script.google.com</strong> → New project → delete the placeholder code → paste this:</p>
+      <pre style="background:#0F172A;color:#E2E8F0;padding:16px;border-radius:8px;overflow-x:auto;font-size:11.5px;line-height:1.6;white-space:pre;max-height:280px;overflow-y:auto;">function doPost(e) {
+  const req = JSON.parse(e.postData.contents);
+  try {
+    if (req.action === 'sendWhatsApp' || req.action === 'sendSMS') {
+      const url = 'https://api.twilio.com/2010-04-01/Accounts/' + req.accountSid + '/Messages.json';
+      const payload = { To: req.to, From: req.from, Body: req.body };
+      const options = {
+        method: 'post',
+        payload: payload,
+        headers: { Authorization: 'Basic ' + Utilities.base64Encode(req.accountSid + ':' + req.authToken) },
+        muteHttpExceptions: true
+      };
+      const response = UrlFetchApp.fetch(url, options);
+      const result = JSON.parse(response.getContentText());
+      if (result.sid) {
+        return ContentService.createTextOutput(JSON.stringify({ success: true, sid: result.sid })).setMimeType(ContentService.MimeType.JSON);
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: false, error: result.message || 'Twilio error' })).setMimeType(ContentService.MimeType.JSON);
+    }
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Unknown action' })).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.message })).setMimeType(ContentService.MimeType.JSON);
+  }
+}</pre>
+      <h4 style="margin:14px 0 6px">Step 3: Deploy as a Web App</h4>
+      <p style="font-size:13px;line-height:1.6"><strong>Deploy → New deployment</strong> → gear icon ⚙️ → select <strong>Web app</strong>. Execute as: <strong>Me</strong> &nbsp;|&nbsp; Who has access: <strong>Anyone</strong>. Click <strong>Deploy</strong>, authorize it if asked, then copy the Web app URL (ends with <code>/exec</code>).</p>
+      <h4 style="margin:14px 0 6px">Step 4: Connect it here</h4>
+      <p style="font-size:13px;line-height:1.6">Paste that URL into <strong>"Twilio Proxy Web App URL"</strong> above, along with your Account SID, Auth Token, and From numbers, then click <strong>Save Settings</strong>. You can now use "Send WhatsApp" / "Send SMS" actions in Workflow Automation, or the quick test box.</p>
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:10px">
+        <strong style="font-size:12.5px">⚠️ Good to know:</strong>
+        <ul style="margin:8px 0 0 18px;font-size:12.5px;color:var(--text-light);line-height:1.6">
+          <li>Trial Twilio accounts can only message numbers you've verified, and WhatsApp Sandbox recipients must first text your sandbox a join code.</li>
+          <li>Your Account SID/Auth Token are stored in your own Supabase project and are only ever sent to your own Apps Script URL.</li>
+          <li>If you ever redeploy and get a new URL, update it here again.</li>
+        </ul>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button class="btn btn-primary" style="flex:1" onclick="closeModal('twilioGuideModal')">Got it, close guide</button>
+    </div>
+  </div>
+</div>
+
 <!-- Workflow Automation Modal -->
 <div class="modal-overlay" id="workflowModal">
   <div class="modal" style="max-width:600px">
@@ -10170,6 +10430,8 @@ function copyScriptCode() {
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <select class="form-control" id="wf-new-action-type" style="max-width:220px">
           <option value="send_email">✉️ Send an email</option>
+          <option value="send_whatsapp">💬 Send a WhatsApp message</option>
+          <option value="send_sms">📩 Send an SMS</option>
           <option value="create_task">✅ Create a task</option>
           <option value="notify">🔔 Show a notification</option>
           <option value="assign_owner">👤 Assign owner</option>

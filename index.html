@@ -1328,6 +1328,13 @@ Leadnovaai</textarea>
             <input type="checkbox" id="seqSelectAll" onchange="toggleAllSeqContacts(this)"> Select All (filtered)
           </label>
           <div id="seqContactList" style="max-height:280px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:10px"></div>
+          <div class="form-group" style="margin-bottom:10px">
+            <label class="form-label" style="font-size:12px">📅 Schedule Campaign (optional)</label>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <input type="datetime-local" id="seqScheduleStart" class="form-control" style="max-width:220px;padding:7px 10px;font-size:13px">
+              <span style="font-size:11.5px;color:var(--text-light)">Choose a date &amp; time and the first email will go out exactly then. Leave empty to send the first email immediately on enrollment.</span>
+            </div>
+          </div>
           <button class="btn btn-primary" onclick="enrollContactsInSequence()">🚀 Enroll Selected Contacts</button>
           <div id="seqEnrollLog" style="margin-top:12px;font-size:13px"></div>
         </div>
@@ -1452,6 +1459,12 @@ Leadnovaai</textarea>
                 <input type="text" id="email-writer-search" class="form-control" placeholder="🔍 Search by name..." style="margin-top:4px;margin-bottom:4px;font-size:12px;padding:6px 10px" oninput="filterEmailWriterContacts()" autocomplete="off">
                 <select class="form-control" id="email-writer-contact" style="margin-top:4px"></select>
               </div>
+              <div style="margin-bottom:10px">
+                <span style="font-size:12px;color:var(--text-light)">Product/Service to pitch (optional)</span>
+                <select class="form-control" id="email-writer-product" style="margin-top:4px">
+                  <option value="">Let AI choose generically</option>
+                </select>
+              </div>
               <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;margin-bottom:10px">
                 <input type="checkbox" id="email-visit-website" checked> 🌐 Research their website &amp; tech stack for pain points
               </label>
@@ -1502,6 +1515,12 @@ Leadnovaai</textarea>
                 </div>
                 <input type="text" id="followup-lead-search" class="form-control" placeholder="🔍 Search leads by name..." style="margin-bottom:8px;font-size:12px;padding:6px 10px" oninput="filterFollowupLeads()" autocomplete="off">
                 <div id="followup-lead-list" style="max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--bg)"></div>
+              </div>
+              <div style="margin-bottom:10px">
+                <span style="font-size:12px;color:var(--text-light)">Product/Service to pitch (optional)</span>
+                <select class="form-control" id="followup-product" style="margin-top:4px">
+                  <option value="">Let AI choose generically</option>
+                </select>
               </div>
               <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;margin-bottom:10px">
                 <input type="checkbox" id="followup-visit-website" checked> 🌐 Research their website &amp; tech stack for pain points
@@ -7789,6 +7808,8 @@ function openEnrollPanel(sequenceId) {
   document.getElementById('seqEnrollLog').innerHTML = '';
   document.getElementById('seqSearchName').value = '';
   document.getElementById('seqFilterLeadScore').value = '';
+  const seqScheduleEl = document.getElementById('seqScheduleStart');
+  if (seqScheduleEl) seqScheduleEl.value = '';
   populateSeqCountryFilter();
   renderSeqContactList();
   document.getElementById('seqEnrollCard').scrollIntoView({ behavior: 'smooth' });
@@ -7890,7 +7911,19 @@ async function enrollContactsInSequence() {
   if (!seq) return;
   const list = [...seqSelectedIds].map(id => contacts.find(c => c.id === id)).filter(Boolean);
   if (!list.length) { alert('Select at least one contact.'); return; }
-  if (!confirm(`Enroll ${list.length} contact(s) in "${seq.name}" sequence (${seq.steps.length} emails)?`)) return;
+
+  const scheduleStartVal = document.getElementById('seqScheduleStart')?.value;
+  let baseStart = new Date();
+  if (scheduleStartVal) {
+    const chosen = new Date(scheduleStartVal);
+    if (isNaN(chosen.getTime())) { alert('Invalid schedule date/time.'); return; }
+    if (chosen < new Date()) { alert('Scheduled date/time must be in the future.'); return; }
+    baseStart = chosen;
+  }
+  const confirmMsg = scheduleStartVal
+    ? `Enroll ${list.length} contact(s) in "${seq.name}" sequence (${seq.steps.length} emails)? First email will go out on ${baseStart.toLocaleString()}.`
+    : `Enroll ${list.length} contact(s) in "${seq.name}" sequence (${seq.steps.length} emails)? First email sends immediately.`;
+  if (!confirm(confirmMsg)) return;
 
   const logEl = document.getElementById('seqEnrollLog');
   logEl.innerHTML = '';
@@ -7918,7 +7951,7 @@ async function enrollContactsInSequence() {
     for (let i = 0; i < seq.steps.length; i++) {
       const step = seq.steps[i];
       cumulativeDays += (step.delayDays || 0);
-      const scheduledAt = new Date();
+      const scheduledAt = new Date(baseStart);
       scheduledAt.setDate(scheduledAt.getDate() + cumulativeDays);
       const subject = mergeTags(step.subject, c);
       const body = mergeTags(step.body, c);
@@ -9114,6 +9147,14 @@ function populateAIContactSelectors() {
     }
   }
 
+  // Product/Service selectors (Email Writer + Follow-up)
+  const productOptionsHtml = '<option value="">Let AI choose generically</option>' +
+    products.map(p => `<option value="${p.id}">${p.name}${p.category ? ' (' + p.category + ')' : ''}</option>`).join('');
+  const emailProductEl = document.getElementById('email-writer-product');
+  if (emailProductEl) emailProductEl.innerHTML = productOptionsHtml;
+  const followupProductEl = document.getElementById('followup-product');
+  if (followupProductEl) followupProductEl.innerHTML = productOptionsHtml;
+
   // Enrichment dropdown
   const enrichSelectEl = document.getElementById('enrich-contact');
   if (enrichSelectEl) {
@@ -9315,7 +9356,8 @@ async function runAI(type) {
 
     if (visitWebsites && hasAnyWebsite) {
       body.innerHTML = `<div style="color:var(--text-light)">🌐 AI visiting company websites and analysing ${selected.length} selected lead(s)… this can take a bit longer.</div>`;
-      const leadsPayload = selected.map(c => ({ name: c.name, company: c.company || '', status: c.status, website: c.website || '' }));
+      const productsSummary = products.length ? products.map(p => `${p.name}${p.category ? ' (' + p.category + ')' : ''}`).join(', ') : '';
+      const leadsPayload = selected.map(c => ({ name: c.name, company: c.company || '', status: c.status, website: c.website || '', ourProducts: productsSummary }));
       try {
         const raw = await callAI('', 'lead-scoring-deep', leadsPayload);
         const clean = raw.replace(/```json|```/g, '').trim();
@@ -9336,7 +9378,10 @@ async function runAI(type) {
     }
 
     body.innerHTML = `<div style="color:var(--text-light)">🤖 AI analysing ${selected.length} selected lead(s)…</div>`;
-    const prompt = `You are a sales AI scoring leads for a CRM. For each contact below, give a score from 0-100 (based on status, company presence, and likely buying intent) and a one-line reason. Respond ONLY as JSON array like [{"name":"...","score":85,"reason":"..."}], nothing else.\n\nContacts:\n${selected.map(c => `- ${c.name}, company: ${c.company || 'unknown'}, status: ${c.status}`).join('\n')}`;
+    const scoringProductsContext = products.length
+      ? `\n\nThe business selling to these leads offers these products/services:\n${products.map(p => `- ${p.name}${p.category ? ' (' + p.category + ')' : ''}${p.description ? ': ' + p.description : ''}`).join('\n')}\nScore each lead partly on how good a fit they look for THESE specific offerings, not just generic buying intent.`
+      : '';
+    const prompt = `You are a sales AI scoring leads for a CRM. For each contact below, give a score from 0-100 (based on status, company presence, and likely buying intent) and a one-line reason. Respond ONLY as JSON array like [{"name":"...","score":85,"reason":"..."}], nothing else.\n\nContacts:\n${selected.map(c => `- ${c.name}, company: ${c.company || 'unknown'}, status: ${c.status}`).join('\n')}${scoringProductsContext}`;
 
     try {
       const raw = await callAI(prompt, 'lead-scoring');
@@ -9371,7 +9416,12 @@ async function runAI(type) {
       return;
     }
     const visitWebsite = document.getElementById('email-visit-website')?.checked;
-    const useDeep = visitWebsite && topContact.website;
+    const selectedProductId = document.getElementById('email-writer-product')?.value;
+    const selectedProduct = selectedProductId ? products.find(p => String(p.id) === String(selectedProductId)) : null;
+    // If a specific product/service is picked, we build the prompt ourselves so it's guaranteed to
+    // pitch that exact product — the website-research ("deep") path runs server-side and can't be
+    // steered to a specific product from here, so a chosen product always wins over deep research.
+    const useDeep = visitWebsite && topContact.website && !selectedProduct;
 
     body.innerHTML = useDeep
       ? '<div style="color:var(--text-light)">🌐 AI researching their website &amp; writing a personal email…</div>'
@@ -9385,7 +9435,11 @@ async function runAI(type) {
         const enrichmentBlock = topContact.enrichmentNotes && topContact.enrichmentNotes.trim()
           ? `\n\nHere is saved research/enrichment data about this lead (use it to make the email specific and relevant, don't just repeat it verbatim):\n${topContact.enrichmentNotes.slice(-800)}`
           : '';
-        const prompt = `Write a short (under 90 words), casual, human-sounding cold outreach email from a sales agency to a lead named ${topContact.name}${topContact.company ? ' at ' + topContact.company : ''}. No corporate buzzwords, no "I hope this finds you well". Include a subject line. Format as:\nSubject: ...\n\n[email body]${enrichmentBlock}`;
+        const productBlock = selectedProduct
+          ? `\n\nPitch this specific product/service (make the email clearly about this, don't be vague or generic):\nName: ${selectedProduct.name}${selectedProduct.category ? '\nCategory: ' + selectedProduct.category : ''}${selectedProduct.price ? '\nPrice: ' + selectedProduct.price : ''}${selectedProduct.description ? '\nDetails: ' + selectedProduct.description : ''}`
+          : '';
+        const websiteBlock = (visitWebsite && topContact.website) ? `\n\nTheir website (for context, don't just describe it back to them): ${topContact.website}` : '';
+        const prompt = `Write a short (under 90 words), casual, human-sounding cold outreach email from a sales agency to a lead named ${topContact.name}${topContact.company ? ' at ' + topContact.company : ''}. No corporate buzzwords, no "I hope this finds you well". Write like a real person, not a template — vary sentence rhythm, keep it specific to this lead so it doesn't read like a mail-merge. Include a subject line. Format as:\nSubject: ...\n\n[email body]${productBlock}${enrichmentBlock}${websiteBlock}`;
         draft = await callAI(prompt, 'email-writer');
       }
       const parsed = parseAIEmailDraft(draft);
@@ -9400,7 +9454,7 @@ async function runAI(type) {
           <label class="form-label" style="font-size:11px">Body (editable)</label>
           <textarea class="form-control" id="ai-email-body-edit" rows="7" style="font-size:13px">${parsed.body || ''}</textarea>
         </div>
-        <em style="color:var(--text-light)">${useDeep ? '🌐 Personalised using live research on their website & tech stack.' : (topContact.enrichmentNotes ? '🔍 Personalised using your saved AI + manual enrichment data.' : 'Personalise before sending.')} Feel free to edit anything above before sending.</em>
+        <em style="color:var(--text-light)">${selectedProduct ? '🎯 Pitching: ' + selectedProduct.name + '. ' : ''}${useDeep ? '🌐 Personalised using live research on their website & tech stack.' : (topContact.enrichmentNotes ? '🔍 Personalised using your saved AI + manual enrichment data.' : 'Personalise before sending.')} Feel free to edit anything above before sending.</em>
         <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
           <div style="font-weight:600;font-size:13px;margin-bottom:8px">📤 Send This Email</div>
           <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:8px">
@@ -9446,14 +9500,40 @@ async function runAI(type) {
     }
     const selected = contacts.filter(c => selectedIds.includes(String(c.id)));
     const visitWebsite = document.getElementById('followup-visit-website')?.checked;
+    const selectedProductId = document.getElementById('followup-product')?.value;
+    const selectedProduct = selectedProductId ? products.find(p => String(p.id) === String(selectedProductId)) : null;
 
-    body.innerHTML = `<div style="color:var(--text-light)">${visitWebsite ? '🌐' : '🤖'} AI generating unique follow-ups for ${selected.length} lead(s)…</div>`;
-    const leadsPayload = selected.map(c => ({ name: c.name, company: c.company || '', status: c.status, website: visitWebsite ? (c.website || '') : '' }));
+    body.innerHTML = `<div style="color:var(--text-light)">${visitWebsite && !selectedProduct ? '🌐' : '🤖'} AI generating unique follow-ups for ${selected.length} lead(s)…</div>`;
 
     try {
-      const raw = await callAI('', 'followup-deep', leadsPayload);
-      const clean = raw.replace(/```json|```/g, '').trim();
-      const results = JSON.parse(clean);
+      let results;
+      if (selectedProduct) {
+        // A specific product/service was chosen — build the prompt ourselves per lead so the
+        // follow-up is guaranteed to be about that product (the website-research path is
+        // server-side and can't be steered to a chosen product).
+        const productBlock = `\n\nThis follow-up should be about this specific product/service (be clear and specific, not vague):\nName: ${selectedProduct.name}${selectedProduct.category ? '\nCategory: ' + selectedProduct.category : ''}${selectedProduct.price ? '\nPrice: ' + selectedProduct.price : ''}${selectedProduct.description ? '\nDetails: ' + selectedProduct.description : ''}`;
+        results = [];
+        for (const c of selected) {
+          const enrichmentBlock = c.enrichmentNotes && c.enrichmentNotes.trim()
+            ? `\n\nSaved research/enrichment data about this lead (use it, don't repeat verbatim):\n${c.enrichmentNotes.slice(-600)}`
+            : '';
+          const websiteBlock = (visitWebsite && c.website) ? `\n\nTheir website (context only): ${c.website}` : '';
+          const prompt = `Write ONE short, casual, human-sounding sales follow-up message (under 60 words, no "just checking in" clichés) to a lead named ${c.name}${c.company ? ' at ' + c.company : ''}, current status: ${c.status || 'unknown'}.${productBlock}${enrichmentBlock}${websiteBlock}\n\nRespond ONLY as JSON like {"message":"..."}, nothing else.`;
+          try {
+            const raw = await callAI(prompt, 'followup');
+            const clean = raw.replace(/```json|```/g, '').trim();
+            const parsedMsg = JSON.parse(clean);
+            results.push({ name: c.name, message: parsedMsg.message || '' });
+          } catch (err) {
+            results.push({ name: c.name, message: '⚠️ Could not generate for this lead.' });
+          }
+        }
+      } else {
+        const leadsPayload = selected.map(c => ({ name: c.name, company: c.company || '', status: c.status, website: visitWebsite ? (c.website || '') : '' }));
+        const raw = await callAI('', 'followup-deep', leadsPayload);
+        const clean = raw.replace(/```json|```/g, '').trim();
+        results = JSON.parse(clean);
+      }
       window.__lastFollowupResults = results.map((r, i) => {
         const contact = selected[i] || selected.find(c => (c.name || '').trim().toLowerCase() === (r.name || '').trim().toLowerCase());
         return { contact, message: r.message, name: r.name };
@@ -9469,7 +9549,7 @@ async function runAI(type) {
             <button class="btn btn-outline btn-sm" onclick="scheduleFollowupResult(${i})">⏰ Schedule</button>
             <span class="followup-status-${i}" style="font-size:11.5px"></span>
           </div>
-        </div>`).join('') + `<br><em style="color:var(--text-light)">${visitWebsite ? '🌐 Each message grounded in real research on their website & tech stack.' : 'Follow up within 48 hours for best response rates.'}</em>`;
+        </div>`).join('') + `<br><em style="color:var(--text-light)">${selectedProduct ? '🎯 Pitching: ' + selectedProduct.name + '. ' : ''}${visitWebsite && !selectedProduct ? '🌐 Each message grounded in real research on their website & tech stack.' : 'Follow up within 48 hours for best response rates.'}</em>`;
     } catch (err) {
       body.innerHTML = `<div style="color:#dc2626">⚠️ ${err.message}</div>`;
     }

@@ -1572,11 +1572,18 @@ Leadnovaai</textarea>
               <div class="ai-card-icon">⏰</div>
               <div><span class="ai-card-badge">AI TIMING</span></div>
               <div class="ai-card-title">AI Best Contact Time</div>
-              <div class="ai-card-desc">AI suggests the best day and time window to reach out to a specific contact, based on their role, company, and status.</div>
+              <div class="ai-card-desc">AI suggests the best day and time window to reach out to a specific contact, based on their role, company, and status — shown in their local time and converted to yours.</div>
               <div style="margin-bottom:10px">
                 <span style="font-size:12px;color:var(--text-light)">Select a contact</span>
-                <select class="form-control" id="bct-contact-select" style="margin-top:4px"></select>
+                <select class="form-control" id="bct-contact-select" style="margin-top:4px" onchange="updateBctTimeDisplay()"></select>
               </div>
+              <div style="margin-bottom:10px">
+                <span style="font-size:12px;color:var(--text-light)">Your Country (for time conversion)</span>
+                <select class="form-control" id="bct-my-country" style="margin-top:4px" onchange="onBctMyCountryChange()">
+                  <option value="">Select your country...</option>
+                </select>
+              </div>
+              <div id="bct-time-preview" style="font-size:11.5px;color:var(--text-light);margin-bottom:10px;display:none;background:var(--bg);padding:8px 10px;border-radius:8px;line-height:1.6"></div>
               <button class="btn btn-primary btn-sm" onclick="runAI('best-contact-time')">Suggest Best Time</button>
             </div>
             <div class="ai-card">
@@ -9110,6 +9117,83 @@ async function callAI(prompt, feature, leads) {
 }
 
 // ===== AI Automation: Lead/Contact Selectors =====
+// ===== Country → Timezone lookup (best-effort, for AI Best Contact Time local-time display) =====
+// Large countries with multiple timezones use their most common business timezone as an approximation.
+const COUNTRY_TIMEZONE_MAP = {
+  'usa': 'America/New_York', 'united states': 'America/New_York', 'united states of america': 'America/New_York', 'us': 'America/New_York',
+  'canada': 'America/Toronto',
+  'uk': 'Europe/London', 'united kingdom': 'Europe/London', 'great britain': 'Europe/London', 'england': 'Europe/London',
+  'uae': 'Asia/Dubai', 'united arab emirates': 'Asia/Dubai', 'dubai': 'Asia/Dubai',
+  'australia': 'Australia/Sydney',
+  'pakistan': 'Asia/Karachi',
+  'india': 'Asia/Kolkata',
+  'germany': 'Europe/Berlin', 'france': 'Europe/Paris', 'spain': 'Europe/Madrid', 'italy': 'Europe/Rome',
+  'netherlands': 'Europe/Amsterdam', 'belgium': 'Europe/Brussels', 'switzerland': 'Europe/Zurich',
+  'sweden': 'Europe/Stockholm', 'norway': 'Europe/Oslo', 'denmark': 'Europe/Copenhagen', 'ireland': 'Europe/Dublin',
+  'poland': 'Europe/Warsaw', 'portugal': 'Europe/Lisbon', 'austria': 'Europe/Vienna',
+  'saudi arabia': 'Asia/Riyadh', 'qatar': 'Asia/Qatar', 'kuwait': 'Asia/Kuwait', 'bahrain': 'Asia/Bahrain', 'oman': 'Asia/Muscat',
+  'singapore': 'Asia/Singapore', 'malaysia': 'Asia/Kuala_Lumpur', 'philippines': 'Asia/Manila', 'indonesia': 'Asia/Jakarta',
+  'japan': 'Asia/Tokyo', 'south korea': 'Asia/Seoul', 'china': 'Asia/Shanghai', 'hong kong': 'Asia/Hong_Kong',
+  'new zealand': 'Pacific/Auckland', 'south africa': 'Africa/Johannesburg', 'nigeria': 'Africa/Lagos', 'egypt': 'Africa/Cairo',
+  'brazil': 'America/Sao_Paulo', 'mexico': 'America/Mexico_City', 'argentina': 'America/Argentina/Buenos_Aires',
+  'bangladesh': 'Asia/Dhaka', 'sri lanka': 'Asia/Colombo', 'turkey': 'Europe/Istanbul', 'israel': 'Asia/Jerusalem',
+  'russia': 'Europe/Moscow', 'ukraine': 'Europe/Kyiv', 'greece': 'Europe/Athens', 'finland': 'Europe/Helsinki'
+};
+
+function findTimezoneForCountry(countryText) {
+  if (!countryText) return null;
+  const key = countryText.trim().toLowerCase();
+  if (COUNTRY_TIMEZONE_MAP[key]) return COUNTRY_TIMEZONE_MAP[key];
+  const match = Object.keys(COUNTRY_TIMEZONE_MAP).find(k => key.includes(k) || k.includes(key));
+  return match ? COUNTRY_TIMEZONE_MAP[match] : null;
+}
+
+function formatTimeInTimezone(tz) {
+  try {
+    return new Intl.DateTimeFormat('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit', hour12: true, timeZone: tz }).format(new Date());
+  } catch (e) { return null; }
+}
+
+function populateBctMyCountrySelect() {
+  const sel = document.getElementById('bct-my-country');
+  if (!sel) return;
+  const saved = localStorage.getItem('crm_agency_country') || '';
+  const countryNames = Object.keys(COUNTRY_TIMEZONE_MAP).filter(k => !['usa','uk','us','united states','united states of america','great britain'].includes(k));
+  const displayNames = ['Pakistan', 'USA', 'Canada', 'UK', 'UAE', 'Australia', ...countryNames.filter(k => !['pakistan','canada','australia','uae','united arab emirates'].includes(k)).map(k => k[0].toUpperCase() + k.slice(1))];
+  const seen = new Set();
+  const uniqueNames = displayNames.filter(n => { const k = n.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; });
+  sel.innerHTML = '<option value="">Select your country...</option>' + uniqueNames.map(n => `<option value="${n}">${n}</option>`).join('');
+  if (saved) sel.value = saved;
+}
+
+function onBctMyCountryChange() {
+  const val = document.getElementById('bct-my-country')?.value || '';
+  localStorage.setItem('crm_agency_country', val);
+  updateBctTimeDisplay();
+}
+
+function updateBctTimeDisplay() {
+  const preview = document.getElementById('bct-time-preview');
+  if (!preview) return;
+  const contactId = document.getElementById('bct-contact-select')?.value;
+  const contact = contacts.find(c => String(c.id) === String(contactId));
+  const myCountry = document.getElementById('bct-my-country')?.value || '';
+  const leadTz = contact ? findTimezoneForCountry(contact.country) : null;
+  const myTz = myCountry ? findTimezoneForCountry(myCountry) : null;
+
+  const lines = [];
+  if (contact) {
+    lines.push(leadTz
+      ? `📍 <strong>${contact.name}</strong>'s local time now (${contact.country}): ${formatTimeInTimezone(leadTz)}`
+      : `📍 <strong>${contact.name}</strong>: no country on file (or country not recognized) — can't show their local time.`);
+  }
+  lines.push(myTz
+    ? `🏠 Your local time now (${myCountry}): ${formatTimeInTimezone(myTz)}`
+    : `🏠 Select your country above to see your local time alongside theirs.`);
+  preview.innerHTML = lines.join('<br>');
+  preview.style.display = '';
+}
+
 function populateAIContactSelectors() {
   const scoringSearch = document.getElementById('scoring-lead-search');
   if (scoringSearch) scoringSearch.value = '';
@@ -9193,6 +9277,8 @@ function populateAIContactSelectors() {
   const bctSelectEl = document.getElementById('bct-contact-select');
   if (bctSelectEl) {
     bctSelectEl.innerHTML = contacts.length ? contacts.map(c => `<option value="${c.id}">${escapeHtml(c.name)}${c.company ? ' — ' + escapeHtml(c.company) : ''}</option>`).join('') : '<option value="">No contacts yet</option>';
+    populateBctMyCountrySelect();
+    updateBctTimeDisplay();
   }
 
   // Sentiment Analysis — optional contact dropdown
@@ -9632,11 +9718,20 @@ async function runAI(type) {
     const contactId = document.getElementById('bct-contact-select')?.value;
     const contact = contacts.find(c => String(c.id) === String(contactId));
     if (!contact) { body.innerHTML = '<div style="color:#dc2626">⚠️ Select a contact first — add one in Contacts if you don\'t have any yet.</div>'; return; }
+    const myCountry = document.getElementById('bct-my-country')?.value || '';
+    const leadTz = findTimezoneForCountry(contact.country);
+    const myTz = myCountry ? findTimezoneForCountry(myCountry) : null;
     body.innerHTML = '<div style="color:var(--text-light)">🤖 AI thinking…</div>';
-    const prompt = `Suggest the best day(s) of the week and time window to contact this person for a sales follow-up, and briefly explain why. Contact: ${contact.name}, role/title: ${contact.title || 'unknown'}, company: ${contact.company || 'unknown'}, status: ${contact.status || 'unknown'}, country/location: ${contact.country || contact.location || 'unknown'}. Keep it to a few sentences.`;
+    const timeContext = (leadTz || myTz)
+      ? `\n\nRight now, it is ${leadTz ? formatTimeInTimezone(leadTz) + ` in ${contact.country}` : 'unknown time'} for this lead${myTz ? `, and it is ${formatTimeInTimezone(myTz)} in ${myCountry} (the sender's location)` : ''}. Give the best contact window in the LEAD's local time first, then explicitly convert that same window to the SENDER's local time (${myCountry || 'their own timezone'}) so they know exactly what time on their own clock to send/call — label these clearly as "Lead's local time" and "Your local time".`
+      : '';
+    const prompt = `Suggest the best day(s) of the week and time window to contact this person for a sales follow-up, and briefly explain why. Contact: ${contact.name}, role/title: ${contact.title || 'unknown'}, company: ${contact.company || 'unknown'}, status: ${contact.status || 'unknown'}, country/location: ${contact.country || contact.location || 'unknown'}. Keep it to a few sentences.${timeContext}`;
     try {
       const raw = await callAI(prompt, 'best-contact-time');
-      body.innerHTML = aiTextToHtml(raw);
+      const timeBanner = (leadTz || myTz)
+        ? `<div style="margin-bottom:10px;padding:8px 10px;background:var(--bg);border-radius:8px;font-size:12px">${leadTz ? `📍 Lead's local time now (${contact.country}): <strong>${formatTimeInTimezone(leadTz)}</strong>` : `📍 No recognized country on file for this lead.`}${myTz ? `<br>🏠 Your local time now (${myCountry}): <strong>${formatTimeInTimezone(myTz)}</strong>` : `<br>🏠 Select your country above for a side-by-side time conversion.`}</div>`
+        : '';
+      body.innerHTML = timeBanner + aiTextToHtml(raw);
     } catch (err) {
       body.innerHTML = `<div style="color:#dc2626">⚠️ ${err.message}</div>`;
     }

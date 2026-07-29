@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Confirm Email — NovaAICRM</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --primary: #2563EB;
+    --primary-dark: #1D4ED8;
+    --primary-light: #DBEAFE;
+    --sidebar-bg: #0F172A;
+    --bg: #F8FAFC;
+    --card: #FFFFFF;
+    --text: #0F172A;
+    --text-light: #64748B;
+    --border: #E2E8F0;
+    --danger: #EF4444;
+    --success: #22C55E;
+  }
+
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+  }
+
+  /* LEFT BRAND PANEL — matches signup.html */
+  .brand-panel {
+    width: 45%;
+    background: linear-gradient(160deg, var(--sidebar-bg) 0%, #1E3A8A 100%);
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 60px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .brand-panel::before {
+    content: "";
+    position: absolute;
+    width: 500px;
+    height: 500px;
+    background: rgba(37, 99, 235, 0.25);
+    border-radius: 50%;
+    top: -150px;
+    right: -150px;
+  }
+
+  .brand-panel::after {
+    content: "";
+    position: absolute;
+    width: 350px;
+    height: 350px;
+    background: rgba(37, 99, 235, 0.15);
+    border-radius: 50%;
+    bottom: -100px;
+    left: -100px;
+  }
+
+  .brand-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 48px;
+    z-index: 1;
+  }
+
+  .brand-logo-icon {
+    width: 40px;
+    height: 40px;
+    background: var(--primary);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+  }
+
+  .brand-logo-text {
+    font-weight: 700;
+    font-size: 20px;
+    letter-spacing: -0.3px;
+  }
+
+  .brand-logo-text span { color: #60A5FA; }
+
+  .brand-heading {
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1.3;
+    margin-bottom: 16px;
+    z-index: 1;
+    max-width: 420px;
+  }
+
+  .brand-subtext {
+    font-size: 15px;
+    color: #CBD5E1;
+    line-height: 1.6;
+    max-width: 400px;
+    margin-bottom: 40px;
+    z-index: 1;
+  }
+
+  .feature-list {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    z-index: 1;
+  }
+
+  .feature-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 14.5px;
+    color: #E2E8F0;
+  }
+
+  .feature-check {
+    width: 22px;
+    height: 22px;
+    background: rgba(34, 197, 94, 0.2);
+    border: 1px solid var(--success);
+    color: var(--success);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+
+  /* RIGHT PANEL */
+  .form-panel {
+    width: 55%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+  }
+
+  .form-container {
+    width: 100%;
+    max-width: 420px;
+    text-align: center;
+  }
+
+  .status-icon {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 30px;
+    margin: 0 auto 22px;
+  }
+
+  .status-icon.pending {
+    background: var(--primary-light);
+    color: var(--primary);
+  }
+
+  .status-icon.success {
+    background: rgba(34, 197, 94, 0.15);
+    color: var(--success);
+  }
+
+  .status-icon.error {
+    background: #FEF2F2;
+    color: var(--danger);
+  }
+
+  .form-title {
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 10px;
+  }
+
+  .form-subtitle {
+    font-size: 14.5px;
+    color: var(--text-light);
+    line-height: 1.6;
+    margin-bottom: 28px;
+  }
+
+  .btn-primary {
+    display: inline-block;
+    width: 100%;
+    padding: 13px;
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.15s;
+  }
+
+  .btn-primary:hover { background: var(--primary-dark); }
+
+  .spinner {
+    width: 100%;
+    height: 100%;
+    border: 3px solid var(--primary-light);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 900px) {
+    .brand-panel { display: none; }
+    .form-panel { width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+  <!-- LEFT BRANDING PANEL -->
+  <div class="brand-panel">
+    <div class="brand-logo">
+      <div class="brand-logo-icon">⚡</div>
+      <div class="brand-logo-text">Nova<span>AICRM</span></div>
+    </div>
+
+    <div class="brand-heading">Grow your agency with one smart CRM.</div>
+    <div class="brand-subtext">
+      Manage leads, deals, campaigns and your entire pipeline in one place — built for agencies that move fast.
+    </div>
+
+    <div class="feature-list">
+      <div class="feature-item"><div class="feature-check">✓</div> Unified contacts & deal pipeline</div>
+      <div class="feature-item"><div class="feature-check">✓</div> Built-in email campaigns & sequences</div>
+      <div class="feature-item"><div class="feature-check">✓</div> Task automation & team collaboration</div>
+    </div>
+  </div>
+
+  <!-- RIGHT STATUS PANEL -->
+  <div class="form-panel">
+    <div class="form-container">
+      <div class="status-icon pending" id="statusIcon"><div class="spinner"></div></div>
+      <div class="form-title" id="statusTitle">Confirming your email…</div>
+      <div class="form-subtitle" id="statusSubtitle">Hang tight, this only takes a second.</div>
+      <a class="btn-primary" href="login.html" id="actionBtn" style="display:none">Go to Login</a>
+    </div>
+  </div>
+
+  <!-- Supabase JS SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const SUPABASE_URL = "https://opowguxlsaeheuipsaap.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_6UhVK10PfL2FThRZbcd3Yg_dAp8E4jo";
+
+    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const statusIcon = document.getElementById('statusIcon');
+    const statusTitle = document.getElementById('statusTitle');
+    const statusSubtitle = document.getElementById('statusSubtitle');
+    const actionBtn = document.getElementById('actionBtn');
+
+    function showSuccess(message) {
+      statusIcon.className = 'status-icon success';
+      statusIcon.innerHTML = '✓';
+      statusTitle.textContent = 'Email confirmed!';
+      statusSubtitle.textContent = message;
+      actionBtn.style.display = 'inline-block';
+      actionBtn.textContent = 'Go to Login';
+      actionBtn.href = 'login.html';
+    }
+
+    function showError(message) {
+      statusIcon.className = 'status-icon error';
+      statusIcon.innerHTML = '✕';
+      statusTitle.textContent = 'Confirmation failed';
+      statusSubtitle.textContent = message;
+      actionBtn.style.display = 'inline-block';
+      actionBtn.textContent = 'Back to Sign Up';
+      actionBtn.href = 'signup.html';
+    }
+
+    async function handleConfirmation() {
+      // Supabase Auth JS automatically parses the #access_token / ?code in the URL
+      // (detectSessionInUrl is on by default) and turns it into a session. We just
+      // need to wait for that and then reflect the result in the UI.
+
+      // Case 1: Supabase returned an explicit error in the URL (expired/used link, etc.)
+      const hashParams = new URLSearchParams(window.location.hash.replace('#', '?'));
+      const queryParams = new URLSearchParams(window.location.search);
+      const errorDescription = hashParams.get('error_description') || queryParams.get('error_description');
+      if (errorDescription) {
+        showError(decodeURIComponent(errorDescription.replace(/\+/g, ' ')));
+        return;
+      }
+
+      // Case 2: newer PKCE-style link — a ?code= param that needs to be exchanged for a session.
+      const code = queryParams.get('code');
+      if (code) {
+        const { error } = await supabaseClient.auth.exchangeCodeForSession(window.location.href);
+        if (error) {
+          showError(error.message || 'This confirmation link is invalid or has expired. Please sign up again or request a new link.');
+          return;
+        }
+        showSuccess('Your email is verified and your account is ready. You can log in now.');
+        return;
+      }
+
+      // Case 3: classic implicit flow — #access_token=...&type=signup already parsed into a session.
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (session) {
+        showSuccess('Your email is verified and your account is ready. You can log in now.');
+        return;
+      }
+
+      // Give the SDK a moment in case it's still processing the URL, then re-check once.
+      setTimeout(async () => {
+        const { data: { session: retrySession } } = await supabaseClient.auth.getSession();
+        if (retrySession) {
+          showSuccess('Your email is verified and your account is ready. You can log in now.');
+        } else {
+          showError('We couldn\'t verify this link. It may have expired or already been used — please try logging in, or sign up again.');
+        }
+      }, 1200);
+    }
+
+    handleConfirmation();
+  </script>
+
+</body>
+</html>

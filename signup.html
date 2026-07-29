@@ -455,6 +455,12 @@
       submitBtn.textContent = 'Creating account...';
 
       try {
+        // Build the confirm.html URL relative to wherever this page is actually
+        // hosted (works whether that's a root domain or a GitHub Pages subfolder
+        // like username.github.io/repo-name/).
+        const currentDir = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
+        const confirmRedirectUrl = window.location.origin + currentDir + 'confirm.html';
+
         // Create the auth user, passing name/agency as metadata.
         // A database trigger (on_auth_user_created) automatically creates
         // the matching row in public.profiles from this metadata.
@@ -465,7 +471,8 @@
             data: {
               full_name: fullName,
               agency_name: agencyName
-            }
+            },
+            emailRedirectTo: confirmRedirectUrl
           }
         });
 

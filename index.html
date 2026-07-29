@@ -1465,6 +1465,10 @@ Leadnovaai</textarea>
                   <option value="">Let AI choose generically</option>
                 </select>
               </div>
+              <div style="margin-bottom:10px">
+                <span style="font-size:12px;color:var(--text-light)">Your instructions for this campaign (optional)</span>
+                <textarea class="form-control" id="email-writer-custom-prompt" rows="2" placeholder="e.g. Offer a free 15-min audit, tone should be confident and direct, mention we work with HubSpot..." style="margin-top:4px;font-size:12px"></textarea>
+              </div>
               <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;margin-bottom:10px">
                 <input type="checkbox" id="email-visit-website" checked> 🌐 Research their website &amp; tech stack for pain points
               </label>
@@ -1521,6 +1525,10 @@ Leadnovaai</textarea>
                 <select class="form-control" id="followup-product" style="margin-top:4px">
                   <option value="">Let AI choose generically</option>
                 </select>
+              </div>
+              <div style="margin-bottom:10px">
+                <span style="font-size:12px;color:var(--text-light)">Your instructions for this campaign (optional)</span>
+                <textarea class="form-control" id="followup-custom-prompt" rows="2" placeholder="e.g. Create urgency, mention limited onboarding slots this month, keep it under 40 words..." style="margin-top:4px;font-size:12px"></textarea>
               </div>
               <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;margin-bottom:10px">
                 <input type="checkbox" id="followup-visit-website" checked> 🌐 Research their website &amp; tech stack for pain points
@@ -9504,10 +9512,11 @@ async function runAI(type) {
     const visitWebsite = document.getElementById('email-visit-website')?.checked;
     const selectedProductId = document.getElementById('email-writer-product')?.value;
     const selectedProduct = selectedProductId ? products.find(p => String(p.id) === String(selectedProductId)) : null;
-    // If a specific product/service is picked, we build the prompt ourselves so it's guaranteed to
-    // pitch that exact product — the website-research ("deep") path runs server-side and can't be
-    // steered to a specific product from here, so a chosen product always wins over deep research.
-    const useDeep = visitWebsite && topContact.website && !selectedProduct;
+    const customPrompt = document.getElementById('email-writer-custom-prompt')?.value.trim() || '';
+    // If a specific product/service is picked OR the user typed campaign instructions, we build the
+    // prompt ourselves so it's guaranteed to be followed — the website-research ("deep") path runs
+    // server-side and can't be steered by a product choice or custom instructions from here.
+    const useDeep = visitWebsite && topContact.website && !selectedProduct && !customPrompt;
 
     body.innerHTML = useDeep
       ? '<div style="color:var(--text-light)">🌐 AI researching their website &amp; writing a personal email…</div>'
@@ -9525,7 +9534,10 @@ async function runAI(type) {
           ? `\n\nPitch this specific product/service (make the email clearly about this, don't be vague or generic):\nName: ${selectedProduct.name}${selectedProduct.category ? '\nCategory: ' + selectedProduct.category : ''}${selectedProduct.price ? '\nPrice: ' + selectedProduct.price : ''}${selectedProduct.description ? '\nDetails: ' + selectedProduct.description : ''}`
           : '';
         const websiteBlock = (visitWebsite && topContact.website) ? `\n\nTheir website (for context, don't just describe it back to them): ${topContact.website}` : '';
-        const prompt = `Write a short (under 90 words), casual, human-sounding cold outreach email from a sales agency to a lead named ${topContact.name}${topContact.company ? ' at ' + topContact.company : ''}. No corporate buzzwords, no "I hope this finds you well". Write like a real person, not a template — vary sentence rhythm, keep it specific to this lead so it doesn't read like a mail-merge. Include a subject line. Format as:\nSubject: ...\n\n[email body]${productBlock}${enrichmentBlock}${websiteBlock}`;
+        const customBlock = customPrompt
+          ? `\n\nThe sender's specific instructions for this campaign — follow these closely, they override any generic style guidance above where they conflict:\n${customPrompt}`
+          : '';
+        const prompt = `Write a short (under 90 words), casual, human-sounding cold outreach email from a sales agency to a lead named ${topContact.name}${topContact.company ? ' at ' + topContact.company : ''}. No corporate buzzwords, no "I hope this finds you well". Write like a real person, not a template — vary sentence rhythm, keep it specific to this lead so it doesn't read like a mail-merge. Include a subject line. Format as:\nSubject: ...\n\n[email body]${productBlock}${enrichmentBlock}${websiteBlock}${customBlock}`;
         draft = await callAI(prompt, 'email-writer');
       }
       const parsed = parseAIEmailDraft(draft);
@@ -9540,7 +9552,7 @@ async function runAI(type) {
           <label class="form-label" style="font-size:11px">Body (editable)</label>
           <textarea class="form-control" id="ai-email-body-edit" rows="7" style="font-size:13px">${parsed.body || ''}</textarea>
         </div>
-        <em style="color:var(--text-light)">${selectedProduct ? '🎯 Pitching: ' + selectedProduct.name + '. ' : ''}${useDeep ? '🌐 Personalised using live research on their website & tech stack.' : (topContact.enrichmentNotes ? '🔍 Personalised using your saved AI + manual enrichment data.' : 'Personalise before sending.')} Feel free to edit anything above before sending.</em>
+        <em style="color:var(--text-light)">${selectedProduct ? '🎯 Pitching: ' + selectedProduct.name + '. ' : ''}${customPrompt ? '📝 Followed your custom instructions. ' : ''}${useDeep ? '🌐 Personalised using live research on their website & tech stack.' : (topContact.enrichmentNotes ? '🔍 Personalised using your saved AI + manual enrichment data.' : 'Personalise before sending.')} Feel free to edit anything above before sending.</em>
         <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
           <div style="font-weight:600;font-size:13px;margin-bottom:8px">📤 Send This Email</div>
           <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:8px">
@@ -9588,23 +9600,29 @@ async function runAI(type) {
     const visitWebsite = document.getElementById('followup-visit-website')?.checked;
     const selectedProductId = document.getElementById('followup-product')?.value;
     const selectedProduct = selectedProductId ? products.find(p => String(p.id) === String(selectedProductId)) : null;
+    const customPrompt = document.getElementById('followup-custom-prompt')?.value.trim() || '';
 
-    body.innerHTML = `<div style="color:var(--text-light)">${visitWebsite && !selectedProduct ? '🌐' : '🤖'} AI generating unique follow-ups for ${selected.length} lead(s)…</div>`;
+    body.innerHTML = `<div style="color:var(--text-light)">${visitWebsite && !selectedProduct && !customPrompt ? '🌐' : '🤖'} AI generating unique follow-ups for ${selected.length} lead(s)…</div>`;
 
     try {
       let results;
-      if (selectedProduct) {
-        // A specific product/service was chosen — build the prompt ourselves per lead so the
-        // follow-up is guaranteed to be about that product (the website-research path is
-        // server-side and can't be steered to a chosen product).
-        const productBlock = `\n\nThis follow-up should be about this specific product/service (be clear and specific, not vague):\nName: ${selectedProduct.name}${selectedProduct.category ? '\nCategory: ' + selectedProduct.category : ''}${selectedProduct.price ? '\nPrice: ' + selectedProduct.price : ''}${selectedProduct.description ? '\nDetails: ' + selectedProduct.description : ''}`;
+      if (selectedProduct || customPrompt) {
+        // A specific product/service was chosen and/or the user typed campaign instructions — build
+        // the prompt ourselves per lead so both are guaranteed to be followed (the website-research
+        // path is server-side and can't be steered by a product choice or custom instructions).
+        const productBlock = selectedProduct
+          ? `\n\nThis follow-up should be about this specific product/service (be clear and specific, not vague):\nName: ${selectedProduct.name}${selectedProduct.category ? '\nCategory: ' + selectedProduct.category : ''}${selectedProduct.price ? '\nPrice: ' + selectedProduct.price : ''}${selectedProduct.description ? '\nDetails: ' + selectedProduct.description : ''}`
+          : '';
+        const customBlock = customPrompt
+          ? `\n\nThe sender's specific instructions for this campaign — follow these closely, they override any generic style guidance above where they conflict:\n${customPrompt}`
+          : '';
         results = [];
         for (const c of selected) {
           const enrichmentBlock = c.enrichmentNotes && c.enrichmentNotes.trim()
             ? `\n\nSaved research/enrichment data about this lead (use it, don't repeat verbatim):\n${c.enrichmentNotes.slice(-600)}`
             : '';
           const websiteBlock = (visitWebsite && c.website) ? `\n\nTheir website (context only): ${c.website}` : '';
-          const prompt = `Write ONE short, casual, human-sounding sales follow-up message (under 60 words, no "just checking in" clichés) to a lead named ${c.name}${c.company ? ' at ' + c.company : ''}, current status: ${c.status || 'unknown'}.${productBlock}${enrichmentBlock}${websiteBlock}\n\nRespond ONLY as JSON like {"message":"..."}, nothing else.`;
+          const prompt = `Write ONE short, casual, human-sounding sales follow-up message (under 60 words, no "just checking in" clichés) to a lead named ${c.name}${c.company ? ' at ' + c.company : ''}, current status: ${c.status || 'unknown'}.${productBlock}${enrichmentBlock}${websiteBlock}${customBlock}\n\nRespond ONLY as JSON like {"message":"..."}, nothing else.`;
           try {
             const raw = await callAI(prompt, 'followup');
             const clean = raw.replace(/```json|```/g, '').trim();

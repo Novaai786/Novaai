@@ -4199,7 +4199,7 @@ function renderProfileDeals(c) {
           <div style="font-weight:600;font-size:13px">${d.name}</div>
           <div style="font-size:11px;color:var(--text-light)">${d.stage} · $${d.value || 0}</div>
         </div>
-        <button class="btn btn-outline btn-sm" onclick="closeModal('contactProfileModal');editDeal(${d.id})">View / Edit</button>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('contactProfileModal');editDeal('${d.id}')">View / Edit</button>
       </div>`).join('') : `<div style="text-align:center;color:var(--text-light);font-size:13px;padding:20px">No deals yet for this contact.</div>`}`;
 }
 
@@ -5380,7 +5380,7 @@ function clearDealForm() {
 }
 
 function editDeal(id) {
-  const d = deals.find(d => d.id === id);
+  const d = deals.find(d => d.id == id);
   if (!d) return;
   document.getElementById('d-name').value = d.name || '';
   document.getElementById('d-company').value = d.company || '';
@@ -5411,7 +5411,7 @@ async function deleteDeal(id) {
 }
 
 async function moveDeal(id, newStage) {
-  const d = deals.find(d => d.id === id);
+  const d = deals.find(d => d.id == id);
   if (!d) return;
   recordStageChange(d, newStage);
   d.probability = getStageProbability(newStage, d.category);
@@ -5718,13 +5718,13 @@ function renderDeals() {
               <div class="deal-days-tag">⏱️ ${daysInStage} day${daysInStage===1?'':'s'} in stage</div>
               ${customFieldsCardBlock('deal', d)}
               <div class="deal-move-row">
-                <select class="deal-move-select" onchange="moveDeal(${d.id}, this.value)">
+                <select class="deal-move-select" onchange="moveDeal('${d.id}', this.value)">
                   ${stageNames.map(st => `<option value="${st}" ${st===d.stage?'selected':''}>${st}</option>`).join('')}
                 </select>
                 <div class="deal-actions">
-                  <button class="deal-icon-btn" title="Tracking" onclick="viewDealDetails(${d.id})">👁️</button>
-                  <button class="deal-icon-btn" title="Edit" onclick="editDeal(${d.id})">✏️</button>
-                  <button class="deal-icon-btn" title="Delete" onclick="deleteDeal(${d.id})">🗑️</button>
+                  <button class="deal-icon-btn" title="Tracking" onclick="viewDealDetails('${d.id}')">👁️</button>
+                  <button class="deal-icon-btn" title="Edit" onclick="editDeal('${d.id}')">✏️</button>
+                  <button class="deal-icon-btn" title="Delete" onclick="deleteDeal('${d.id}')">🗑️</button>
                 </div>
               </div>
             </div>`;
@@ -5748,7 +5748,7 @@ function onDealCategoryFilterChange() {
 }
 
 function viewDealDetails(id) {
-  const d = deals.find(d => d.id === id);
+  const d = deals.find(d => d.id == id);
   if (!d) return;
   const durations = getStageDurations(d);
   const hist = getHistory(d);

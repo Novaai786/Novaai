@@ -1950,6 +1950,14 @@ Leadnovaai</textarea>
       <button class="modal-close" onclick="closeModal('contactModal')">✕</button>
     </div>
     <input type="hidden" id="c-edit-id">
+    <div class="form-group" style="background:#f8f9fb;border:1px solid var(--border,#e2e5eb);border-radius:8px;padding:10px 12px">
+      <label class="form-label">📋 Add to List <span style="font-size:10px;color:var(--text-light)">(optional — keeps this client's leads easy to find later)</span></label>
+      <select class="form-control" id="c-list" onchange="onListPickerChange('c')">
+        <option value="">— No list —</option>
+        <option value="__new__">➕ Create New List...</option>
+      </select>
+      <input class="form-control" id="c-list-new-name" placeholder="New list name, e.g. AIREC Leads" style="display:none;margin-top:6px">
+    </div>
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">First Name *</label>
@@ -2139,6 +2147,14 @@ Leadnovaai</textarea>
       <button class="modal-close" onclick="closeModal('companyModal')">✕</button>
     </div>
     <input type="hidden" id="co-edit-id">
+    <div class="form-group" style="background:#f8f9fb;border:1px solid var(--border,#e2e5eb);border-radius:8px;padding:10px 12px">
+      <label class="form-label">📋 Add to List <span style="font-size:10px;color:var(--text-light)">(optional — keeps this client's companies easy to find later)</span></label>
+      <select class="form-control" id="co-list" onchange="onListPickerChange('co')">
+        <option value="">— No list —</option>
+        <option value="__new__">➕ Create New List...</option>
+      </select>
+      <input class="form-control" id="co-list-new-name" placeholder="New list name, e.g. AIREC Leads" style="display:none;margin-top:6px">
+    </div>
     <div class="form-group">
       <label class="form-label">Company Name *</label>
       <input class="form-control" id="co-name" placeholder="e.g. Rad Marketing Agency">
@@ -3718,6 +3734,7 @@ async function saveContact() {
     if (editId) {
       const { error } = await supabaseClient.from('leads').update(dbRow).eq('id', editId);
       if (error) { alert('Could not update lead: ' + error.message); return; }
+      await applyListPickerSelection('c', 'contact', editId);
     } else {
       const { data: insertedRows, error } = await supabaseClient.from('leads').insert(dbRow).select();
       if (error) { alert('Could not save lead: ' + error.message); return; }
@@ -3727,6 +3744,7 @@ async function saveContact() {
       if (automationSettings.roundRobinEnabled && (automationSettings.roundRobinTeamIds || []).length) {
         await autoAssignLeadRoundRobin(data.id);
       }
+      await applyListPickerSelection('c', 'contact', data.id);
     }
 
     closeModal('contactModal');
@@ -3740,6 +3758,9 @@ async function saveContact() {
 
 function clearContactForm() {
   ['c-fname','c-lname','c-email','c-phone','c-company','c-country','c-title','c-website','c-linkedin','c-notes','c-lastcontacted','c-nextfollowup'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('c-list').value = '';
+  document.getElementById('c-list-new-name').value = '';
+  document.getElementById('c-list-new-name').style.display = 'none';
   document.getElementById('c-companysize').value = '';
   document.getElementById('c-status').value = 'New';
   document.getElementById('c-source').value = '';
@@ -3760,6 +3781,9 @@ function clearContactForm() {
 function editContact(id) {
   const c = contacts.find(c => c.id === id);
   if (!c) return;
+  document.getElementById('c-list').value = '';
+  document.getElementById('c-list-new-name').value = '';
+  document.getElementById('c-list-new-name').style.display = 'none';
   const parts = (c.name||'').split(' ');
   document.getElementById('c-fname').value = c.fname || parts[0] || '';
   document.getElementById('c-lname').value = c.lname !== undefined ? c.lname : (parts.slice(1).join(' ') || '');
@@ -4759,6 +4783,7 @@ function deleteAttachment(contactId, attId) {
 function importContactsCSV(event) {
   const file = event.target.files[0];
   if (!file) return;
+  const listName = (prompt('Add these leads to a list? Type a list name — existing or new (leave blank to skip):', '') || '').trim();
   const reader = new FileReader();
   reader.onload = async function(e) {
     try {
@@ -4821,11 +4846,14 @@ function importContactsCSV(event) {
       }
 
       if (!rows.length) { alert('No valid contacts found in CSV.'); event.target.value = ''; return; }
-      const { error } = await supabaseClient.from('leads').insert(rows);
+      const { data: insertedRows, error } = await supabaseClient.from('leads').insert(rows).select();
       if (error) { alert('Import failed: ' + error.message); event.target.value = ''; return; }
+      if (listName && insertedRows && insertedRows.length) {
+        await resolveOrCreateList(listName, 'contact', insertedRows.map(r => r.id));
+      }
       await loadContactsFromSupabase();
       renderDashboard(); updateBadges();
-      alert(rows.length + ' contact(s) imported successfully!');
+      alert(rows.length + ' contact(s) imported successfully!' + (listName ? ` Added to list "${listName}".` : ''));
     } catch (err) {
       alert('Import failed. Please check your CSV format.');
     }
@@ -4927,9 +4955,11 @@ async function saveCompany() {
     if (editId) {
       const { error } = await supabaseClient.from('companies').update(dbRow).eq('id', editId);
       if (error) { alert('Could not update company: ' + error.message); return; }
+      await applyListPickerSelection('co', 'company', editId);
     } else {
-      const { error } = await supabaseClient.from('companies').insert(dbRow);
+      const { data: insertedRows, error } = await supabaseClient.from('companies').insert(dbRow).select();
       if (error) { alert('Could not save company: ' + error.message); return; }
+      if (insertedRows && insertedRows[0]) await applyListPickerSelection('co', 'company', insertedRows[0].id);
     }
 
     closeModal('companyModal');
@@ -4943,6 +4973,9 @@ async function saveCompany() {
 
 function clearCompanyForm() {
   ['co-name','co-website','co-location','co-notes','co-country','co-employees','co-techstack'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('co-list').value = '';
+  document.getElementById('co-list-new-name').value = '';
+  document.getElementById('co-list-new-name').style.display = 'none';
   document.getElementById('co-revenue').value = '';
   document.getElementById('co-crm').value = 'Unknown';
   document.getElementById('co-automation').value = '';
@@ -4955,6 +4988,9 @@ function clearCompanyForm() {
 function editCompany(id) {
   const c = companies.find(c => c.id === id);
   if (!c) return;
+  document.getElementById('co-list').value = '';
+  document.getElementById('co-list-new-name').value = '';
+  document.getElementById('co-list-new-name').style.display = 'none';
   document.getElementById('co-name').value = c.name || '';
   document.getElementById('co-industry').value = c.industry || '';
   document.getElementById('co-size').value = c.size || '';
@@ -6063,9 +6099,73 @@ async function loadListsFromSupabase() {
     lists = (data || []).map(mapListFromDb);
     renderLists();
     updateBadges();
+    populateListPickers();
   } catch (err) {
     console.error(err);
   }
+}
+
+// --- Quick "Add to List" picker used inside the Contact & Company modals, and CSV import ---
+function populateListPickers() {
+  ['c', 'co'].forEach(prefix => {
+    const objectType = prefix === 'c' ? 'contact' : 'company';
+    const sel = document.getElementById(prefix + '-list');
+    if (!sel) return;
+    const current = sel.value;
+    const staticLists = lists.filter(l => l.objectType === objectType && l.listType === 'static');
+    sel.innerHTML = '<option value="">— No list —</option>' +
+      staticLists.map(l => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join('') +
+      '<option value="__new__">➕ Create New List...</option>';
+    sel.value = current && [...sel.options].some(o => o.value === current) ? current : '';
+  });
+}
+
+function onListPickerChange(prefix) {
+  const sel = document.getElementById(prefix + '-list');
+  const newNameInput = document.getElementById(prefix + '-list-new-name');
+  if (!sel || !newNameInput) return;
+  newNameInput.style.display = sel.value === '__new__' ? 'block' : 'none';
+}
+
+// Finds an existing static list by name (case-insensitive) for the given object type, or creates one.
+// Adds the given record ids as members either way. Returns the list id, or null on failure.
+async function resolveOrCreateList(name, objectType, recordIds) {
+  const session = window.__currentSession;
+  if (!session || !name || !recordIds.length) return null;
+  const userId = session.user.id;
+  const cleanName = name.trim();
+  const existing = lists.find(l => l.objectType === objectType && l.listType === 'static' && (l.name || '').trim().toLowerCase() === cleanName.toLowerCase());
+  try {
+    if (existing) {
+      const memberIds = Array.from(new Set([...(existing.memberIds || []).map(String), ...recordIds.map(String)]));
+      const { error } = await supabaseClient.from('lists').update({ member_ids: memberIds }).eq('id', existing.id);
+      if (error) { alert('Could not add to list: ' + error.message); return null; }
+      return existing.id;
+    }
+    const dbRow = mapListToDb({ name: cleanName, objectType, listType: 'static', filters: [], memberIds: recordIds.map(String) }, userId);
+    const { data: inserted, error } = await supabaseClient.from('lists').insert(dbRow).select();
+    if (error) { alert('Could not create list: ' + error.message); return null; }
+    return inserted && inserted[0] ? inserted[0].id : null;
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+}
+
+// Reads the c-list/co-list picker after a contact/company was just saved and applies the selection.
+async function applyListPickerSelection(prefix, objectType, recordId) {
+  const sel = document.getElementById(prefix + '-list');
+  if (!sel || !sel.value || !recordId) return;
+  let name = sel.value === '__new__' ? (document.getElementById(prefix + '-list-new-name').value || '').trim() : null;
+  if (sel.value === '__new__') {
+    if (!name) return;
+    await resolveOrCreateList(name, objectType, [recordId]);
+  } else {
+    const list = lists.find(l => l.id == sel.value);
+    if (!list) return;
+    await resolveOrCreateList(list.name, objectType, [recordId]);
+  }
+  await loadListsFromSupabase();
 }
 
 function renderLists() {
@@ -10478,6 +10578,7 @@ function exportCSV(type) {
 async function importCSV(type, input) {
   const file = input.files[0];
   if (!file) return;
+  const listName = (prompt(`Add these ${type} to a list? Type a list name — existing or new (leave blank to skip):`, '') || '').trim();
   const msgEl = document.getElementById('import' + (type === 'contacts' ? 'Contacts' : 'Companies') + 'Msg');
   const reader = new FileReader();
   reader.onload = async function(e) {
@@ -10512,11 +10613,14 @@ async function importCSV(type, input) {
       if (!rows.length) { showImportMsg(msgEl, 'error', 'No valid rows found in CSV.'); return; }
 
       const table = type === 'contacts' ? 'leads' : 'companies';
-      const { error } = await supabaseClient.from(table).insert(rows);
+      const { data: insertedRows, error } = await supabaseClient.from(table).insert(rows).select();
       if (error) { showImportMsg(msgEl, 'error', 'Could not import: ' + error.message); return; }
 
+      if (listName && insertedRows && insertedRows.length) {
+        await resolveOrCreateList(listName, type === 'contacts' ? 'contact' : 'company', insertedRows.map(r => r.id));
+      }
       if (type === 'contacts') await loadContactsFromSupabase(); else await loadCompaniesFromSupabase();
-      showImportMsg(msgEl, 'success', `✅ ${rows.length} ${type} imported successfully!`);
+      showImportMsg(msgEl, 'success', `✅ ${rows.length} ${type} imported successfully!` + (listName ? ` Added to list "${listName}".` : ''));
       input.value = '';
     } catch(err) {
       showImportMsg(msgEl, 'error', 'Error parsing CSV. Please check the file format.');

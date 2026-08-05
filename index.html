@@ -5370,7 +5370,11 @@ async function saveDeal() {
 
 function clearDealForm() {
   ['d-name','d-company','d-value','d-owner','d-date','d-notes','d-probability'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('d-category').value = '';
+  // Pre-select whichever pipeline/category the user is currently viewing, so a
+  // newly created deal lands in the same filtered view instead of disappearing
+  // into "Unassigned" (which is what made it look like it had no edit/delete option).
+  const activeCategoryFilter = document.getElementById('dealFilterCategory') ? document.getElementById('dealFilterCategory').value : '';
+  document.getElementById('d-category').value = activeCategoryFilter;
   populateDealStageOptions('New Lead');
   document.getElementById('d-lostreason').value = '';
   document.getElementById('d-edit-id').value = '';

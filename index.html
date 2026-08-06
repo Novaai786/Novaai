@@ -1210,6 +1210,12 @@ Leadnovaai</textarea>
                 <option value="">All</option>
               </select>
             </div>
+            <div class="form-group">
+              <label class="form-label">📋 Filter by List</label>
+              <select class="form-control" id="campaignFilterList" onchange="renderCampaignContacts()">
+                <option value="">All Contacts</option>
+              </select>
+            </div>
           </div>
           <input type="text" id="campaignSearchName" class="form-control" placeholder="🔍 Search by name..." style="margin-bottom:10px" oninput="renderCampaignContacts()" autocomplete="off">
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:8px;cursor:pointer">
@@ -1441,6 +1447,9 @@ Leadnovaai</textarea>
                     <input type="checkbox" id="scoring-select-all" onchange="toggleAllScoringLeads(this)"> Select all
                   </label>
                 </div>
+                <select class="form-control" id="scoring-list-filter" style="margin-bottom:6px;font-size:12px;padding:6px 10px" onchange="populateAIContactSelectors()">
+                  <option value="">All Contacts</option>
+                </select>
                 <input type="text" id="scoring-lead-search" class="form-control" placeholder="🔍 Search leads by name..." style="margin-bottom:8px;font-size:12px;padding:6px 10px" oninput="filterScoringLeads()" autocomplete="off">
                 <div id="scoring-lead-list" style="max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--bg)"></div>
               </div>
@@ -1456,6 +1465,9 @@ Leadnovaai</textarea>
               <div class="ai-card-desc">Short, personal, human-sounding emails — written from real pain points found on the lead's own website and tech stack. Never generic.</div>
               <div style="margin-bottom:10px">
                 <span style="font-size:12px;color:var(--text-light)">Select a contact</span>
+                <select class="form-control" id="email-writer-list-filter" style="margin-top:4px;margin-bottom:4px;font-size:12px;padding:6px 10px" onchange="populateAIContactSelectors()">
+                  <option value="">All Contacts</option>
+                </select>
                 <input type="text" id="email-writer-search" class="form-control" placeholder="🔍 Search by name..." style="margin-top:4px;margin-bottom:4px;font-size:12px;padding:6px 10px" oninput="filterEmailWriterContacts()" autocomplete="off">
                 <select class="form-control" id="email-writer-contact" style="margin-top:4px"></select>
               </div>
@@ -1490,6 +1502,9 @@ Leadnovaai</textarea>
               <div class="ai-card-desc">Permanently enrich a contact's profile — AI research + <b>your own manual research</b> are both saved in one place, and Email Writer automatically uses it.</div>
               <div style="margin-bottom:10px">
                 <span style="font-size:12px;color:var(--text-light)">Select a contact</span>
+                <select class="form-control" id="enrich-list-filter" style="margin-top:4px;margin-bottom:4px;font-size:12px;padding:6px 10px" onchange="populateAIContactSelectors()">
+                  <option value="">All Contacts</option>
+                </select>
                 <input type="text" id="enrich-contact-search" class="form-control" placeholder="🔍 Search by name..." style="margin-top:4px;margin-bottom:4px;font-size:12px;padding:6px 10px" oninput="filterEnrichContacts()" autocomplete="off">
                 <select class="form-control" id="enrich-contact" style="margin-top:4px" onchange="onEnrichContactChange()"></select>
               </div>
@@ -1518,6 +1533,9 @@ Leadnovaai</textarea>
                   </label>
                 </div>
                 <input type="text" id="followup-lead-search" class="form-control" placeholder="🔍 Search leads by name..." style="margin-bottom:8px;font-size:12px;padding:6px 10px" oninput="filterFollowupLeads()" autocomplete="off">
+                <select class="form-control" id="followup-list-filter" style="margin-bottom:6px;font-size:12px;padding:6px 10px" onchange="populateAIContactSelectors()">
+                  <option value="">All Contacts</option>
+                </select>
                 <div id="followup-lead-list" style="max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--bg)"></div>
               </div>
               <div style="margin-bottom:10px">
@@ -1583,6 +1601,9 @@ Leadnovaai</textarea>
               <div class="ai-card-desc">AI suggests the best day and time window to reach out to a specific contact, based on their role, company, and status — shown in their local time and converted to yours.</div>
               <div style="margin-bottom:10px">
                 <span style="font-size:12px;color:var(--text-light)">Select a contact</span>
+                <select class="form-control" id="bct-list-filter" style="margin-top:4px;margin-bottom:4px;font-size:12px;padding:6px 10px" onchange="populateAIContactSelectors()">
+                  <option value="">All Contacts</option>
+                </select>
                 <select class="form-control" id="bct-contact-select" style="margin-top:4px" onchange="updateBctTimeDisplay()"></select>
               </div>
               <div style="margin-bottom:10px">
@@ -1601,6 +1622,9 @@ Leadnovaai</textarea>
               <div class="ai-card-desc">Paste an email, chat log, or notes — AI reads the tone and tells you how the customer is really feeling.</div>
               <div style="margin-bottom:8px">
                 <span style="font-size:12px;color:var(--text-light)">Related contact (optional)</span>
+                <select class="form-control" id="sentiment-list-filter" style="margin-top:4px;margin-bottom:4px;font-size:12px;padding:6px 10px" onchange="populateAIContactSelectors()">
+                  <option value="">All Contacts</option>
+                </select>
                 <select class="form-control" id="sentiment-contact-select" style="margin-top:4px"></select>
               </div>
               <textarea class="form-control" id="sentiment-text-input" rows="3" placeholder="Paste the email, message, or notes to analyze..." style="margin-bottom:10px;font-size:12px"></textarea>
@@ -1958,6 +1982,14 @@ Leadnovaai</textarea>
       </select>
       <input class="form-control" id="c-list-new-name" placeholder="New list name, e.g. AIREC Leads" style="display:none;margin-top:6px">
     </div>
+    <div class="form-group" style="background:#f8f9fb;border:1px solid var(--border,#e2e5eb);border-radius:8px;padding:10px 12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="document.getElementById('c-extra-fields-panel').classList.toggle('open')">
+        <label class="form-label" style="margin:0">⚙️ Additional Properties <span style="font-size:10px;color:var(--text-light);font-weight:400">(choose which extra fields to show — your choice is remembered)</span></label>
+        <span style="font-size:12px">▾</span>
+      </div>
+      <div id="c-extra-fields-panel" style="display:none;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
+    </div>
+    <style>#c-extra-fields-panel.open{display:flex !important}</style>
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">First Name *</label>
@@ -2155,6 +2187,14 @@ Leadnovaai</textarea>
       </select>
       <input class="form-control" id="co-list-new-name" placeholder="New list name, e.g. AIREC Leads" style="display:none;margin-top:6px">
     </div>
+    <div class="form-group" style="background:#f8f9fb;border:1px solid var(--border,#e2e5eb);border-radius:8px;padding:10px 12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="document.getElementById('co-extra-fields-panel').classList.toggle('open')">
+        <label class="form-label" style="margin:0">⚙️ Additional Properties <span style="font-size:10px;color:var(--text-light);font-weight:400">(choose which extra fields to show — your choice is remembered)</span></label>
+        <span style="font-size:12px">▾</span>
+      </div>
+      <div id="co-extra-fields-panel" style="display:none;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
+    </div>
+    <style>#co-extra-fields-panel.open{display:flex !important}</style>
     <div class="form-group">
       <label class="form-label">Company Name *</label>
       <input class="form-control" id="co-name" placeholder="e.g. Rad Marketing Agency">
@@ -2495,6 +2535,9 @@ Leadnovaai</textarea>
     <input class="form-control" id="l-add-search" placeholder="Search..." oninput="renderListAddRecordsOptions()" style="margin-bottom:8px">
     <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:10px;cursor:pointer">
       <input type="checkbox" id="l-add-hide-listed" checked onchange="renderListAddRecordsOptions()"> Hide records already in another list
+    </label>
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:8px;cursor:pointer;font-weight:600">
+      <input type="checkbox" id="l-add-select-all" onchange="toggleSelectAllListRecords(this.checked)"> Select All
     </label>
     <div id="listAddRecordsOptions" style="display:flex;flex-direction:column;gap:6px;max-height:340px;overflow-y:auto"></div>
     <div style="display:flex;gap:10px;margin-top:14px">
@@ -3761,6 +3804,7 @@ function clearContactForm() {
   document.getElementById('c-list').value = '';
   document.getElementById('c-list-new-name').value = '';
   document.getElementById('c-list-new-name').style.display = 'none';
+  renderContactExtraFieldsPanel();
   document.getElementById('c-companysize').value = '';
   document.getElementById('c-status').value = 'New';
   document.getElementById('c-source').value = '';
@@ -3784,6 +3828,7 @@ function editContact(id) {
   document.getElementById('c-list').value = '';
   document.getElementById('c-list-new-name').value = '';
   document.getElementById('c-list-new-name').style.display = 'none';
+  renderContactExtraFieldsPanel();
   const parts = (c.name||'').split(' ');
   document.getElementById('c-fname').value = c.fname || parts[0] || '';
   document.getElementById('c-lname').value = c.lname !== undefined ? c.lname : (parts.slice(1).join(' ') || '');
@@ -3812,6 +3857,13 @@ function editContact(id) {
   document.getElementById('c-edit-id').value = c.id;
   document.getElementById('contactModalTitle').textContent = 'Edit Contact';
   renderCustomFieldsInto('contact', 'contact-custom-fields', c.customFields || {});
+  // Also reveal any optional field that already has data on this contact, even if not in the saved preference,
+  // so editing never hides existing information.
+  const filledKeys = Object.keys(CONTACT_FIELD_TO_INPUTS).filter(k => CONTACT_FIELD_TO_INPUTS[k].some(id => {
+    const el = document.getElementById(id);
+    return el && el.value;
+  }));
+  applyContactExtraFieldVisibility(Array.from(new Set([...getSavedFieldList('contactVisibleExtraFields'), ...filledKeys])));
   openModal('contactModal');
 }
 
@@ -4983,6 +5035,7 @@ function clearCompanyForm() {
   document.getElementById('co-edit-id').value = '';
   document.getElementById('companyModalTitle').textContent = 'Add Company';
   renderCustomFieldsInto('company', 'company-custom-fields', {});
+  renderCompanyExtraFieldsPanel();
 }
 
 function editCompany(id) {
@@ -4991,6 +5044,7 @@ function editCompany(id) {
   document.getElementById('co-list').value = '';
   document.getElementById('co-list-new-name').value = '';
   document.getElementById('co-list-new-name').style.display = 'none';
+  renderCompanyExtraFieldsPanel();
   document.getElementById('co-name').value = c.name || '';
   document.getElementById('co-industry').value = c.industry || '';
   document.getElementById('co-size').value = c.size || '';
@@ -5007,6 +5061,12 @@ function editCompany(id) {
   document.getElementById('co-edit-id').value = c.id;
   document.getElementById('companyModalTitle').textContent = 'Edit Company';
   renderCustomFieldsInto('company', 'company-custom-fields', c.customFields || {});
+  // Reveal any optional field that already has data on this company, even if not in the saved preference.
+  const filledKeys = Object.keys(COMPANY_FIELD_TO_INPUTS).filter(k => COMPANY_FIELD_TO_INPUTS[k].some(id => {
+    const el = document.getElementById(id);
+    return el && el.value;
+  }));
+  applyCompanyExtraFieldVisibility(Array.from(new Set([...getSavedFieldList('companyVisibleExtraFields'), ...filledKeys])));
   openModal('companyModal');
 }
 
@@ -6120,6 +6180,99 @@ function populateListPickers() {
   });
 }
 
+// --- Add/Edit Contact & Company modals: only First/Last/Email/Country/Phone (contact) and
+// Name/Website/Size/Country (company) show by default. Everything else is optional and the
+// user's choice is remembered in localStorage so it stays the same next time they open the form.
+const CONTACT_OPTIONAL_FIELDS = [
+  ['company', 'Company'], ['companysize', 'Company Size'], ['title', 'Job Title'], ['status', 'Status'],
+  ['source', 'Lead Source'], ['icp', 'ICP Tag'], ['leadscore', 'Lead Score'], ['owner', 'Contact Owner'],
+  ['category', 'Service Category & Pipeline Stage'], ['website', 'Company Website'], ['linkedin', 'LinkedIn URL'],
+  ['painpoint', 'Pain Point'], ['lastcontacted', 'Last Contacted Date'], ['nextfollowup', 'Next Follow-up Date'],
+  ['decisionmaker', 'Decision Maker'], ['budget', 'Budget Range'], ['priority', 'Priority Level'], ['notes', 'Notes']
+];
+const CONTACT_FIELD_TO_INPUTS = {
+  company: ['c-company'], companysize: ['c-companysize'], title: ['c-title'], status: ['c-status'],
+  source: ['c-source'], icp: ['c-icp'], leadscore: ['c-leadscore'], owner: ['c-owner'],
+  category: ['c-category', 'c-stage'], website: ['c-website'], linkedin: ['c-linkedin'],
+  painpoint: ['c-painpoint'], lastcontacted: ['c-lastcontacted'], nextfollowup: ['c-nextfollowup'],
+  decisionmaker: ['c-decisionmaker'], budget: ['c-budget'], priority: ['c-priority'], notes: ['c-notes']
+};
+
+function getSavedFieldList(storageKey) {
+  try { return JSON.parse(localStorage.getItem(storageKey) || '[]'); } catch (e) { return []; }
+}
+
+function renderContactExtraFieldsPanel() {
+  const panel = document.getElementById('c-extra-fields-panel');
+  if (!panel) return;
+  const saved = getSavedFieldList('contactVisibleExtraFields');
+  panel.innerHTML = CONTACT_OPTIONAL_FIELDS.map(([key, label]) => `
+    <label style="font-size:12px;display:flex;align-items:center;gap:5px;width:47%;min-width:150px;cursor:pointer">
+      <input type="checkbox" ${saved.includes(key) ? 'checked' : ''} onchange="toggleContactExtraField('${key}', this.checked)"> ${label}
+    </label>`).join('');
+  applyContactExtraFieldVisibility(saved);
+}
+
+function toggleContactExtraField(key, checked) {
+  let saved = getSavedFieldList('contactVisibleExtraFields');
+  if (checked && !saved.includes(key)) saved.push(key);
+  if (!checked) saved = saved.filter(k => k !== key);
+  localStorage.setItem('contactVisibleExtraFields', JSON.stringify(saved));
+  applyContactExtraFieldVisibility(saved);
+}
+
+function applyContactExtraFieldVisibility(saved) {
+  Object.keys(CONTACT_FIELD_TO_INPUTS).forEach(key => {
+    const show = saved.includes(key);
+    CONTACT_FIELD_TO_INPUTS[key].forEach(id => {
+      const el = document.getElementById(id);
+      const group = el && el.closest('.form-group');
+      if (group) group.style.display = show ? '' : 'none';
+    });
+  });
+}
+
+const COMPANY_OPTIONAL_FIELDS = [
+  ['industry', 'Industry'], ['location', 'Location'], ['employees', 'Number of Employees'],
+  ['revenue', 'Company Revenue'], ['crm', 'CRM Used'], ['techstack', 'Tech Stack'],
+  ['automation', 'Automation Level'], ['category', 'Service Category'], ['notes', 'Notes']
+];
+const COMPANY_FIELD_TO_INPUTS = {
+  industry: ['co-industry'], location: ['co-location'], employees: ['co-employees'],
+  revenue: ['co-revenue'], crm: ['co-crm'], techstack: ['co-techstack'],
+  automation: ['co-automation'], category: ['co-category'], notes: ['co-notes']
+};
+
+function renderCompanyExtraFieldsPanel() {
+  const panel = document.getElementById('co-extra-fields-panel');
+  if (!panel) return;
+  const saved = getSavedFieldList('companyVisibleExtraFields');
+  panel.innerHTML = COMPANY_OPTIONAL_FIELDS.map(([key, label]) => `
+    <label style="font-size:12px;display:flex;align-items:center;gap:5px;width:47%;min-width:150px;cursor:pointer">
+      <input type="checkbox" ${saved.includes(key) ? 'checked' : ''} onchange="toggleCompanyExtraField('${key}', this.checked)"> ${label}
+    </label>`).join('');
+  applyCompanyExtraFieldVisibility(saved);
+}
+
+function toggleCompanyExtraField(key, checked) {
+  let saved = getSavedFieldList('companyVisibleExtraFields');
+  if (checked && !saved.includes(key)) saved.push(key);
+  if (!checked) saved = saved.filter(k => k !== key);
+  localStorage.setItem('companyVisibleExtraFields', JSON.stringify(saved));
+  applyCompanyExtraFieldVisibility(saved);
+}
+
+function applyCompanyExtraFieldVisibility(saved) {
+  Object.keys(COMPANY_FIELD_TO_INPUTS).forEach(key => {
+    const show = saved.includes(key);
+    COMPANY_FIELD_TO_INPUTS[key].forEach(id => {
+      const el = document.getElementById(id);
+      const group = el && el.closest('.form-group');
+      if (group) group.style.display = show ? '' : 'none';
+    });
+  });
+}
+
 function onListPickerChange(prefix) {
   const sel = document.getElementById(prefix + '-list');
   const newNameInput = document.getElementById(prefix + '-list-new-name');
@@ -6398,6 +6551,7 @@ async function removeFromStaticList(recordId) {
 function openListAddRecordsModal() {
   document.getElementById('l-add-search').value = '';
   document.getElementById('l-add-hide-listed').checked = true;
+  document.getElementById('l-add-select-all').checked = false;
   renderListAddFilters();
   renderListAddRecordsOptions();
   openModal('listAddRecordsModal');
@@ -6444,13 +6598,28 @@ function renderListAddRecordsOptions() {
   });
   if (!filtered.length) {
     wrap.innerHTML = '<div style="color:var(--text-light);font-size:12px;padding:10px">No matching records found.</div>';
+    document.getElementById('l-add-select-all').checked = false;
     return;
   }
   wrap.innerHTML = filtered.map(r => `
     <label style="display:flex;align-items:center;gap:8px;font-size:13px;padding:7px 9px;border:1px solid var(--border);border-radius:6px;cursor:pointer">
-      <input type="checkbox" class="l-add-check" value="${r.id}"> ${escapeHtml(getRecordLabel(l.objectType, r))}${r.company ? ` <span style="color:var(--text-light);font-size:11px">— ${escapeHtml(r.company)}</span>` : ''}
+      <input type="checkbox" class="l-add-check" value="${r.id}" onchange="syncSelectAllListCheckbox()"> ${escapeHtml(getRecordLabel(l.objectType, r))}${r.company ? ` <span style="color:var(--text-light);font-size:11px">— ${escapeHtml(r.company)}</span>` : ''}
     </label>
   `).join('');
+  document.getElementById('l-add-select-all').checked = false;
+}
+
+// Select All / deselect all checkboxes currently visible in the "Add Records to List" modal
+function toggleSelectAllListRecords(checked) {
+  document.querySelectorAll('.l-add-check').forEach(cb => { cb.checked = checked; });
+}
+
+// Keeps the "Select All" checkbox in sync if the user unchecks one record manually
+function syncSelectAllListCheckbox() {
+  const boxes = document.querySelectorAll('.l-add-check');
+  const allChecked = boxes.length > 0 && Array.from(boxes).every(cb => cb.checked);
+  const selectAll = document.getElementById('l-add-select-all');
+  if (selectAll) selectAll.checked = allChecked;
 }
 
 async function confirmAddRecordsToList() {
@@ -7427,16 +7596,21 @@ function populateCampaignFilters() {
   const scoreSel = document.getElementById('campaignFilterScore');
   const sourceSel = document.getElementById('campaignFilterSource');
   const countrySel = document.getElementById('campaignFilterCountry');
+  const listSel = document.getElementById('campaignFilterList');
   const prevScore = scoreSel.value, prevSource = sourceSel.value, prevCountry = countrySel ? countrySel.value : '';
+  const prevList = listSel ? listSel.value : '';
   const scores = [...new Set(contacts.map(c => c.leadScore).filter(Boolean))];
   const sources = [...new Set(contacts.map(c => c.source).filter(Boolean))];
   const countries = [...new Set(contacts.map(c => c.country && c.country.trim()).filter(Boolean))].sort();
+  const contactLists = lists.filter(l => l.objectType === 'contact');
   scoreSel.innerHTML = '<option value="">All</option>' + scores.map(s => `<option value="${s}">${s}</option>`).join('');
   sourceSel.innerHTML = '<option value="">All</option>' + sources.map(s => `<option value="${s}">${s}</option>`).join('');
   if (countrySel) countrySel.innerHTML = '<option value="">All</option>' + countries.map(c => `<option value="${c}">${c}</option>`).join('');
+  if (listSel) listSel.innerHTML = '<option value="">All Contacts</option>' + contactLists.map(l => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join('');
   if (scores.includes(prevScore)) scoreSel.value = prevScore;
   if (sources.includes(prevSource)) sourceSel.value = prevSource;
   if (countrySel && countries.includes(prevCountry)) countrySel.value = prevCountry;
+  if (listSel && contactLists.some(l => l.id == prevList)) listSel.value = prevList;
 }
 
 function getFilteredCampaignContacts() {
@@ -7444,9 +7618,16 @@ function getFilteredCampaignContacts() {
   const sourceF = document.getElementById('campaignFilterSource').value;
   const countryEl = document.getElementById('campaignFilterCountry');
   const countryF = countryEl ? countryEl.value : '';
+  const listEl = document.getElementById('campaignFilterList');
+  const listF = listEl ? listEl.value : '';
   const searchEl = document.getElementById('campaignSearchName');
   const search = searchEl ? searchEl.value.toLowerCase().trim() : '';
-  return contacts.filter(c =>
+  let pool = contacts;
+  if (listF) {
+    const l = lists.find(x => x.id == listF);
+    if (l) pool = computeListMembers(l);
+  }
+  return pool.filter(c =>
     c.email &&
     (!scoreF || c.leadScore === scoreF) &&
     (!sourceF || c.source === sourceF) &&
@@ -9316,13 +9497,34 @@ function populateAIContactSelectors() {
   const enrichSearch = document.getElementById('enrich-contact-search');
   if (enrichSearch) enrichSearch.value = '';
 
+  // Fill every "Filter by List" dropdown across the AI Automation cards, keeping the current selection if still valid
+  const contactLists = lists.filter(l => l.objectType === 'contact');
+  const listFilterIds = ['scoring-list-filter','followup-list-filter','email-writer-list-filter','enrich-list-filter','bct-list-filter','sentiment-list-filter'];
+  listFilterIds.forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">All Contacts</option>' + contactLists.map(l => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join('');
+    if (contactLists.some(l => l.id == prev)) sel.value = prev;
+  });
+
+  // Returns the contacts array scoped to whichever list is picked in the given filter dropdown (or all contacts)
+  const contactsFor = (filterId) => {
+    const sel = document.getElementById(filterId);
+    const val = sel ? sel.value : '';
+    if (!val) return contacts;
+    const l = lists.find(x => x.id == val);
+    return l ? computeListMembers(l) : contacts;
+  };
+
   // Lead scoring checklist
   const listEl = document.getElementById('scoring-lead-list');
   if (listEl) {
-    if (!contacts.length) {
-      listEl.innerHTML = '<div style="font-size:12px;color:var(--text-light)">No contacts yet.</div>';
+    const scoped = contactsFor('scoring-list-filter');
+    if (!scoped.length) {
+      listEl.innerHTML = '<div style="font-size:12px;color:var(--text-light)">No contacts in this list yet.</div>';
     } else {
-      listEl.innerHTML = contacts.map(c => `
+      listEl.innerHTML = scoped.map(c => `
         <label style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:13px;cursor:pointer">
           <input type="checkbox" class="scoring-lead-checkbox" value="${c.id}">
           <span>${c.name}${c.company ? ' — ' + c.company : ''}</span>
@@ -9336,10 +9538,11 @@ function populateAIContactSelectors() {
   // Email writer dropdown
   const selectEl = document.getElementById('email-writer-contact');
   if (selectEl) {
-    if (!contacts.length) {
-      selectEl.innerHTML = '<option value="">No contacts yet</option>';
+    const scoped = contactsFor('email-writer-list-filter');
+    if (!scoped.length) {
+      selectEl.innerHTML = '<option value="">No contacts in this list yet</option>';
     } else {
-      selectEl.innerHTML = contacts.map(c => `<option value="${c.id}">${c.name}${c.company ? ' — ' + c.company : ''}</option>`).join('');
+      selectEl.innerHTML = scoped.map(c => `<option value="${c.id}">${c.name}${c.company ? ' — ' + c.company : ''}</option>`).join('');
     }
   }
 
@@ -9354,10 +9557,11 @@ function populateAIContactSelectors() {
   // Enrichment dropdown
   const enrichSelectEl = document.getElementById('enrich-contact');
   if (enrichSelectEl) {
-    if (!contacts.length) {
-      enrichSelectEl.innerHTML = '<option value="">No contacts yet</option>';
+    const scoped = contactsFor('enrich-list-filter');
+    if (!scoped.length) {
+      enrichSelectEl.innerHTML = '<option value="">No contacts in this list yet</option>';
     } else {
-      enrichSelectEl.innerHTML = contacts.map(c => `<option value="${c.id}">${c.name}${c.company ? ' — ' + c.company : ''}</option>`).join('');
+      enrichSelectEl.innerHTML = scoped.map(c => `<option value="${c.id}">${c.name}${c.company ? ' — ' + c.company : ''}</option>`).join('');
     }
     onEnrichContactChange();
   }
@@ -9365,10 +9569,11 @@ function populateAIContactSelectors() {
   // Follow-up generator checklist
   const followupListEl = document.getElementById('followup-lead-list');
   if (followupListEl) {
-    if (!contacts.length) {
-      followupListEl.innerHTML = '<div style="font-size:12px;color:var(--text-light)">No contacts yet.</div>';
+    const scoped = contactsFor('followup-list-filter');
+    if (!scoped.length) {
+      followupListEl.innerHTML = '<div style="font-size:12px;color:var(--text-light)">No contacts in this list yet.</div>';
     } else {
-      followupListEl.innerHTML = contacts.map(c => `
+      followupListEl.innerHTML = scoped.map(c => `
         <label style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:13px;cursor:pointer">
           <input type="checkbox" class="followup-lead-checkbox" value="${c.id}">
           <span>${c.name}${c.company ? ' — ' + c.company : ''}</span>
@@ -9388,7 +9593,8 @@ function populateAIContactSelectors() {
   // Best Contact Time — contact dropdown
   const bctSelectEl = document.getElementById('bct-contact-select');
   if (bctSelectEl) {
-    bctSelectEl.innerHTML = contacts.length ? contacts.map(c => `<option value="${c.id}">${escapeHtml(c.name)}${c.company ? ' — ' + escapeHtml(c.company) : ''}</option>`).join('') : '<option value="">No contacts yet</option>';
+    const scoped = contactsFor('bct-list-filter');
+    bctSelectEl.innerHTML = scoped.length ? scoped.map(c => `<option value="${c.id}">${escapeHtml(c.name)}${c.company ? ' — ' + escapeHtml(c.company) : ''}</option>`).join('') : '<option value="">No contacts in this list yet</option>';
     populateBctMyCountrySelect();
     updateBctTimeDisplay();
   }
@@ -9396,7 +9602,8 @@ function populateAIContactSelectors() {
   // Sentiment Analysis — optional contact dropdown
   const sentContactEl = document.getElementById('sentiment-contact-select');
   if (sentContactEl) {
-    sentContactEl.innerHTML = '<option value="">(no specific contact)</option>' + contacts.map(c => `<option value="${c.id}">${escapeHtml(c.name)}${c.company ? ' — ' + escapeHtml(c.company) : ''}</option>`).join('');
+    const scoped = contactsFor('sentiment-list-filter');
+    sentContactEl.innerHTML = '<option value="">(no specific contact)</option>' + scoped.map(c => `<option value="${c.id}">${escapeHtml(c.name)}${c.company ? ' — ' + escapeHtml(c.company) : ''}</option>`).join('');
   }
 }
 

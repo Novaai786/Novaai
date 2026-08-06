@@ -1982,14 +1982,7 @@ Leadnovaai</textarea>
       </select>
       <input class="form-control" id="c-list-new-name" placeholder="New list name, e.g. AIREC Leads" style="display:none;margin-top:6px">
     </div>
-    <div class="form-group" style="background:#f8f9fb;border:1px solid var(--border,#e2e5eb);border-radius:8px;padding:10px 12px">
-      <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="document.getElementById('c-extra-fields-panel').classList.toggle('open')">
-        <label class="form-label" style="margin:0">⚙️ Additional Properties <span style="font-size:10px;color:var(--text-light);font-weight:400">(choose which extra fields to show — your choice is remembered)</span></label>
-        <span style="font-size:12px">▾</span>
-      </div>
-      <div id="c-extra-fields-panel" style="display:none;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
-    </div>
-    <style>#c-extra-fields-panel.open{display:flex !important}</style>
+    <div id="c-extra-fields-panel" style="display:none"></div>
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">First Name *</label>
@@ -2187,14 +2180,7 @@ Leadnovaai</textarea>
       </select>
       <input class="form-control" id="co-list-new-name" placeholder="New list name, e.g. AIREC Leads" style="display:none;margin-top:6px">
     </div>
-    <div class="form-group" style="background:#f8f9fb;border:1px solid var(--border,#e2e5eb);border-radius:8px;padding:10px 12px">
-      <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="document.getElementById('co-extra-fields-panel').classList.toggle('open')">
-        <label class="form-label" style="margin:0">⚙️ Additional Properties <span style="font-size:10px;color:var(--text-light);font-weight:400">(choose which extra fields to show — your choice is remembered)</span></label>
-        <span style="font-size:12px">▾</span>
-      </div>
-      <div id="co-extra-fields-panel" style="display:none;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
-    </div>
-    <style>#co-extra-fields-panel.open{display:flex !important}</style>
+    <div id="co-extra-fields-panel" style="display:none"></div>
     <div class="form-group">
       <label class="form-label">Company Name *</label>
       <input class="form-control" id="co-name" placeholder="e.g. Rad Marketing Agency">
@@ -2490,6 +2476,12 @@ Leadnovaai</textarea>
       <label class="form-label">Filter Criteria <span style="font-size:10px;color:var(--text-light)">(record must match ALL conditions)</span></label>
       <div id="l-filters-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px"></div>
       <button class="btn btn-outline btn-sm" onclick="addListFilterRow()">+ Add Filter</button>
+    </div>
+    <div class="form-group" id="l-category-wrap">
+      <label class="form-label">🏷️ Pipeline / Category <span style="font-size:10px;color:var(--text-light)">(optional — every lead in this list will be moved into this pipeline)</span></label>
+      <select class="form-control" id="l-category">
+        <option value="">— Don't set a pipeline —</option>
+      </select>
     </div>
     <div id="l-static-note" style="font-size:12px;color:var(--text-light);margin:10px 0">
       💡 After saving the list, you can add records from the list detail page using the "+ Add Records" button.
@@ -6130,6 +6122,7 @@ function mapListFromDb(row) {
     listType: row.list_type || 'static',
     filters: row.filters || [],
     memberIds: row.member_ids || [],
+    categoryId: row.category_id || '',
     createdAt: row.created_at || null
   };
 }
@@ -6141,6 +6134,7 @@ function mapListToDb(data, userId) {
     list_type: data.listType || null,
     filters: data.filters || [],
     member_ids: data.memberIds || [],
+    category_id: data.categoryId || null,
     user_id: userId
   };
 }
@@ -6203,22 +6197,10 @@ function getSavedFieldList(storageKey) {
 }
 
 function renderContactExtraFieldsPanel() {
-  const panel = document.getElementById('c-extra-fields-panel');
-  if (!panel) return;
-  const saved = getSavedFieldList('contactVisibleExtraFields');
-  panel.innerHTML = CONTACT_OPTIONAL_FIELDS.map(([key, label]) => `
-    <label style="font-size:12px;display:flex;align-items:center;gap:5px;width:47%;min-width:150px;cursor:pointer">
-      <input type="checkbox" ${saved.includes(key) ? 'checked' : ''} onchange="toggleContactExtraField('${key}', this.checked)"> ${label}
-    </label>`).join('');
-  applyContactExtraFieldVisibility(saved);
-}
-
-function toggleContactExtraField(key, checked) {
-  let saved = getSavedFieldList('contactVisibleExtraFields');
-  if (checked && !saved.includes(key)) saved.push(key);
-  if (!checked) saved = saved.filter(k => k !== key);
-  localStorage.setItem('contactVisibleExtraFields', JSON.stringify(saved));
-  applyContactExtraFieldVisibility(saved);
+  // The old "choose which extra fields to show" checklist has been removed — only the
+  // 5 default fields (First/Last/Email/Country/Phone) ever show in the Add Contact form now.
+  // Anything else the user needs should be added as a Custom Property instead.
+  applyContactExtraFieldVisibility([]);
 }
 
 function applyContactExtraFieldVisibility(saved) {
@@ -6244,22 +6226,9 @@ const COMPANY_FIELD_TO_INPUTS = {
 };
 
 function renderCompanyExtraFieldsPanel() {
-  const panel = document.getElementById('co-extra-fields-panel');
-  if (!panel) return;
-  const saved = getSavedFieldList('companyVisibleExtraFields');
-  panel.innerHTML = COMPANY_OPTIONAL_FIELDS.map(([key, label]) => `
-    <label style="font-size:12px;display:flex;align-items:center;gap:5px;width:47%;min-width:150px;cursor:pointer">
-      <input type="checkbox" ${saved.includes(key) ? 'checked' : ''} onchange="toggleCompanyExtraField('${key}', this.checked)"> ${label}
-    </label>`).join('');
-  applyCompanyExtraFieldVisibility(saved);
-}
-
-function toggleCompanyExtraField(key, checked) {
-  let saved = getSavedFieldList('companyVisibleExtraFields');
-  if (checked && !saved.includes(key)) saved.push(key);
-  if (!checked) saved = saved.filter(k => k !== key);
-  localStorage.setItem('companyVisibleExtraFields', JSON.stringify(saved));
-  applyCompanyExtraFieldVisibility(saved);
+  // Only the 4 default fields (Company Name/Website/Company Size/Country) ever show
+  // in the Add Company form now — use Custom Properties for anything else.
+  applyCompanyExtraFieldVisibility([]);
 }
 
 function applyCompanyExtraFieldVisibility(saved) {
@@ -6293,6 +6262,9 @@ async function resolveOrCreateList(name, objectType, recordIds) {
       const memberIds = Array.from(new Set([...(existing.memberIds || []).map(String), ...recordIds.map(String)]));
       const { error } = await supabaseClient.from('lists').update({ member_ids: memberIds }).eq('id', existing.id);
       if (error) { alert('Could not add to list: ' + error.message); return null; }
+      if (existing.categoryId) {
+        await applyCategoryToListMembers(objectType, existing.categoryId, recordIds);
+      }
       return existing.id;
     }
     const dbRow = mapListToDb({ name: cleanName, objectType, listType: 'static', filters: [], memberIds: recordIds.map(String) }, userId);
@@ -6346,9 +6318,46 @@ function renderLists() {
   }).join('');
 }
 
+// Applies a list's chosen Pipeline/Category (and its first stage, for contacts/deals) to a batch of record ids.
+async function applyCategoryToListMembers(objectType, categoryId, recordIds) {
+  if (!categoryId || !recordIds || !recordIds.length) return;
+  const cat = categories.find(c => c.id == categoryId);
+  const defaultStage = cat && cat.stages && cat.stages.length ? cat.stages[0] : '';
+  try {
+    if (objectType === 'contact') {
+      const { error } = await supabaseClient.from('leads').update({ category: categoryId, stage: defaultStage }).in('id', recordIds);
+      if (error) { console.error('Could not apply pipeline to leads:', error); return; }
+      await loadContactsFromSupabase();
+    } else if (objectType === 'company') {
+      const { error } = await supabaseClient.from('companies').update({ category: categoryId }).in('id', recordIds);
+      if (error) { console.error('Could not apply pipeline to companies:', error); return; }
+      await loadCompaniesFromSupabase();
+    } else if (objectType === 'deal') {
+      const { error } = await supabaseClient.from('deals').update({ category: categoryId, stage: defaultStage }).in('id', recordIds);
+      if (error) { console.error('Could not apply pipeline to deals:', error); return; }
+      await loadDealsFromSupabase();
+    }
+  } catch (err) {
+    console.error(err);
+  }
+}
+
 function onListObjectTypeChange() {
   document.getElementById('l-filters-list').innerHTML = '';
   if (document.getElementById('l-listtype').value === 'smart') addListFilterRow();
+  populateListCategoryDropdown();
+}
+
+function populateListCategoryDropdown() {
+  const wrap = document.getElementById('l-category-wrap');
+  const sel = document.getElementById('l-category');
+  if (!wrap || !sel) return;
+  const objectType = document.getElementById('l-objecttype').value;
+  if (objectType === 'task') { wrap.style.display = 'none'; sel.value = ''; return; }
+  wrap.style.display = 'block';
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">— Don\'t set a pipeline —</option>' + categories.map(cat => `<option value="${cat.id}">${escapeHtml(cat.name)}</option>`).join('');
+  if (categories.some(cat => cat.id == prev)) sel.value = prev;
 }
 
 function onListTypeChange() {
@@ -6422,6 +6431,8 @@ function clearListForm() {
   document.getElementById('l-smart-filters-wrap').style.display = 'none';
   document.getElementById('l-static-note').style.display = 'block';
   document.getElementById('listModalTitle').textContent = 'Create List';
+  populateListCategoryDropdown();
+  document.getElementById('l-category').value = '';
 }
 
 async function saveList() {
@@ -6430,6 +6441,7 @@ async function saveList() {
   const editId = document.getElementById('l-edit-id').value;
   const objectType = document.getElementById('l-objecttype').value;
   const listType = document.getElementById('l-listtype').value;
+  const categoryId = document.getElementById('l-category').value;
   let filters = [];
   if (listType === 'smart') {
     document.querySelectorAll('#l-filters-list .list-filter-row').forEach(row => {
@@ -6449,11 +6461,15 @@ async function saveList() {
     if (editId) {
       const existing = lists.find(l => l.id == editId);
       const memberIds = existing ? existing.memberIds : [];
-      const dbRow = mapListToDb({ name, objectType, listType, filters, memberIds }, userId);
+      const dbRow = mapListToDb({ name, objectType, listType, filters, memberIds, categoryId }, userId);
       const { error } = await supabaseClient.from('lists').update(dbRow).eq('id', editId);
       if (error) { alert('Could not update list: ' + error.message); return; }
+      // Existing members should immediately be moved into the newly chosen pipeline too
+      if (categoryId && memberIds && memberIds.length) {
+        await applyCategoryToListMembers(objectType, categoryId, memberIds);
+      }
     } else {
-      const dbRow = mapListToDb({ name, objectType, listType, filters, memberIds: [] }, userId);
+      const dbRow = mapListToDb({ name, objectType, listType, filters, memberIds: [], categoryId }, userId);
       const { error } = await supabaseClient.from('lists').insert(dbRow);
       if (error) { alert('Could not save list: ' + error.message); return; }
     }
@@ -6481,6 +6497,8 @@ function editList(id) {
     (l.filters || []).forEach(f => addListFilterRow(f.field, f.operator, f.value));
     if (!(l.filters || []).length) addListFilterRow();
   }
+  populateListCategoryDropdown();
+  document.getElementById('l-category').value = l.categoryId || '';
   openModal('listModal');
 }
 
@@ -6631,6 +6649,9 @@ async function confirmAddRecordsToList() {
   checked.forEach(id => existing.add(String(id)));
   l.memberIds = Array.from(existing);
   await persistListMembers(l);
+  if (l.categoryId) {
+    await applyCategoryToListMembers(l.objectType, l.categoryId, checked);
+  }
   closeModal('listAddRecordsModal');
   renderListDetailMembers();
   renderLists();

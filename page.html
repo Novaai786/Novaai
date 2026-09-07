@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Loading…</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background: #F8FAFC;
+    color: #0F172A;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+  }
+  .lp-wrap { width: 100%; max-width: 560px; }
+  .lp-card {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.08);
+    overflow: hidden;
+  }
+  .lp-image { width: 100%; max-height: 280px; object-fit: cover; display: block; }
+  .lp-body { padding: 32px 28px; }
+  .lp-headline { font-size: 26px; font-weight: 800; line-height: 1.25; margin-bottom: 10px; }
+  .lp-subheadline { font-size: 15px; color: #64748B; margin-bottom: 18px; line-height: 1.5; }
+  .lp-text { font-size: 14px; color: #334155; line-height: 1.6; margin-bottom: 24px; white-space: pre-wrap; }
+  .lp-field { margin-bottom: 14px; }
+  .lp-label { display: block; font-size: 12px; font-weight: 600; color: #64748B; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .lp-input, .lp-textarea {
+    width: 100%;
+    padding: 11px 14px;
+    border: 1.5px solid #E2E8F0;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .lp-input:focus, .lp-textarea:focus { border-color: var(--theme, #2563EB); }
+  .lp-submit {
+    width: 100%;
+    padding: 13px 20px;
+    border: none;
+    border-radius: 8px;
+    background: var(--theme, #2563EB);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    margin-top: 6px;
+    transition: opacity 0.15s;
+  }
+  .lp-submit:hover { opacity: 0.9; }
+  .lp-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+  .lp-error { color: #dc2626; font-size: 13px; margin-bottom: 12px; display: none; }
+  .lp-success { text-align: center; padding: 40px 20px; }
+  .lp-success-icon { font-size: 44px; margin-bottom: 14px; }
+  .lp-success-msg { font-size: 16px; font-weight: 600; color: #0F172A; }
+  .lp-footer { text-align: center; font-size: 11px; color: #94A3B8; margin-top: 18px; }
+  .lp-state { text-align: center; padding: 60px 20px; color: #64748B; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="lp-wrap" id="lpWrap">
+  <div class="lp-state" id="lpState">Loading…</div>
+</div>
+
+<script>
+  const SUPABASE_URL = "https://opowguxlsaeheuipsaap.supabase.co";
+  const SUPABASE_ANON_KEY = "sb_publishable_6UhVK10PfL2FThRZbcd3Yg_dAp8E4jo";
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  function escapeHtml(str) {
+    return String(str || '').replace(/[&<>"']/g, m => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[m]));
+  }
+
+  function getPageId() {
+    const params = new URLSearchParams(location.search);
+    return params.get('id');
+  }
+
+  async function loadPage() {
+    const id = getPageId();
+    const wrap = document.getElementById('lpWrap');
+    if (!id) { wrap.innerHTML = '<div class="lp-state">This link is missing a page ID.</div>'; return; }
+
+    const { data, error } = await supabaseClient
+      .from('landing_pages')
+      .select('*')
+      .eq('id', id)
+      .eq('published', true)
+      .maybeSingle();
+
+    if (error || !data) {
+      wrap.innerHTML = '<div class="lp-state">This page is unavailable or has been unpublished.</div>';
+      return;
+    }
+
+    document.title = data.headline || 'Contact Us';
+    const theme = data.theme_color || '#2563EB';
+    const fields = data.fields || {};
+
+    let fieldsHtml = `
+      <div class="lp-field">
+        <label class="lp-label">Full Name</label>
+        <input class="lp-input" id="lpFname" placeholder="Your name" required>
+      </div>
+      <div class="lp-field">
+        <label class="lp-label">Email</label>
+        <input class="lp-input" id="lpEmail" type="email" placeholder="you@example.com" required>
+      </div>`;
+    if (fields.phone) {
+      fieldsHtml += `
+      <div class="lp-field">
+        <label class="lp-label">Phone</label>
+        <input class="lp-input" id="lpPhone" placeholder="+1 555 000 0000">
+      </div>`;
+    }
+    if (fields.company) {
+      fieldsHtml += `
+      <div class="lp-field">
+        <label class="lp-label">Company</label>
+        <input class="lp-input" id="lpCompany" placeholder="Company name">
+      </div>`;
+    }
+    if (fields.message) {
+      fieldsHtml += `
+      <div class="lp-field">
+        <label class="lp-label">Message</label>
+        <textarea class="lp-textarea" id="lpMessage" rows="3" placeholder="Tell us a bit more..."></textarea>
+      </div>`;
+    }
+
+    wrap.innerHTML = `
+      <div class="lp-card" style="--theme:${escapeHtml(theme)}">
+        ${data.image_url ? `<img class="lp-image" src="${escapeHtml(data.image_url)}" alt="">` : ''}
+        <div class="lp-body">
+          <div class="lp-headline">${escapeHtml(data.headline)}</div>
+          ${data.subheadline ? `<div class="lp-subheadline">${escapeHtml(data.subheadline)}</div>` : ''}
+          ${data.body ? `<div class="lp-text">${escapeHtml(data.body)}</div>` : ''}
+          <form id="lpForm">
+            ${fieldsHtml}
+            <div class="lp-error" id="lpError"></div>
+            <button type="submit" class="lp-submit" id="lpSubmitBtn">${escapeHtml(data.submit_text || 'Submit')}</button>
+          </form>
+        </div>
+      </div>
+      <div class="lp-footer">Powered by NovaAICRM</div>
+    `;
+
+    document.getElementById('lpForm').addEventListener('submit', (e) => submitForm(e, id, data));
+  }
+
+  async function submitForm(e, pageId, pageData) {
+    e.preventDefault();
+    const errEl = document.getElementById('lpError');
+    const btn = document.getElementById('lpSubmitBtn');
+    errEl.style.display = 'none';
+
+    const fname = document.getElementById('lpFname').value.trim();
+    const email = document.getElementById('lpEmail').value.trim();
+    if (!fname || !email) { errEl.textContent = 'Please fill in your name and email.'; errEl.style.display = 'block'; return; }
+
+    const phoneEl = document.getElementById('lpPhone');
+    const companyEl = document.getElementById('lpCompany');
+    const messageEl = document.getElementById('lpMessage');
+
+    btn.disabled = true;
+    btn.textContent = 'Submitting…';
+
+    const { error } = await supabaseClient.rpc('submit_landing_page_lead', {
+      p_page_id: pageId,
+      p_fname: fname,
+      p_lname: '',
+      p_email: email,
+      p_phone: phoneEl ? phoneEl.value.trim() : '',
+      p_company: companyEl ? companyEl.value.trim() : '',
+      p_message: messageEl ? messageEl.value.trim() : ''
+    });
+
+    if (error) {
+      btn.disabled = false;
+      btn.textContent = pageData.submit_text || 'Submit';
+      errEl.textContent = 'Something went wrong. Please try again.';
+      errEl.style.display = 'block';
+      console.error(error);
+      return;
+    }
+
+    document.getElementById('lpWrap').innerHTML = `
+      <div class="lp-card">
+        <div class="lp-success">
+          <div class="lp-success-icon">✅</div>
+          <div class="lp-success-msg">${escapeHtml(pageData.success_message || 'Thank you! We will be in touch shortly.')}</div>
+        </div>
+      </div>`;
+  }
+
+  loadPage();
+</script>
+</body>
+</html>

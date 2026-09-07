@@ -498,6 +498,23 @@
 
   select.form-control { cursor: pointer; }
 
+  /* WORKFLOW VISUAL CANVAS */
+  .wf-canvas-wrap { display: flex; flex-direction: column; align-items: stretch; margin: 4px 0 6px; }
+  .wf-node { border: 1.5px solid var(--border); border-radius: 12px; background: #fff; padding: 14px; position: relative; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+  .wf-node-trigger { border-color: var(--primary); background: var(--primary-light); }
+  .wf-node-action { background: #fff; }
+  .wf-node-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .wf-node-label { font-weight: 700; font-size: 12.5px; display: flex; align-items: center; gap: 6px; }
+  .wf-node-icon { font-size: 14px; }
+  .wf-node-step-num { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 10.5px; font-weight: 700; margin-right: 2px; }
+  .wf-node-del { background: none; border: none; color: #dc2626; cursor: pointer; font-size: 14px; line-height: 1; padding: 2px; }
+  .wf-node-del:hover { opacity: 0.7; }
+  .wf-connector { display: flex; flex-direction: column; align-items: center; position: relative; min-height: 34px; justify-content: center; }
+  .wf-connector-line { width: 2px; flex: 1; min-height: 12px; background: var(--border); }
+  .wf-insert-btn { width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 1.5px solid var(--primary); color: var(--primary); font-size: 15px; font-weight: 700; line-height: 1; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; margin: -2px 0; flex-shrink: 0; z-index: 1; }
+  .wf-insert-btn:hover { background: var(--primary); color: #fff; }
+  .wf-inserter-row { display: flex; gap: 6px; align-items: center; background: var(--bg); border: 1.5px dashed var(--primary); border-radius: 10px; padding: 8px; width: 100%; margin: 2px 0; }
+
   .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
   /* TASKS */
@@ -753,6 +770,9 @@
     <div class="nav-label">Tools</div>
     <div class="nav-item" onclick="showSection('products', this)">
       <span class="icon">📦</span> Products
+    </div>
+    <div class="nav-item" onclick="showSection('formspages', this)">
+      <span class="icon">📝</span> Forms &amp; Pages
     </div>
     <div class="nav-item" onclick="showSection('automation', this)">
       <span class="icon">🤖</span> AI Automation
@@ -1376,6 +1396,22 @@ Leadnovaai</textarea>
         </div>
         <div class="products-grid" id="productsGrid">
           <div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--text-light)">No products yet. Add your first product.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FORMS & LANDING PAGES -->
+    <div class="section" id="section-formspages">
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header">
+          <div class="card-title">📝 Forms &amp; Landing Pages</div>
+          <button class="btn btn-primary btn-sm" onclick="openLandingPageModal()">+ Create Page</button>
+        </div>
+        <div style="padding:20px">
+          <div style="font-size:12.5px;color:var(--text-light);margin-bottom:14px">
+            Build a public lead-capture page — headline, image, text, and a form. Share the link anywhere; every submission is added straight to your Contacts.
+          </div>
+          <div id="landingPagesList"><div style="padding:20px;text-align:center;color:var(--text-light)">No pages yet. Create your first one above.</div></div>
         </div>
       </div>
     </div>
@@ -3216,6 +3252,7 @@ let team = []; // now loaded from Supabase (see loadTeamFromSupabase)
 // ===== WORKFLOW AUTOMATION =====
 let workflows = []; // now loaded from Supabase (see loadWorkflowsFromSupabase)
 let wfActionDraft = []; // temp working array while building/editing a workflow in the modal
+let wfInserterPos = null; // position index currently showing the "add step" picker on the canvas, or null
 let firedOverdueWorkflowTaskIds = new Set(); // prevents a task_overdue workflow from firing more than once per task
 const WF_TRIGGER_LABELS = {
   deal_stage_changed: 'Deal reaches stage',
@@ -3325,7 +3362,7 @@ function showSection(id, el) {
     dashboard:'Dashboard', contacts:'Contacts', companies:'Companies', lists:'Lists',
     deals:'Deals & Pipeline', categories:'Service Categories & Pipelines', tasks:'Tasks', email:'Email Tracking',
     products:'Products', automation:'AI Automation', reports:'Reports', importexport:'Import / Export',
-    team:'Team & Roles', properties:'Properties'
+    team:'Team & Roles', properties:'Properties', formspages:'Forms & Pages'
   };
   document.getElementById('pageTitle').textContent = titles[id] || id;
   closeSidebar();
@@ -3342,6 +3379,7 @@ function showSection(id, el) {
   if (id === 'reports') renderReports();
   if (id === 'team') renderTeam();
   if (id === 'properties') renderPropertiesManager();
+  if (id === 'formspages') loadLandingPagesFromSupabase();
 }
 
 // MODAL
@@ -6878,56 +6916,16 @@ function onWorkflowTriggerChange() {
   }
 }
 
-function renderWfActionDraft() {
-  const el = document.getElementById('wf-actions-list');
-  if (!el) return;
-  if (!wfActionDraft.length) { el.innerHTML = '<div style="font-size:12px;color:var(--text-light)">No actions added yet — pick one below and click "Add Action".</div>'; return; }
-  el.innerHTML = wfActionDraft.map((a, idx) => {
-    let fields = '';
-    if (a.type === 'send_email') {
-      fields = `
-        <input class="form-control" style="margin-bottom:6px" placeholder="Subject" value="${escapeHtml(a.subject || '')}" oninput="updateWfAction(${idx},'subject',this.value)">
-        <textarea class="form-control" rows="2" style="margin-bottom:6px" placeholder="Body — use {{name}}, {{company}}, {{title}}" oninput="updateWfAction(${idx},'body',this.value)">${escapeHtml(a.body || '')}</textarea>
-        <div style="display:flex;gap:6px;align-items:center">
-          <span style="font-size:11.5px;color:var(--text-light)">Send after (days):</span>
-          <input type="number" min="0" max="60" class="form-control" style="max-width:70px" value="${a.delayDays !== undefined ? a.delayDays : 0}" oninput="updateWfAction(${idx},'delayDays',this.value)">
-        </div>`;
-    } else if (a.type === 'create_task') {
-      fields = `
-        <input class="form-control" style="margin-bottom:6px" placeholder="Task title — use {{name}}, {{company}}" value="${escapeHtml(a.title || '')}" oninput="updateWfAction(${idx},'title',this.value)">
-        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-          <span style="font-size:11.5px;color:var(--text-light)">Due in (days):</span>
-          <input type="number" min="0" max="60" class="form-control" style="max-width:70px" value="${a.delayDays !== undefined ? a.delayDays : 2}" oninput="updateWfAction(${idx},'delayDays',this.value)">
-          <select class="form-control" style="max-width:110px" onchange="updateWfAction(${idx},'priority',this.value)">
-            <option ${a.priority === 'Low' ? 'selected' : ''}>Low</option>
-            <option ${(!a.priority || a.priority === 'Medium') ? 'selected' : ''}>Medium</option>
-            <option ${a.priority === 'High' ? 'selected' : ''}>High</option>
-          </select>
-        </div>`;
-    } else if (a.type === 'notify') {
-      fields = `<input class="form-control" placeholder="Notification message — use {{name}}, {{company}}" value="${escapeHtml(a.message || '')}" oninput="updateWfAction(${idx},'message',this.value)">`;
-    } else if (a.type === 'send_whatsapp' || a.type === 'send_sms') {
-      fields = `<textarea class="form-control" rows="2" placeholder="Message — use {{name}}, {{company}}" oninput="updateWfAction(${idx},'body',this.value)">${escapeHtml(a.body || '')}</textarea>`;
-    } else if (a.type === 'assign_owner') {
-      fields = `<select class="form-control" onchange="updateWfAction(${idx},'owner',this.value)">
-        <option value="">Select team member</option>
-        ${team.map(t => `<option value="${escapeHtml(t.name)}" ${a.owner === t.name ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}
-      </select>`;
-    }
-    return `<div style="border:1px solid var(--border);border-radius:8px;padding:10px;background:var(--bg)">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <strong style="font-size:12.5px">${WF_ACTION_LABELS[a.type] || a.type}</strong>
-        <button class="btn btn-outline btn-sm" style="color:#dc2626;border-color:#dc2626;padding:2px 8px" onclick="removeWfAction(${idx})">✕</button>
-      </div>
-      ${fields}
-    </div>`;
-  }).join('');
-}
+// ----- Visual canvas: node + connector rendering -----
+const WF_INSERT_TYPE_OPTIONS = `
+  <option value="send_email">✉️ Send an email</option>
+  <option value="send_whatsapp">💬 Send a WhatsApp message</option>
+  <option value="send_sms">📩 Send an SMS</option>
+  <option value="create_task">✅ Create a task</option>
+  <option value="notify">🔔 Show a notification</option>
+  <option value="assign_owner">👤 Assign owner</option>`;
 
-function updateWfAction(idx, field, value) { if (wfActionDraft[idx]) wfActionDraft[idx][field] = value; }
-function removeWfAction(idx) { wfActionDraft.splice(idx, 1); renderWfActionDraft(); }
-function addWorkflowActionRow() {
-  const type = document.getElementById('wf-new-action-type').value;
+function wfActionDefaults(type) {
   const defaults = {
     send_email: { type, subject: '', body: '', delayDays: 0 },
     send_whatsapp: { type, body: '' },
@@ -6936,9 +6934,90 @@ function addWorkflowActionRow() {
     notify: { type, message: '' },
     assign_owner: { type, owner: '' }
   };
-  wfActionDraft.push(defaults[type]);
+  return defaults[type];
+}
+
+function wfActionFieldsHtml(a, idx) {
+  if (a.type === 'send_email') {
+    return `
+      <input class="form-control" style="margin-bottom:6px" placeholder="Subject" value="${escapeHtml(a.subject || '')}" oninput="updateWfAction(${idx},'subject',this.value)">
+      <textarea class="form-control" rows="2" style="margin-bottom:6px" placeholder="Body — use {{name}}, {{company}}, {{title}}" oninput="updateWfAction(${idx},'body',this.value)">${escapeHtml(a.body || '')}</textarea>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span style="font-size:11.5px;color:var(--text-light)">Send after (days):</span>
+        <input type="number" min="0" max="60" class="form-control" style="max-width:70px" value="${a.delayDays !== undefined ? a.delayDays : 0}" oninput="updateWfAction(${idx},'delayDays',this.value)">
+      </div>`;
+  } else if (a.type === 'create_task') {
+    return `
+      <input class="form-control" style="margin-bottom:6px" placeholder="Task title — use {{name}}, {{company}}" value="${escapeHtml(a.title || '')}" oninput="updateWfAction(${idx},'title',this.value)">
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:11.5px;color:var(--text-light)">Due in (days):</span>
+        <input type="number" min="0" max="60" class="form-control" style="max-width:70px" value="${a.delayDays !== undefined ? a.delayDays : 2}" oninput="updateWfAction(${idx},'delayDays',this.value)">
+        <select class="form-control" style="max-width:110px" onchange="updateWfAction(${idx},'priority',this.value)">
+          <option ${a.priority === 'Low' ? 'selected' : ''}>Low</option>
+          <option ${(!a.priority || a.priority === 'Medium') ? 'selected' : ''}>Medium</option>
+          <option ${a.priority === 'High' ? 'selected' : ''}>High</option>
+        </select>
+      </div>`;
+  } else if (a.type === 'notify') {
+    return `<input class="form-control" placeholder="Notification message — use {{name}}, {{company}}" value="${escapeHtml(a.message || '')}" oninput="updateWfAction(${idx},'message',this.value)">`;
+  } else if (a.type === 'send_whatsapp' || a.type === 'send_sms') {
+    return `<textarea class="form-control" rows="2" placeholder="Message — use {{name}}, {{company}}" oninput="updateWfAction(${idx},'body',this.value)">${escapeHtml(a.body || '')}</textarea>`;
+  } else if (a.type === 'assign_owner') {
+    return `<select class="form-control" onchange="updateWfAction(${idx},'owner',this.value)">
+      <option value="">Select team member</option>
+      ${team.map(t => `<option value="${escapeHtml(t.name)}" ${a.owner === t.name ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}
+    </select>`;
+  }
+  return '';
+}
+
+function wfConnectorHtml(pos) {
+  if (wfInserterPos === pos) {
+    return `<div class="wf-connector">
+      <div class="wf-connector-line"></div>
+      <div class="wf-inserter-row">
+        <select class="form-control" id="wf-inserter-type-${pos}" style="font-size:12px;padding:6px 8px;flex:1">${WF_INSERT_TYPE_OPTIONS}</select>
+        <button type="button" class="btn btn-primary btn-sm" onclick="wfInsertActionAt(${pos})">Add</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="wfCancelInsert()">✕</button>
+      </div>
+      <div class="wf-connector-line"></div>
+    </div>`;
+  }
+  return `<div class="wf-connector">
+    <div class="wf-connector-line"></div>
+    <button type="button" class="wf-insert-btn" onclick="wfShowInserter(${pos})" title="Add a step here">+</button>
+    <div class="wf-connector-line"></div>
+  </div>`;
+}
+
+function renderWfActionDraft() {
+  const el = document.getElementById('wf-actions-list');
+  if (!el) return;
+  let html = wfConnectorHtml(0);
+  wfActionDraft.forEach((a, idx) => {
+    html += `<div class="wf-node wf-node-action">
+      <div class="wf-node-header">
+        <span class="wf-node-label"><span class="wf-node-step-num">${idx + 1}</span> ${WF_ACTION_LABELS[a.type] || a.type}</span>
+        <button type="button" class="wf-node-del" onclick="removeWfAction(${idx})" title="Remove step">✕</button>
+      </div>
+      ${wfActionFieldsHtml(a, idx)}
+    </div>`;
+    html += wfConnectorHtml(idx + 1);
+  });
+  el.innerHTML = html;
+}
+
+function wfShowInserter(pos) { wfInserterPos = pos; renderWfActionDraft(); }
+function wfCancelInsert() { wfInserterPos = null; renderWfActionDraft(); }
+function wfInsertActionAt(pos) {
+  const sel = document.getElementById('wf-inserter-type-' + pos);
+  const type = sel ? sel.value : 'send_email';
+  wfActionDraft.splice(pos, 0, wfActionDefaults(type));
+  wfInserterPos = null;
   renderWfActionDraft();
 }
+function updateWfAction(idx, field, value) { if (wfActionDraft[idx]) wfActionDraft[idx][field] = value; }
+function removeWfAction(idx) { wfActionDraft.splice(idx, 1); renderWfActionDraft(); }
 
 function openWorkflowModal(id) {
   document.getElementById('wf-edit-id').value = '';
@@ -6947,6 +7026,7 @@ function openWorkflowModal(id) {
   document.getElementById('wf-stage').value = '';
   document.getElementById('wf-error').style.display = 'none';
   wfActionDraft = [];
+  wfInserterPos = null;
   if (id) {
     const w = workflows.find(w => w.id === id);
     if (w) {
@@ -7024,6 +7104,208 @@ async function toggleWorkflowActive(id) {
     if (!session) return;
     const { error } = await supabaseClient.from('workflows').update({ active: w.active }).eq('id', id);
     if (error) console.error('Could not toggle workflow:', error);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+// ===================== FORMS & LANDING PAGES =====================
+let landingPages = []; // loaded from Supabase
+
+function mapLandingPageFromDb(row) {
+  return {
+    id: row.id,
+    title: row.title || '',
+    headline: row.headline || '',
+    subheadline: row.subheadline || '',
+    imageUrl: row.image_url || '',
+    body: row.body || '',
+    fields: row.fields || {},
+    submitText: row.submit_text || 'Submit',
+    themeColor: row.theme_color || '#2563EB',
+    successMessage: row.success_message || 'Thank you! We will be in touch shortly.',
+    published: row.published !== false
+  };
+}
+
+function mapLandingPageToDb(p, userId) {
+  return {
+    title: p.title || null,
+    headline: p.headline || null,
+    subheadline: p.subheadline || null,
+    image_url: p.imageUrl || null,
+    body: p.body || null,
+    fields: p.fields || {},
+    submit_text: p.submitText || null,
+    theme_color: p.themeColor || null,
+    success_message: p.successMessage || null,
+    published: !!p.published,
+    user_id: userId
+  };
+}
+
+async function loadLandingPagesFromSupabase() {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const userId = session.user.id;
+    const { data, error } = await supabaseClient
+      .from('landing_pages')
+      .select('*')
+      .eq('user_id', userId)
+      .order('id', { ascending: false });
+    if (error) { console.error('Could not load landing pages:', error); return; }
+    landingPages = (data || []).map(mapLandingPageFromDb);
+    renderLandingPagesList();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function landingPageUrl(id) {
+  const base = location.href.replace(/[^/]*$/, '');
+  return base + 'page.html?id=' + id;
+}
+
+function renderLandingPagesList() {
+  const el = document.getElementById('landingPagesList');
+  if (!el) return;
+  if (!landingPages.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-light)">No pages yet. Create your first one above.</div>'; return; }
+  el.innerHTML = landingPages.map(p => `
+    <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+        <div>
+          <div style="font-weight:600;font-size:13.5px">${escapeHtml(p.title)}${p.published ? '' : ' <span style="color:var(--text-light);font-weight:500;font-size:11px">(unpublished)</span>'}</div>
+          <div style="font-size:12px;color:var(--text-light);margin-top:2px">${escapeHtml(p.headline)}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button class="btn btn-outline btn-sm" onclick="toggleLandingPagePublished(${p.id})">${p.published ? '⏸ Unpublish' : '▶️ Publish'}</button>
+          <button class="btn btn-outline btn-sm" onclick="openLandingPageModal(${p.id})">✏️ Edit</button>
+          <button class="btn btn-outline btn-sm" style="color:#dc2626;border-color:#dc2626" onclick="deleteLandingPage(${p.id})">🗑️</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--bg);border-radius:8px;padding:8px 10px">
+        <input class="form-control" readonly value="${escapeHtml(landingPageUrl(p.id))}" style="flex:1;min-width:180px;font-size:12px;background:#fff" onclick="this.select()">
+        <button class="btn btn-outline btn-sm" onclick="copyLandingPageLink(${p.id})">📋 Copy</button>
+        <a class="btn btn-outline btn-sm" href="${escapeHtml(landingPageUrl(p.id))}" target="_blank" style="text-decoration:none">🔗 View</a>
+      </div>
+    </div>`).join('');
+}
+
+function copyLandingPageLink(id) {
+  const url = landingPageUrl(id);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(() => showToast('✅ Link copied')).catch(() => showToast(url));
+  } else {
+    showToast(url);
+  }
+}
+
+function openLandingPageModal(id) {
+  document.getElementById('lp-edit-id').value = '';
+  document.getElementById('lp-title').value = '';
+  document.getElementById('lp-headline').value = '';
+  document.getElementById('lp-subheadline').value = '';
+  document.getElementById('lp-image').value = '';
+  document.getElementById('lp-body').value = '';
+  document.getElementById('lp-field-phone').checked = false;
+  document.getElementById('lp-field-company').checked = false;
+  document.getElementById('lp-field-message').checked = false;
+  document.getElementById('lp-submit-text').value = 'Get Started';
+  document.getElementById('lp-color').value = '#2563EB';
+  document.getElementById('lp-success').value = 'Thank you! We will be in touch shortly.';
+  document.getElementById('lp-published').checked = true;
+  document.getElementById('lp-error').style.display = 'none';
+  if (id) {
+    const p = landingPages.find(p => p.id === id);
+    if (p) {
+      document.getElementById('lp-edit-id').value = p.id;
+      document.getElementById('lp-title').value = p.title;
+      document.getElementById('lp-headline').value = p.headline;
+      document.getElementById('lp-subheadline').value = p.subheadline;
+      document.getElementById('lp-image').value = p.imageUrl;
+      document.getElementById('lp-body').value = p.body;
+      document.getElementById('lp-field-phone').checked = !!(p.fields || {}).phone;
+      document.getElementById('lp-field-company').checked = !!(p.fields || {}).company;
+      document.getElementById('lp-field-message').checked = !!(p.fields || {}).message;
+      document.getElementById('lp-submit-text').value = p.submitText;
+      document.getElementById('lp-color').value = p.themeColor || '#2563EB';
+      document.getElementById('lp-success').value = p.successMessage;
+      document.getElementById('lp-published').checked = p.published;
+      document.getElementById('landingPageModalTitle').textContent = 'Edit Page';
+    }
+  } else {
+    document.getElementById('landingPageModalTitle').textContent = 'Create Page';
+  }
+  openModal('landingPageModal');
+}
+
+async function saveLandingPage() {
+  const title = document.getElementById('lp-title').value.trim();
+  const headline = document.getElementById('lp-headline').value.trim();
+  const errEl = document.getElementById('lp-error');
+  errEl.style.display = 'none';
+  if (!title) { errEl.textContent = 'Page name is required.'; errEl.style.display = 'block'; return; }
+  if (!headline) { errEl.textContent = 'Headline is required.'; errEl.style.display = 'block'; return; }
+  const editId = document.getElementById('lp-edit-id').value;
+  const p = {
+    title, headline,
+    subheadline: document.getElementById('lp-subheadline').value.trim(),
+    imageUrl: document.getElementById('lp-image').value.trim(),
+    body: document.getElementById('lp-body').value.trim(),
+    fields: {
+      phone: document.getElementById('lp-field-phone').checked,
+      company: document.getElementById('lp-field-company').checked,
+      message: document.getElementById('lp-field-message').checked
+    },
+    submitText: document.getElementById('lp-submit-text').value.trim() || 'Submit',
+    themeColor: document.getElementById('lp-color').value || '#2563EB',
+    successMessage: document.getElementById('lp-success').value.trim() || 'Thank you!',
+    published: document.getElementById('lp-published').checked
+  };
+  try {
+    const session = window.__currentSession;
+    if (!session) { alert('Session expired. Please log in again.'); return; }
+    const userId = session.user.id;
+    const dbRow = mapLandingPageToDb(p, userId);
+    if (editId) {
+      const { error } = await supabaseClient.from('landing_pages').update(dbRow).eq('id', editId);
+      if (error) { errEl.textContent = 'Could not save: ' + error.message; errEl.style.display = 'block'; return; }
+    } else {
+      const { error } = await supabaseClient.from('landing_pages').insert(dbRow);
+      if (error) { errEl.textContent = 'Could not save: ' + error.message; errEl.style.display = 'block'; return; }
+    }
+    closeModal('landingPageModal');
+    await loadLandingPagesFromSupabase();
+    showToast('✅ Page saved');
+  } catch (err) {
+    console.error(err);
+    errEl.textContent = 'Something went wrong.';
+    errEl.style.display = 'block';
+  }
+}
+
+async function deleteLandingPage(id) {
+  if (!confirm('Delete this page? The public link will stop working.')) return;
+  try {
+    const { error } = await supabaseClient.from('landing_pages').delete().eq('id', id);
+    if (error) { alert('Could not delete: ' + error.message); return; }
+    await loadLandingPagesFromSupabase();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function toggleLandingPagePublished(id) {
+  const p = landingPages.find(p => p.id === id);
+  if (!p) return;
+  p.published = !p.published;
+  renderLandingPagesList();
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const { error } = await supabaseClient.from('landing_pages').update({ published: p.published }).eq('id', id);
+    if (error) console.error('Could not toggle page:', error);
   } catch (err) {
     console.error(err);
   }
@@ -11309,7 +11591,7 @@ function copyScriptCode() {
 
 <!-- Workflow Automation Modal -->
 <div class="modal-overlay" id="workflowModal">
-  <div class="modal" style="max-width:600px">
+  <div class="modal" style="max-width:640px">
     <div class="modal-header">
       <div class="modal-title" id="workflowModalTitle">Create Workflow</div>
       <button class="modal-close" onclick="closeModal('workflowModal')">✕</button>
@@ -11319,41 +11601,95 @@ function copyScriptCode() {
       <label class="form-label">Workflow Name *</label>
       <input class="form-control" id="wf-name" placeholder="e.g. Deal Won → Thank You">
     </div>
-    <div class="form-group">
-      <label class="form-label">Trigger — When... *</label>
-      <select class="form-control" id="wf-trigger" onchange="onWorkflowTriggerChange()">
-        <option value="deal_stage_changed">Deal moves to a specific stage</option>
-        <option value="deal_won">Deal is marked Won</option>
-        <option value="deal_lost">Deal is marked Lost</option>
-        <option value="deal_created">New deal is created</option>
-        <option value="contact_created">New contact/lead is created</option>
-        <option value="task_overdue">A task becomes overdue</option>
-      </select>
-    </div>
-    <div class="form-group" id="wf-stage-group" style="display:none">
-      <label class="form-label">Target Stage</label>
-      <input class="form-control" id="wf-stage" list="wf-stage-options" placeholder="e.g. Proposal Sent">
-      <datalist id="wf-stage-options"></datalist>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Actions — Do... *</label>
-      <div id="wf-actions-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px"></div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <select class="form-control" id="wf-new-action-type" style="max-width:220px">
-          <option value="send_email">✉️ Send an email</option>
-          <option value="send_whatsapp">💬 Send a WhatsApp message</option>
-          <option value="send_sms">📩 Send an SMS</option>
-          <option value="create_task">✅ Create a task</option>
-          <option value="notify">🔔 Show a notification</option>
-          <option value="assign_owner">👤 Assign owner</option>
+
+    <div class="wf-canvas-wrap">
+      <div class="wf-node wf-node-trigger">
+        <div class="wf-node-header">
+          <span class="wf-node-label"><span class="wf-node-icon">⚡</span> Trigger — When...</span>
+        </div>
+        <select class="form-control" id="wf-trigger" onchange="onWorkflowTriggerChange()">
+          <option value="deal_stage_changed">Deal moves to a specific stage</option>
+          <option value="deal_won">Deal is marked Won</option>
+          <option value="deal_lost">Deal is marked Lost</option>
+          <option value="deal_created">New deal is created</option>
+          <option value="contact_created">New contact/lead is created</option>
+          <option value="task_overdue">A task becomes overdue</option>
         </select>
-        <button class="btn btn-outline btn-sm" onclick="addWorkflowActionRow()">+ Add Action</button>
+        <div id="wf-stage-group" style="display:none;margin-top:8px">
+          <input class="form-control" id="wf-stage" list="wf-stage-options" placeholder="e.g. Proposal Sent">
+          <datalist id="wf-stage-options"></datalist>
+        </div>
       </div>
+      <div id="wf-actions-list"></div>
     </div>
+
     <div id="wf-error" style="display:none;color:#dc2626;font-size:12px;margin-bottom:8px"></div>
     <div style="display:flex;gap:10px;margin-top:8px">
       <button class="btn btn-primary" style="flex:1" onclick="saveWorkflow()">💾 Save Workflow</button>
       <button class="btn btn-outline" onclick="closeModal('workflowModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Landing Page / Form Builder Modal -->
+<div class="modal-overlay" id="landingPageModal">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-header">
+      <div class="modal-title" id="landingPageModalTitle">Create Page</div>
+      <button class="modal-close" onclick="closeModal('landingPageModal')">✕</button>
+    </div>
+    <input type="hidden" id="lp-edit-id">
+    <div class="form-group">
+      <label class="form-label">Page Name (internal) *</label>
+      <input class="form-control" id="lp-title" placeholder="e.g. Free Consultation Signup">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Headline *</label>
+      <input class="form-control" id="lp-headline" placeholder="e.g. Get a Free HubSpot Audit">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Subheadline</label>
+      <input class="form-control" id="lp-subheadline" placeholder="e.g. We'll review your CRM setup, free of charge">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Image URL</label>
+      <input class="form-control" id="lp-image" placeholder="https://...">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Body Text</label>
+      <textarea class="form-control" id="lp-body" rows="3" placeholder="Describe the offer..."></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Form Fields</label>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px"><input type="checkbox" checked disabled> Full Name (always included)</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px"><input type="checkbox" checked disabled> Email (always included)</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px"><input type="checkbox" id="lp-field-phone"> Phone</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px"><input type="checkbox" id="lp-field-company"> Company</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px"><input type="checkbox" id="lp-field-message"> Message</label>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <div class="form-group" style="flex:1">
+        <label class="form-label">Submit Button Text</label>
+        <input class="form-control" id="lp-submit-text" placeholder="Get Started">
+      </div>
+      <div class="form-group" style="flex:1">
+        <label class="form-label">Theme Color</label>
+        <input class="form-control" id="lp-color" type="color" value="#2563EB" style="padding:4px;height:38px">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Success Message</label>
+      <input class="form-control" id="lp-success" placeholder="Thanks! We'll be in touch shortly.">
+    </div>
+    <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;margin-bottom:14px;cursor:pointer">
+      <input type="checkbox" id="lp-published" checked> Published (live and accepting submissions)
+    </label>
+    <div id="lp-error" style="display:none;color:#dc2626;font-size:12px;margin-bottom:8px"></div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button class="btn btn-primary" style="flex:1" onclick="saveLandingPage()">💾 Save Page</button>
+      <button class="btn btn-outline" onclick="closeModal('landingPageModal')">Cancel</button>
     </div>
   </div>
 </div>

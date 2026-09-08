@@ -842,6 +842,24 @@
           </div>
         </div>
       </div>
+      <div class="notif-bell-wrap">
+        <button class="notif-bell-btn" onclick="toggleSettingsPanel()" title="Settings">
+          ⚙️
+        </button>
+        <div class="notif-panel" id="settingsPanel" style="width:220px">
+          <div class="notif-panel-header">
+            <span>Settings</span>
+          </div>
+          <div style="padding:6px 0">
+            <button class="user-dropdown-item" onclick="openCompleteProfile(); closeSettingsPanel();">📝 Complete Profile</button>
+            <button class="user-dropdown-item" onclick="goToTeamFromMenu(); closeSettingsPanel();">🧑‍🤝‍🧑 Team</button>
+            <button class="user-dropdown-item" onclick="showSection('properties', null); closeSettingsPanel();">🏷️ Properties</button>
+            <div style="border-top:1px solid var(--border);margin:4px 0;"></div>
+            <button class="user-dropdown-item" onclick="handleLogout()">🚪 Logout</button>
+            <button class="user-dropdown-item danger" onclick="handleDeleteAccount()">🗑️ Delete Account</button>
+          </div>
+        </div>
+      </div>
       <div class="user-menu-wrap">
         <button class="user-menu-btn" onclick="toggleUserMenu()" style="position:relative">
           <div class="avatar" title="Account" id="topbarAvatar" style="width:36px;height:36px;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;overflow:hidden;">👤</div>
@@ -853,11 +871,6 @@
             <div class="user-dropdown-name" id="userMenuName">Loading...</div>
             <div class="user-dropdown-email" id="userMenuEmail"></div>
           </div>
-          <button class="user-dropdown-item" onclick="openCompleteProfile()">📝 Complete Profile</button>
-          <button class="user-dropdown-item" onclick="goToTeamFromMenu()">🧑‍🤝‍🧑 Team</button>
-          <div style="border-top:1px solid var(--border);margin:4px 0;"></div>
-          <button class="user-dropdown-item" onclick="handleLogout()">🚪 Logout</button>
-          <button class="user-dropdown-item danger" onclick="handleDeleteAccount()">🗑️ Delete Account</button>
         </div>
       </div>
     </div>
@@ -11290,16 +11303,29 @@ function toggleUserMenu() {
   document.getElementById('userDropdown').classList.toggle('open');
 }
 
+function toggleSettingsPanel() {
+  document.getElementById('settingsPanel').classList.toggle('open');
+}
+
+function closeSettingsPanel() {
+  document.getElementById('settingsPanel').classList.remove('open');
+}
+
 document.addEventListener('click', function (e) {
   const wrap = document.querySelector('.user-menu-wrap');
   const dropdown = document.getElementById('userDropdown');
   if (wrap && dropdown && !wrap.contains(e.target)) {
     dropdown.classList.remove('open');
   }
-  const notifWrap = document.querySelector('.notif-bell-wrap');
+  const notifWrap = document.querySelectorAll('.notif-bell-wrap')[0];
   const notifPanel = document.getElementById('notifPanel');
   if (notifWrap && notifPanel && !notifWrap.contains(e.target)) {
     notifPanel.classList.remove('open');
+  }
+  const settingsWrap = document.querySelectorAll('.notif-bell-wrap')[1];
+  const settingsPanel = document.getElementById('settingsPanel');
+  if (settingsWrap && settingsPanel && !settingsWrap.contains(e.target)) {
+    settingsPanel.classList.remove('open');
   }
 });
 

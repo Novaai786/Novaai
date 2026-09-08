@@ -1226,6 +1226,15 @@
           </div>
           <button class="btn btn-primary btn-sm" onclick="saveCampaignSettings()">Save Settings</button>
           <span id="campaignSettingsSaved" style="margin-left:10px;font-size:12px;color:#16a34a"></span>
+
+          <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+            <label class="form-label">🔁 Reply Detection — Your Account ID</label>
+            <div style="font-size:12px;color:var(--text-light);margin-bottom:8px">Paste this into the Apps Script code (replace <code>PASTE_YOUR_ACCOUNT_ID_HERE</code>) so replies are matched to your leads. See Setup Guide, Step 5.</div>
+            <div style="display:flex;gap:8px">
+              <input class="form-control" id="myAccountIdField" readonly style="font-size:12px;background:var(--bg)">
+              <button class="btn btn-outline btn-sm" onclick="copyMyAccountId()">📋 Copy</button>
+            </div>
+          </div>
         </div>
 
         <!-- COMPOSE -->
@@ -2993,10 +3002,16 @@ Leadnovaai</textarea>
         <pre id="scriptGuideCode" style="background:#0F172A;color:#E2E8F0;padding:16px;border-radius:8px;overflow-x:auto;font-size:11.5px;line-height:1.6;white-space:pre;max-height:340px;overflow-y:auto;">// ===== NovaAICRM — Gmail Email Engine (Google Apps Script) =====
 // No manual Google Sheet needed — this script creates and manages
 // its own Google Sheet automatically the first time it runs.
-// Handles: Send Now, Schedule for Later, Sequences, and Open Tracking.
+// Handles: Send Now, Schedule for Later, Sequences, Open Tracking,
+// and Reply Detection (auto-stops sequences + auto-creates a deal).
 
 const SHEET_NAME_QUEUE = 'EmailQueue';
 const SHEET_NAME_LOG = 'EmailLog';
+
+// ---------- Reply Detection settings — fill these in (Step 5) ----------
+const SUPABASE_URL = 'https://opowguxlsaeheuipsaap.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_6UhVK10PfL2FThRZbcd3Yg_dAp8E4jo';
+const MY_ACCOUNT_ID = 'PASTE_YOUR_ACCOUNT_ID_HERE'; // from CRM &gt; Email &gt; Sender Setup &gt; "Your Account ID"
 
 // ---------- Spreadsheet is created automatically (no setup needed) ----------
 function getOrCreateSpreadsheet() {
@@ -3011,7 +3026,7 @@ function getOrCreateSpreadsheet() {
   queue.setName(SHEET_NAME_QUEUE);
   queue.appendRow(['queueId', 'to', 'subject', 'body', 'fromName', 'scheduledAt', 'status', 'sentAt']);
   const log = ss.insertSheet(SHEET_NAME_LOG);
-  log.appendRow(['trackId', 'to', 'subject', 'fromName', 'status', 'sentAt', 'openedAt']);
+  log.appendRow(['trackId', 'to', 'subject', 'fromName', 'status', 'sentAt', 'openedAt', 'threadId', 'repliedAt']);
   return ss;
 }
 
@@ -3021,16 +3036,19 @@ function getSheet(name) {
   if (!sh) {
     sh = ss.insertSheet(name);
     if (name === SHEET_NAME_QUEUE) sh.appendRow(['queueId', 'to', 'subject', 'body', 'fromName', 'scheduledAt', 'status', 'sentAt']);
-    if (name === SHEET_NAME_LOG) sh.appendRow(['trackId', 'to', 'subject', 'fromName', 'status', 'sentAt', 'openedAt']);
+    if (name === SHEET_NAME_LOG) sh.appendRow(['trackId', 'to', 'subject', 'fromName', 'status', 'sentAt', 'openedAt', 'threadId', 'repliedAt']);
   }
   return sh;
 }
 
-// ---------- Background timer installs itself automatically ----------
+// ---------- Background timers install themselves automatically ----------
 function ensureTrigger() {
-  const exists = ScriptApp.getProjectTriggers().some(t =&gt; t.getHandlerFunction() === 'processQueue');
-  if (!exists) {
+  const triggers = ScriptApp.getProjectTriggers();
+  if (!triggers.some(t =&gt; t.getHandlerFunction() === 'processQueue')) {
     ScriptApp.newTrigger('processQueue').timeBased().everyMinutes(10).create();
+  }
+  if (!triggers.some(t =&gt; t.getHandlerFunction() === 'checkForReplies')) {
+    ScriptApp.newTrigger('checkForReplies').timeBased().everyMinutes(15).create();
   }
 }
 
@@ -3092,8 +3110,10 @@ function handleSendEmail(req) {
   const fromName = req.fromName || 'NovaAICRM';
   try {
     const htmlBody = String(req.body).replace(/\n/g, '&lt;br&gt;') + trackingPixelTag(trackId);
-    GmailApp.sendEmail(req.to, req.subject, req.body, { htmlBody: htmlBody, name: fromName });
-    getSheet(SHEET_NAME_LOG).appendRow([trackId, req.to, req.subject, fromName, 'Sent', new Date(), '']);
+    const draft = GmailApp.createDraft(req.to, req.subject, req.body, { htmlBody: htmlBody, name: fromName });
+    const message = draft.send();
+    const threadId = message.getThread().getId();
+    getSheet(SHEET_NAME_LOG).appendRow([trackId, req.to, req.subject, fromName, 'Sent', new Date(), '', threadId, '']);
     return jsonOut({ success: true, trackId: trackId });
   } catch (err) {
     return jsonOut({ success: false, error: err.message });
@@ -3178,19 +3198,56 @@ function processQueue() {
       try {
         const trackId = genId();
         const htmlBody = String(body).replace(/\n/g, '&lt;br&gt;') + trackingPixelTag(trackId);
-        GmailApp.sendEmail(to, subject, body, { htmlBody: htmlBody, name: fromName || 'NovaAICRM' });
+        const draft = GmailApp.createDraft(to, subject, body, { htmlBody: htmlBody, name: fromName || 'NovaAICRM' });
+        const message = draft.send();
+        const threadId = message.getThread().getId();
         sh.getRange(i + 1, 7).setValue('sent');
         sh.getRange(i + 1, 8).setValue(new Date());
-        getSheet(SHEET_NAME_LOG).appendRow([trackId, to, subject, fromName || 'NovaAICRM', 'Sent', new Date(), '']);
+        getSheet(SHEET_NAME_LOG).appendRow([trackId, to, subject, fromName || 'NovaAICRM', 'Sent', new Date(), '', threadId, '']);
       } catch (err) {
         sh.getRange(i + 1, 7).setValue('failed: ' + err.message);
       }
       Utilities.sleep(500);
     }
   }
+}
+
+// ---------- Runs automatically every ~15 minutes: checks for replies ----------
+function checkForReplies() {
+  if (!MY_ACCOUNT_ID || MY_ACCOUNT_ID === 'PASTE_YOUR_ACCOUNT_ID_HERE') return;
+  const sh = getSheet(SHEET_NAME_LOG);
+  const data = sh.getDataRange().getValues();
+  const myEmail = Session.getActiveUser().getEmail();
+  for (let i = 1; i &lt; data.length; i++) {
+    const row = data[i];
+    const to = row[1], threadId = row[7], repliedAt = row[8];
+    if (!threadId || repliedAt) continue;
+    try {
+      const thread = GmailApp.getThreadById(threadId);
+      if (!thread) continue;
+      const messages = thread.getMessages();
+      if (messages.length &lt; 2) continue;
+      const last = messages[messages.length - 1];
+      if (last.getFrom().indexOf(myEmail) !== -1) continue;
+      notifyReply(to);
+      sh.getRange(i + 1, 9).setValue(new Date());
+    } catch (err) { /* skip this row */ }
+  }
+}
+
+function notifyReply(email) {
+  try {
+    UrlFetchApp.fetch(SUPABASE_URL + '/rest/v1/rpc/mark_email_replied', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + SUPABASE_ANON_KEY },
+      payload: JSON.stringify({ p_user_id: MY_ACCOUNT_ID, p_email: email }),
+      muteHttpExceptions: true
+    });
+  } catch (err) { /* silent */ }
 }</pre>
       </div>
-      <p style="font-size:12px;color:var(--text-light);margin-bottom:14px">Nothing to edit in this code — no Spreadsheet ID, no manual sheet setup. It's ready to deploy as-is.</p>
+      <p style="font-size:12px;color:var(--text-light);margin-bottom:14px">Only one thing to edit before deploying: paste your Account ID into <code>MY_ACCOUNT_ID</code> near the top (Step 5 below shows where to copy it from). Everything else is ready as-is.</p>
 
       <h4 style="margin:16px 0 6px">Step 3: Deploy as a Web App</h4>
       <p>
@@ -3203,12 +3260,16 @@ function processQueue() {
       <h4 style="margin:16px 0 6px">Step 4: Connect It to the CRM</h4>
       <p>Paste that Web app URL into <strong>"Sender Setup"</strong> above and click <strong>Save Settings</strong>. That's it — <strong>Send Campaign Now</strong>, <strong>Schedule for Later</strong>, and <strong>Sequences</strong> all work immediately. The background timer that sends scheduled and sequence emails installs itself automatically the first time you send or schedule anything — no separate step needed, and it checks every 10 minutes for anything due.</p>
 
+      <h4 style="margin:16px 0 6px">Step 5: Turn On Reply Detection (Optional)</h4>
+      <p>In <strong>"Sender Setup"</strong> above, copy the <strong>"Your Account ID"</strong> value. Go back to the Apps Script editor, find the line <code>const MY_ACCOUNT_ID = 'PASTE_YOUR_ACCOUNT_ID_HERE';</code> near the top, and paste your ID in between the quotes. Save the script, then <strong>Deploy → Manage deployments → Edit (pencil) → Version: New version → Deploy</strong> to push the update. From then on, every ~15 minutes the script checks if any lead replied — if they did, their status becomes "Replied", any active follow-up sequence for them stops automatically, and a new deal is created for them in your CRM.</p>
+
       <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:10px">
         <strong style="font-size:12.5px">⚠️ Good to know:</strong>
         <ul style="margin:8px 0 0 18px;font-size:12.5px;color:var(--text-light);line-height:1.6">
           <li>Free Gmail limit: 500 emails/day (1,500/day on Google Workspace).</li>
           <li>This script only ever uses your own Gmail account — no one's email or password is ever requested.</li>
           <li>If you ever redeploy and get a new URL, remember to update it again in Sender Setup above.</li>
+          <li>Reply Detection only works for emails sent through this script (Campaigns, Workflows, Sequences) after this update — it can't see replies to emails sent before you added this code.</li>
         </ul>
       </div>
     </div>
@@ -3310,7 +3371,7 @@ const WF_TRIGGER_LABELS = {
   contact_created: 'New contact is created',
   task_overdue: 'A task becomes overdue'
 };
-const WF_ACTION_LABELS = { send_email: '✉️ Send Email', create_task: '✅ Create Task', notify: '🔔 Notification', assign_owner: '👤 Assign Owner', send_whatsapp: '💬 Send WhatsApp', send_sms: '📩 Send SMS' };
+const WF_ACTION_LABELS = { send_email: '✉️ Send Email', create_task: '✅ Create Task', notify: '🔔 Notification', assign_owner: '👤 Assign Owner', send_whatsapp: '💬 Send WhatsApp', send_sms: '📩 Send SMS', enroll_sequence: '🔁 Enroll in Sequence' };
 
 // ===== WHATSAPP / SMS + LEAD ASSIGNMENT SETTINGS =====
 let automationSettings = {
@@ -6989,7 +7050,8 @@ function wfActionDefaults(type) {
     send_sms: { type, body: '' },
     create_task: { type, title: '', delayDays: 2, priority: 'Medium' },
     notify: { type, message: '' },
-    assign_owner: { type, owner: '' }
+    assign_owner: { type, owner: '' },
+    enroll_sequence: { type, sequenceId: '' }
   };
   return defaults[type];
 }
@@ -7023,6 +7085,14 @@ function wfActionFieldsHtml(a, idx) {
     return `<select class="form-control" onchange="updateWfAction(${idx},'owner',this.value)">
       <option value="">Select team member</option>
       ${team.map(t => `<option value="${escapeHtml(t.name)}" ${a.owner === t.name ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}
+    </select>`;
+  } else if (a.type === 'enroll_sequence') {
+    if (!sequences.length) {
+      return `<div style="font-size:12px;color:var(--text-light)">No sequences yet — build one first in Email &gt; Email Sequences.</div>`;
+    }
+    return `<select class="form-control" onchange="updateWfAction(${idx},'sequenceId',this.value)">
+      <option value="">Select a sequence</option>
+      ${sequences.map(s => `<option value="${s.id}" ${String(a.sequenceId) === String(s.id) ? 'selected' : ''}>${escapeHtml(s.name)} (${s.steps.length} emails)</option>`).join('')}
     </select>`;
   }
   return '';
@@ -7396,9 +7466,74 @@ async function executeWorkflowAction(action, record) {
     else if (action.type === 'create_task') await wfCreateTask(action, record);
     else if (action.type === 'notify') wfNotify(action, record);
     else if (action.type === 'assign_owner') await wfAssignOwner(action, record);
+    else if (action.type === 'enroll_sequence') await wfEnrollSequence(action, record);
   } catch (err) {
     console.error('Workflow action failed:', err);
   }
+}
+
+async function enrollContactInSequenceProgrammatic(seq, contact, baseStart) {
+  baseStart = baseStart || new Date();
+  const enrollment = {
+    id: Date.now() + Math.random(),
+    sequenceId: seq.id,
+    sequenceName: seq.name,
+    contactId: contact.id || null,
+    contactName: contact.name || contact.email,
+    contactEmail: contact.email,
+    enrolledDate: new Date().toLocaleString(),
+    status: 'active',
+    steps: []
+  };
+  let cumulativeDays = 0;
+  for (let i = 0; i < seq.steps.length; i++) {
+    const step = seq.steps[i];
+    cumulativeDays += (step.delayDays || 0);
+    const scheduledAt = new Date(baseStart);
+    scheduledAt.setDate(scheduledAt.getDate() + cumulativeDays);
+    const subject = mergeTags(step.subject, contact);
+    const body = mergeTags(step.body, contact);
+    try {
+      const res = await fetch(campaignSettings.webAppUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'scheduleEmail',
+          to: contact.email,
+          subject: subject,
+          body: body,
+          fromName: campaignSettings.fromName || 'NovaAICRM',
+          scheduledAt: scheduledAt.toISOString()
+        })
+      });
+      const data = await res.json();
+      enrollment.steps.push({ stepIndex: i, subject, scheduledAt: scheduledAt.toISOString(), queueId: data.queueId || null, status: data.success ? 'pending' : 'failed' });
+    } catch (err) {
+      enrollment.steps.push({ stepIndex: i, subject, scheduledAt: scheduledAt.toISOString(), queueId: null, status: 'failed' });
+    }
+  }
+  try {
+    const session = window.__currentSession;
+    if (session) {
+      const dbRow = mapEnrollmentToDb(enrollment, session.user.id);
+      const { error } = await supabaseClient.from('sequence_enrollments').insert(dbRow);
+      if (error) console.error('Could not save enrollment:', error);
+    }
+  } catch (err) {
+    console.error(err);
+  }
+  return enrollment;
+}
+
+async function wfEnrollSequence(action, record) {
+  if (!action.sequenceId) { console.warn('Workflow: no sequence selected, skipping enroll_sequence action'); return; }
+  const contact = wfResolveContact(record) || record;
+  if (!contact || !contact.email) { console.warn('Workflow: no matching contact email found, skipping enroll_sequence action'); return; }
+  if (!campaignSettings.webAppUrl) { console.warn('Workflow: no Apps Script URL configured in Sender Setup, skipping enroll_sequence action'); return; }
+  const seq = sequences.find(s => String(s.id) === String(action.sequenceId));
+  if (!seq) { console.warn('Workflow: sequence not found, skipping enroll_sequence action'); return; }
+  await enrollContactInSequenceProgrammatic(seq, contact);
+  await loadSequenceEnrollmentsFromSupabase();
 }
 
 function wfResolveContact(record) {
@@ -7928,6 +8063,19 @@ async function loadCampaignSettingsFromSupabase() {
 function loadCampaignSettings() {
   document.getElementById('campaignWebAppUrl').value = campaignSettings.webAppUrl || '';
   document.getElementById('campaignFromName').value = campaignSettings.fromName || '';
+  const idField = document.getElementById('myAccountIdField');
+  if (idField) {
+    const session = window.__currentSession;
+    idField.value = session ? session.user.id : '';
+  }
+}
+
+function copyMyAccountId() {
+  const idField = document.getElementById('myAccountIdField');
+  if (!idField || !idField.value) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(idField.value).then(() => showToast('✅ Account ID copied')).catch(() => {});
+  }
 }
 
 async function saveCampaignSettings() {
@@ -8595,64 +8743,8 @@ async function enrollContactsInSequence() {
     line.textContent = `Enrolling ${c.email}...`;
     logEl.appendChild(line);
 
-    const enrollment = {
-      id: Date.now() + Math.random(),
-      sequenceId: seq.id,
-      sequenceName: seq.name,
-      contactId: c.id,
-      contactName: c.name || c.email,
-      contactEmail: c.email,
-      enrolledDate: new Date().toLocaleString(),
-      status: 'active',
-      steps: []
-    };
-
-    let cumulativeDays = 0;
-    let stepOk = true;
-    for (let i = 0; i < seq.steps.length; i++) {
-      const step = seq.steps[i];
-      cumulativeDays += (step.delayDays || 0);
-      const scheduledAt = new Date(baseStart);
-      scheduledAt.setDate(scheduledAt.getDate() + cumulativeDays);
-      const subject = mergeTags(step.subject, c);
-      const body = mergeTags(step.body, c);
-      try {
-        const res = await fetch(campaignSettings.webAppUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({
-            action: 'scheduleEmail',
-            to: c.email,
-            subject: subject,
-            body: body,
-            fromName: campaignSettings.fromName || 'NovaAICRM',
-            scheduledAt: scheduledAt.toISOString()
-          })
-        });
-        const data = await res.json();
-        enrollment.steps.push({
-          stepIndex: i,
-          subject: subject,
-          scheduledAt: scheduledAt.toISOString(),
-          queueId: data.queueId || null,
-          status: data.success ? 'pending' : 'failed'
-        });
-        if (!data.success) stepOk = false;
-      } catch (err) {
-        enrollment.steps.push({ stepIndex: i, subject, scheduledAt: scheduledAt.toISOString(), queueId: null, status: 'failed' });
-        stepOk = false;
-      }
-    }
-    try {
-      const session = window.__currentSession;
-      if (session) {
-        const dbRow = mapEnrollmentToDb(enrollment, session.user.id);
-        const { error } = await supabaseClient.from('sequence_enrollments').insert(dbRow);
-        if (error) console.error('Could not save enrollment:', error);
-      }
-    } catch (err) {
-      console.error(err);
-    }
+    const enrollment = await enrollContactInSequenceProgrammatic(seq, c, baseStart);
+    const stepOk = enrollment.steps.every(s => s.status !== 'failed');
     enrolledCount++;
     line.textContent = stepOk ? `✅ Enrolled ${c.email} — ${seq.steps.length} emails scheduled` : `⚠️ Enrolled ${c.email} with some failures`;
   }

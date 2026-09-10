@@ -3370,7 +3370,8 @@ const WF_TRIGGER_LABELS = {
   deal_created: 'New deal is created',
   contact_created: 'New contact added manually (in CRM)',
   landing_page_lead: 'New lead from a Landing Page',
-  task_overdue: 'A task becomes overdue'
+  task_overdue: 'A task becomes overdue',
+  custom_condition: 'Custom Condition (field-based)'
 };
 const WF_ACTION_LABELS = { send_email: '✉️ Send Email', create_task: '✅ Create Task', notify: '🔔 Notification', assign_owner: '👤 Assign Owner', send_whatsapp: '💬 Send WhatsApp', send_sms: '📩 Send SMS', enroll_sequence: '🔁 Enroll in Sequence' };
 
@@ -3917,6 +3918,8 @@ async function saveContact() {
     if (editId) {
       const { error } = await supabaseClient.from('leads').update(dbRow).eq('id', editId);
       if (error) { alert('Could not update lead: ' + error.message); return; }
+      data.id = editId;
+      runWorkflows('custom_condition', { ...data, _wfObjectType: 'contact' });
       await applyListPickerSelection('c', 'contact', editId);
     } else {
       const { data: insertedRows, error } = await supabaseClient.from('leads').insert(dbRow).select();
@@ -3924,6 +3927,7 @@ async function saveContact() {
       if (insertedRows && insertedRows[0]) data.id = insertedRows[0].id;
       data.name = fn + (lnameVal ? ' ' + lnameVal : '');
       runWorkflows('contact_created', data);
+      runWorkflows('custom_condition', { ...data, _wfObjectType: 'contact' });
       addNotification('🆕 New Contact', data.name + (data.company ? ' — ' + data.company : ''));
       if (automationSettings.roundRobinEnabled && (automationSettings.roundRobinTeamIds || []).length) {
         await autoAssignLeadRoundRobin(data.id);
@@ -5618,6 +5622,7 @@ async function saveDeal() {
         const dbRow = mapDealToDb(d, userId);
         const { error } = await supabaseClient.from('deals').update(dbRow).eq('id', editId);
         if (error) { alert('Could not update deal: ' + error.message); return; }
+        runWorkflows('custom_condition', { ...d, _wfObjectType: 'deal' });
       }
     } else {
       const newDeal = Object.assign({
@@ -5632,6 +5637,7 @@ async function saveDeal() {
       showToast(`✅ Deal added — follow-up task auto-created for 2 days from now`);
       addNotification('💼 New Deal', newDeal.name + (newDeal.company ? ' — ' + newDeal.company : ''));
       runWorkflows('deal_created', newDeal);
+      runWorkflows('custom_condition', { ...newDeal, _wfObjectType: 'deal' });
     }
 
     closeModal('dealModal'); clearDealForm();
@@ -5699,6 +5705,7 @@ async function moveDeal(id, newStage) {
   }
   renderDeals(); renderDashboard();
   runWorkflows('deal_stage_changed', d);
+  runWorkflows('custom_condition', { ...d, _wfObjectType: 'deal' });
   if (newStage === 'Won') { runWorkflows('deal_won', d); addNotification('🎉 Deal Won', d.name + (d.company ? ' — ' + d.company : '')); }
   if (newStage === 'Lost') { runWorkflows('deal_lost', d); addNotification('❌ Deal Lost', d.name + (d.company ? ' — ' + d.company : '')); }
   try {
@@ -7042,6 +7049,10 @@ function renderWorkflows() {
   el.innerHTML = workflows.map(w => {
     let trigDesc = WF_TRIGGER_LABELS[w.triggerType] || w.triggerType;
     if (w.triggerType === 'deal_stage_changed' && w.triggerConfig.toStage) trigDesc += ` "${escapeHtml(w.triggerConfig.toStage)}"`;
+    if (w.triggerType === 'custom_condition' && w.triggerConfig.field) {
+      const fLabel = w.triggerConfig.field.startsWith('cf__') ? w.triggerConfig.field.slice(4) : w.triggerConfig.field;
+      trigDesc += ` — ${escapeHtml(w.triggerConfig.object || '')}.${escapeHtml(fLabel)} ${escapeHtml(w.triggerConfig.operator || 'equals')} "${escapeHtml(w.triggerConfig.value || '')}"`;
+    }
     const actionsDesc = (w.actions || []).map(a => WF_ACTION_LABELS[a.type] || a.type).join(', ') || 'no actions';
     return `<div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
       <div>
@@ -7057,13 +7068,50 @@ function renderWorkflows() {
   }).join('');
 }
 
+const WF_DEFAULT_FIELDS = {
+  contact: [
+    { key: 'status', label: 'Status' },
+    { key: 'source', label: 'Source' },
+    { key: 'country', label: 'Country' },
+    { key: 'title', label: 'Title' },
+    { key: 'company', label: 'Company' },
+    { key: 'category', label: 'Category' },
+    { key: 'priority', label: 'Priority' },
+    { key: 'decisionMaker', label: 'Decision Maker' },
+    { key: 'budget', label: 'Budget' },
+    { key: 'icp', label: 'ICP' }
+  ],
+  deal: [
+    { key: 'stage', label: 'Stage' },
+    { key: 'category', label: 'Category' },
+    { key: 'owner', label: 'Owner' },
+    { key: 'company', label: 'Company' }
+  ]
+};
+
+function wfPopulateConditionFields() {
+  const objectType = document.getElementById('wf-cond-object').value;
+  const fieldSelect = document.getElementById('wf-cond-field');
+  const defaults = WF_DEFAULT_FIELDS[objectType] || [];
+  const custom = (typeof customProperties !== 'undefined' ? customProperties : []).filter(p => p.object_type === objectType);
+  const prevValue = fieldSelect.value;
+  fieldSelect.innerHTML =
+    defaults.map(f => `<option value="${f.key}">${escapeHtml(f.label)}</option>`).join('') +
+    custom.map(p => `<option value="cf__${escapeHtml(p.field_key)}">${escapeHtml(p.label)} (custom)</option>`).join('');
+  if (prevValue && [...fieldSelect.options].some(o => o.value === prevValue)) fieldSelect.value = prevValue;
+}
+
 function onWorkflowTriggerChange() {
   const trig = document.getElementById('wf-trigger').value;
   document.getElementById('wf-stage-group').style.display = trig === 'deal_stage_changed' ? '' : 'none';
+  document.getElementById('wf-condition-group').style.display = trig === 'custom_condition' ? '' : 'none';
   if (trig === 'deal_stage_changed') {
     const stageSet = new Set((typeof PIPELINE_STAGES !== 'undefined' ? PIPELINE_STAGES.map(s => s.name) : []));
     categories.forEach(c => (c.stages || []).forEach(s => stageSet.add(s)));
     document.getElementById('wf-stage-options').innerHTML = [...stageSet].map(s => `<option value="${escapeHtml(s)}">`).join('');
+  }
+  if (trig === 'custom_condition') {
+    wfPopulateConditionFields();
   }
 }
 
@@ -7184,6 +7232,9 @@ function openWorkflowModal(id) {
   document.getElementById('wf-name').value = '';
   document.getElementById('wf-trigger').value = 'deal_stage_changed';
   document.getElementById('wf-stage').value = '';
+  document.getElementById('wf-cond-object').value = 'contact';
+  document.getElementById('wf-cond-operator').value = 'equals';
+  document.getElementById('wf-cond-value').value = '';
   document.getElementById('wf-error').style.display = 'none';
   wfActionDraft = [];
   wfInserterPos = null;
@@ -7194,6 +7245,9 @@ function openWorkflowModal(id) {
       document.getElementById('wf-name').value = w.name;
       document.getElementById('wf-trigger').value = w.triggerType;
       document.getElementById('wf-stage').value = (w.triggerConfig || {}).toStage || '';
+      document.getElementById('wf-cond-object').value = (w.triggerConfig || {}).object || 'contact';
+      document.getElementById('wf-cond-operator').value = (w.triggerConfig || {}).operator || 'equals';
+      document.getElementById('wf-cond-value').value = (w.triggerConfig || {}).value || '';
       wfActionDraft = JSON.parse(JSON.stringify(w.actions || []));
       document.getElementById('workflowModalTitle').textContent = 'Edit Workflow';
     }
@@ -7201,6 +7255,12 @@ function openWorkflowModal(id) {
     document.getElementById('workflowModalTitle').textContent = 'Create Workflow';
   }
   onWorkflowTriggerChange();
+  if (id) {
+    const w = workflows.find(w => w.id === id);
+    if (w && w.triggerType === 'custom_condition') {
+      document.getElementById('wf-cond-field').value = (w.triggerConfig || {}).field || '';
+    }
+  }
   renderWfActionDraft();
   openModal('workflowModal');
 }
@@ -7217,6 +7277,15 @@ async function saveWorkflow() {
     const stage = document.getElementById('wf-stage').value.trim();
     if (!stage) { errEl.textContent = 'Enter a target stage.'; errEl.style.display = 'block'; return; }
     triggerConfig.toStage = stage;
+  }
+  if (triggerType === 'custom_condition') {
+    const field = document.getElementById('wf-cond-field').value;
+    const value = document.getElementById('wf-cond-value').value.trim();
+    if (!field || !value) { errEl.textContent = 'Choose a field and enter a value for the condition.'; errEl.style.display = 'block'; return; }
+    triggerConfig.object = document.getElementById('wf-cond-object').value;
+    triggerConfig.field = field;
+    triggerConfig.operator = document.getElementById('wf-cond-operator').value;
+    triggerConfig.value = value;
   }
   const editId = document.getElementById('wf-edit-id').value;
   try {
@@ -7510,6 +7579,22 @@ function workflowConditionMatches(w, record) {
   const cfg = w.triggerConfig || {};
   if (w.triggerType === 'deal_stage_changed' && cfg.toStage) {
     return (record.stage || '') === cfg.toStage;
+  }
+  if (w.triggerType === 'custom_condition') {
+    if (!cfg.field) return false;
+    if (cfg.object && record._wfObjectType && cfg.object !== record._wfObjectType) return false;
+    let fieldVal;
+    if (cfg.field.startsWith('cf__')) {
+      const key = cfg.field.slice(4);
+      fieldVal = (record.customFields && record.customFields[key] !== undefined && record.customFields[key] !== null) ? record.customFields[key] : '';
+    } else {
+      fieldVal = (record[cfg.field] !== undefined && record[cfg.field] !== null) ? record[cfg.field] : '';
+    }
+    fieldVal = String(fieldVal).toLowerCase();
+    const targetVal = String(cfg.value || '').toLowerCase();
+    if (cfg.operator === 'not_equals') return fieldVal !== targetVal;
+    if (cfg.operator === 'contains') return fieldVal.includes(targetVal);
+    return fieldVal === targetVal;
   }
   return true;
 }
@@ -11956,10 +12041,26 @@ function copyScriptCode() {
           <option value="contact_created">New contact added manually (in CRM)</option>
           <option value="landing_page_lead">New lead from a Landing Page</option>
           <option value="task_overdue">A task becomes overdue</option>
+          <option value="custom_condition">Custom Condition (Contact/Deal field)</option>
         </select>
         <div id="wf-stage-group" style="display:none;margin-top:8px">
           <input class="form-control" id="wf-stage" list="wf-stage-options" placeholder="e.g. Proposal Sent">
           <datalist id="wf-stage-options"></datalist>
+        </div>
+        <div id="wf-condition-group" style="display:none;margin-top:8px">
+          <select class="form-control" id="wf-cond-object" style="margin-bottom:6px" onchange="wfPopulateConditionFields()">
+            <option value="contact">Contact</option>
+            <option value="deal">Deal</option>
+          </select>
+          <select class="form-control" id="wf-cond-field" style="margin-bottom:6px"></select>
+          <div style="display:flex;gap:6px">
+            <select class="form-control" id="wf-cond-operator" style="max-width:130px">
+              <option value="equals">Equals</option>
+              <option value="not_equals">Not Equals</option>
+              <option value="contains">Contains</option>
+            </select>
+            <input class="form-control" id="wf-cond-value" placeholder="Value — e.g. UAE">
+          </div>
         </div>
       </div>
       <div id="wf-actions-list"></div>

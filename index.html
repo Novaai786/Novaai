@@ -794,6 +794,9 @@
     <div class="nav-item" onclick="showSection('formspages', this)">
       <span class="icon">📝</span> Forms &amp; Pages
     </div>
+    <div class="nav-item" onclick="showSection('visitors', this)">
+      <span class="icon">🌐</span> Website Visitors
+    </div>
     <div class="nav-item" onclick="showSection('automation', this)">
       <span class="icon">🤖</span> AI Automation
     </div>
@@ -1469,6 +1472,33 @@ Leadnovaai</textarea>
             Build a public lead-capture page — headline, image, text, and a form. Share the link anywhere; every submission is added straight to your Contacts.
           </div>
           <div id="landingPagesList"><div style="padding:20px;text-align:center;color:var(--text-light)">No pages yet. Create your first one above.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- WEBSITE VISITORS -->
+    <div class="section" id="section-visitors">
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header">
+          <div class="card-title">🌐 Tracked Websites</div>
+          <button class="btn btn-primary btn-sm" onclick="openTrackedWebsiteModal()">+ Add Website</button>
+        </div>
+        <div style="padding:20px">
+          <div style="font-size:12.5px;color:var(--text-light);margin-bottom:14px">
+            Track visits on your own site or any client's site — separately for each. Paste a small tracking code on the website, and see who visited, how often, and which pages — right here in your CRM.
+          </div>
+          <div id="trackedWebsitesList"><div style="padding:20px;text-align:center;color:var(--text-light)">No websites added yet. Add your first one above.</div></div>
+        </div>
+      </div>
+
+      <div class="card" id="websiteVisitsCard" style="display:none">
+        <div class="card-header">
+          <div class="card-title" id="websiteVisitsTitle">Visitors</div>
+          <button class="btn btn-outline btn-sm" onclick="document.getElementById('websiteVisitsCard').style.display='none'">✕ Close</button>
+        </div>
+        <div style="padding:20px">
+          <div id="websiteVisitsStats" style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px"></div>
+          <div id="websiteVisitsList"></div>
         </div>
       </div>
     </div>
@@ -3473,7 +3503,7 @@ function showSection(id, el) {
     dashboard:'Dashboard', contacts:'Contacts', companies:'Companies', lists:'Lists',
     deals:'Deals & Pipeline', categories:'Service Categories & Pipelines', tasks:'Tasks', email:'Email Tracking',
     products:'Products', automation:'AI Automation', reports:'Reports', importexport:'Import / Export',
-    team:'Team & Roles', properties:'Properties', formspages:'Forms & Pages'
+    team:'Team & Roles', properties:'Properties', formspages:'Forms & Pages', visitors:'Website Visitors'
   };
   document.getElementById('pageTitle').textContent = titles[id] || id;
   closeSidebar();
@@ -3491,6 +3521,7 @@ function showSection(id, el) {
   if (id === 'team') renderTeam();
   if (id === 'properties') renderPropertiesManager();
   if (id === 'formspages') loadLandingPagesFromSupabase();
+  if (id === 'visitors') loadTrackedWebsitesFromSupabase();
 }
 
 // MODAL
@@ -7537,6 +7568,217 @@ async function toggleLandingPagePublished(id) {
     if (error) console.error('Could not toggle page:', error);
   } catch (err) {
     console.error(err);
+  }
+}
+
+// ===================== WEBSITE VISITOR TRACKING =====================
+let trackedWebsites = [];
+
+function mapTrackedWebsiteFromDb(row) {
+  return { id: row.id, name: row.name || '', domain: row.domain || '', snippetId: row.snippet_id };
+}
+
+async function loadTrackedWebsitesFromSupabase() {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const { data, error } = await supabaseClient
+      .from('tracked_websites')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .order('id', { ascending: false });
+    if (error) { console.error('Could not load tracked websites:', error); return; }
+    trackedWebsites = (data || []).map(mapTrackedWebsiteFromDb);
+    renderTrackedWebsitesList();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function renderTrackedWebsitesList() {
+  const el = document.getElementById('trackedWebsitesList');
+  if (!el) return;
+  if (!trackedWebsites.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-light)">No websites added yet. Add your first one above.</div>'; return; }
+  el.innerHTML = trackedWebsites.map(w => `
+    <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-weight:600;font-size:13.5px">${escapeHtml(w.name)}</div>
+        <div style="font-size:12px;color:var(--text-light);margin-top:2px">${escapeHtml(w.domain || 'No domain set')}</div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-outline btn-sm" onclick="viewWebsiteVisits(${w.id})">👥 View Visitors</button>
+        <button class="btn btn-outline btn-sm" onclick="viewTrackedWebsiteSnippet(${w.id})">📋 Get Code</button>
+        <button class="btn btn-outline btn-sm" style="color:#dc2626;border-color:#dc2626" onclick="deleteTrackedWebsite(${w.id})">🗑️</button>
+      </div>
+    </div>`).join('');
+}
+
+function buildTrackingSnippet(snippetId) {
+  return `<script>
+(function(){
+  var SNIPPET_ID = '${snippetId}';
+  var SUPABASE_URL = 'https://opowguxlsaeheuipsaap.supabase.co';
+  var SUPABASE_ANON_KEY = 'sb_publishable_6UhVK10PfL2FThRZbcd3Yg_dAp8E4jo';
+  function uuid(){return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){var r=Math.random()*16|0,v=c=='x'?r:(r&0x3|0x8);return v.toString(16);});}
+  var vid = localStorage.getItem('novaai_vid');
+  if(!vid){ vid = uuid(); localStorage.setItem('novaai_vid', vid); }
+  function send(path, body){
+    fetch(SUPABASE_URL + '/rest/v1/rpc/' + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY },
+      body: JSON.stringify(body)
+    }).catch(function(){});
+  }
+  send('track_page_view', { p_snippet_id: SNIPPET_ID, p_visitor_id: vid, p_page_url: location.href, p_page_title: document.title, p_referrer: document.referrer || '' });
+  window.novaaiIdentify = function(email){
+    send('identify_website_visitor', { p_snippet_id: SNIPPET_ID, p_visitor_id: vid, p_email: email });
+  };
+})();
+<\/script>`;
+}
+
+function openTrackedWebsiteModal() {
+  document.getElementById('tw-name').value = '';
+  document.getElementById('tw-domain').value = '';
+  document.getElementById('tw-error').style.display = 'none';
+  document.getElementById('tw-form').style.display = '';
+  document.getElementById('tw-snippet-view').style.display = 'none';
+  document.getElementById('trackedWebsiteModalTitle').textContent = 'Add Website';
+  openModal('trackedWebsiteModal');
+}
+
+async function saveTrackedWebsite() {
+  const name = document.getElementById('tw-name').value.trim();
+  const domain = document.getElementById('tw-domain').value.trim();
+  const errEl = document.getElementById('tw-error');
+  errEl.style.display = 'none';
+  if (!name) { errEl.textContent = 'Website name is required.'; errEl.style.display = 'block'; return; }
+  try {
+    const session = window.__currentSession;
+    if (!session) { alert('Session expired. Please log in again.'); return; }
+    const { data, error } = await supabaseClient
+      .from('tracked_websites')
+      .insert({ name, domain: domain || null, user_id: session.user.id })
+      .select();
+    if (error) { errEl.textContent = 'Could not save: ' + error.message; errEl.style.display = 'block'; return; }
+    await loadTrackedWebsitesFromSupabase();
+    if (data && data[0]) showTrackedWebsiteSnippetView(data[0].snippet_id, name);
+  } catch (err) {
+    console.error(err);
+    errEl.textContent = 'Something went wrong.';
+    errEl.style.display = 'block';
+  }
+}
+
+function showTrackedWebsiteSnippetView(snippetId, name) {
+  document.getElementById('tw-form').style.display = 'none';
+  document.getElementById('tw-snippet-view').style.display = '';
+  document.getElementById('trackedWebsiteModalTitle').textContent = 'Tracking Code — ' + name;
+  document.getElementById('tw-snippet-code').textContent = buildTrackingSnippet(snippetId);
+}
+
+function viewTrackedWebsiteSnippet(id) {
+  const w = trackedWebsites.find(w => w.id === id);
+  if (!w) return;
+  showTrackedWebsiteSnippetView(w.snippetId, w.name);
+  openModal('trackedWebsiteModal');
+}
+
+function copyTrackedWebsiteSnippet() {
+  const code = document.getElementById('tw-snippet-code').textContent;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(code).then(() => showToast('✅ Code copied')).catch(() => {});
+  }
+}
+
+async function deleteTrackedWebsite(id) {
+  if (!confirm('Delete this website? Its visitor history will no longer be shown (existing data stays in the database).')) return;
+  try {
+    const { error } = await supabaseClient.from('tracked_websites').delete().eq('id', id);
+    if (error) { alert('Could not delete: ' + error.message); return; }
+    await loadTrackedWebsitesFromSupabase();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function viewWebsiteVisits(id) {
+  const w = trackedWebsites.find(w => w.id === id);
+  if (!w) return;
+  const card = document.getElementById('websiteVisitsCard');
+  const statsEl = document.getElementById('websiteVisitsStats');
+  const listEl = document.getElementById('websiteVisitsList');
+  document.getElementById('websiteVisitsTitle').textContent = '👥 Visitors — ' + w.name;
+  card.style.display = '';
+  statsEl.innerHTML = '';
+  listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-light)">Loading...</div>';
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const { data, error } = await supabaseClient
+      .from('website_visits')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .eq('snippet_id', w.snippetId)
+      .order('created_at', { ascending: false })
+      .limit(1000);
+    if (error) { listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-light)">Could not load visits.</div>'; return; }
+
+    if (!data || !data.length) {
+      listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-light)">No visits recorded yet — make sure the tracking code is on the site and pages have been viewed.</div>';
+      return;
+    }
+
+    const sessions = {};
+    data.forEach(v => {
+      if (!sessions[v.visitor_id]) sessions[v.visitor_id] = { visitorId: v.visitor_id, email: '', pages: [], first: v.created_at, last: v.created_at };
+      const s = sessions[v.visitor_id];
+      s.pages.push({ url: v.page_url, title: v.page_title, at: v.created_at });
+      if (v.visitor_email) s.email = v.visitor_email;
+      if (new Date(v.created_at) < new Date(s.first)) s.first = v.created_at;
+      if (new Date(v.created_at) > new Date(s.last)) s.last = v.created_at;
+    });
+    const sessionList = Object.values(sessions).sort((a, b) => new Date(b.last) - new Date(a.last));
+
+    const totalVisits = data.length;
+    const uniqueVisitors = sessionList.length;
+    const identifiedCount = sessionList.filter(s => s.email).length;
+
+    statsEl.innerHTML = `
+      <div style="background:var(--bg);border-radius:8px;padding:12px 18px;min-width:120px">
+        <div style="font-size:20px;font-weight:700">${totalVisits}</div>
+        <div style="font-size:11.5px;color:var(--text-light)">Total Page Views</div>
+      </div>
+      <div style="background:var(--bg);border-radius:8px;padding:12px 18px;min-width:120px">
+        <div style="font-size:20px;font-weight:700">${uniqueVisitors}</div>
+        <div style="font-size:11.5px;color:var(--text-light)">Unique Visitors</div>
+      </div>
+      <div style="background:var(--bg);border-radius:8px;padding:12px 18px;min-width:120px">
+        <div style="font-size:20px;font-weight:700">${identifiedCount}</div>
+        <div style="font-size:11.5px;color:var(--text-light)">Identified (by email)</div>
+      </div>`;
+
+    listEl.innerHTML = sessionList.map(s => {
+      const pageCounts = {};
+      s.pages.forEach(p => { pageCounts[p.url] = (pageCounts[p.url] || 0) + 1; });
+      const topPages = Object.entries(pageCounts).sort((a, b) => b[1] - a[1]).slice(0, 5)
+        .map(([url, count]) => `<div style="font-size:11.5px;color:var(--text-light);padding:2px 0">• ${escapeHtml(url)} <span style="opacity:0.7">(${count}x)</span></div>`).join('');
+      return `
+        <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+            <div>
+              <div style="font-weight:600;font-size:13px">${s.email ? escapeHtml(s.email) : '👤 Anonymous Visitor'}</div>
+              <div style="font-size:11.5px;color:var(--text-light);margin-top:2px">${s.pages.length} page view${s.pages.length > 1 ? 's' : ''} — last seen ${escapeHtml(timeAgo(s.last))}</div>
+            </div>
+          </div>
+          <div style="margin-top:8px">${topPages}</div>
+        </div>`;
+    }).join('');
+  } catch (err) {
+    console.error(err);
+    listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-light)">Something went wrong.</div>';
   }
 }
 
@@ -12133,6 +12375,44 @@ function copyScriptCode() {
     <div style="display:flex;gap:10px;margin-top:8px">
       <button class="btn btn-primary" style="flex:1" onclick="saveLandingPage()">💾 Save Page</button>
       <button class="btn btn-outline" onclick="closeModal('landingPageModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Tracked Website Modal -->
+<div class="modal-overlay" id="trackedWebsiteModal">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-header">
+      <div class="modal-title" id="trackedWebsiteModalTitle">Add Website</div>
+      <button class="modal-close" onclick="closeModal('trackedWebsiteModal')">✕</button>
+    </div>
+    <div id="tw-form">
+      <div class="form-group">
+        <label class="form-label">Website Name *</label>
+        <input class="form-control" id="tw-name" placeholder="e.g. Leadnovaai Site, or Client X Site">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Domain (for your reference)</label>
+        <input class="form-control" id="tw-domain" placeholder="e.g. leadnovaai.com">
+      </div>
+      <div id="tw-error" style="display:none;color:#dc2626;font-size:12px;margin-bottom:8px"></div>
+      <div style="display:flex;gap:10px;margin-top:8px">
+        <button class="btn btn-primary" style="flex:1" onclick="saveTrackedWebsite()">💾 Add Website</button>
+        <button class="btn btn-outline" onclick="closeModal('trackedWebsiteModal')">Cancel</button>
+      </div>
+    </div>
+    <div id="tw-snippet-view" style="display:none">
+      <p style="font-size:12.5px;color:var(--text-light);margin-bottom:10px">Paste this code just before <code>&lt;/body&gt;</code> on every page of the website you want to track. It's ready to use as-is — nothing to edit.</p>
+      <pre id="tw-snippet-code" style="background:#0F172A;color:#E2E8F0;padding:14px;border-radius:8px;overflow-x:auto;font-size:11px;line-height:1.6;white-space:pre-wrap;max-height:280px;overflow-y:auto;"></pre>
+      <button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="copyTrackedWebsiteSnippet()">📋 Copy Code</button>
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:14px">
+        <strong style="font-size:12.5px">💡 Optional — Identify a visitor by email:</strong>
+        <p style="font-size:12px;color:var(--text-light);margin-top:6px">If the site has its own contact/signup form, call this after a successful submit so that visitor's earlier page views get linked to their email:</p>
+        <pre style="background:#0F172A;color:#E2E8F0;padding:10px;border-radius:6px;font-size:11px;margin-top:6px">window.novaaiIdentify('visitor@example.com');</pre>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button class="btn btn-primary" style="flex:1" onclick="closeModal('trackedWebsiteModal')">Done</button>
+      </div>
     </div>
   </div>
 </div>

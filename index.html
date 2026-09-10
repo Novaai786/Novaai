@@ -797,6 +797,9 @@
     <div class="nav-item" onclick="showSection('visitors', this)">
       <span class="icon">🌐</span> Website Visitors
     </div>
+    <div class="nav-item" onclick="showSection('marketing', this)">
+      <span class="icon">📣</span> Marketing
+    </div>
     <div class="nav-item" onclick="showSection('automation', this)">
       <span class="icon">🤖</span> AI Automation
     </div>
@@ -857,6 +860,7 @@
             <button class="user-dropdown-item" onclick="openCompleteProfile(); closeSettingsPanel();">📝 Complete Profile</button>
             <button class="user-dropdown-item" onclick="goToTeamFromMenu(); closeSettingsPanel();">🧑‍🤝‍🧑 Team</button>
             <button class="user-dropdown-item" onclick="showSection('properties', null); closeSettingsPanel();">🏷️ Properties</button>
+            <button class="user-dropdown-item" onclick="showSection('tracking', null); closeSettingsPanel();">🎯 Tracking</button>
             <div style="border-top:1px solid var(--border);margin:4px 0;"></div>
             <button class="user-dropdown-item" onclick="handleLogout()">🚪 Logout</button>
             <button class="user-dropdown-item danger" onclick="handleDeleteAccount()">🗑️ Delete Account</button>
@@ -1499,6 +1503,73 @@ Leadnovaai</textarea>
         <div style="padding:20px">
           <div id="websiteVisitsStats" style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px"></div>
           <div id="websiteVisitsList"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TRACKING HUB (Settings > Tracking) -->
+    <div class="section" id="section-tracking">
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header">
+          <div class="card-title">🌐 Website Visitors</div>
+          <button class="btn btn-outline btn-sm" onclick="showSection('visitors', null)">Open →</button>
+        </div>
+        <div style="padding:20px;font-size:12.5px;color:var(--text-light)">
+          See who visited your (or your clients') websites, how often, and which pages they viewed.
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header">
+          <div class="card-title">🩺 CRM Health Tracker</div>
+          <button class="btn btn-outline btn-sm" onclick="renderCrmHealthTracker()">🔄 Refresh</button>
+        </div>
+        <div style="padding:20px">
+          <div style="font-size:12.5px;color:var(--text-light);margin-bottom:14px">
+            Automatically scans your CRM for stuck work — stalled deals, overdue tasks, unassigned leads — so problems get caught before they cost you a deal.
+          </div>
+          <div id="crmHealthList"><div style="padding:20px;text-align:center;color:var(--text-light)">Loading…</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">💰 AI Revenue Growth Advisor</div>
+          <button class="btn btn-primary btn-sm" onclick="runRevenueAdvisor()">🤖 Analyze &amp; Get Priorities</button>
+        </div>
+        <div style="padding:20px">
+          <div style="font-size:12.5px;color:var(--text-light);margin-bottom:14px">
+            AI looks at your current pipeline and tells you exactly what to work on first this week to grow revenue — not just a forecast, but a priority list.
+          </div>
+          <div id="revenueAdvisorOutput"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MARKETING -->
+    <div class="section" id="section-marketing">
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header">
+          <div class="card-title">📊 Leads by Channel</div>
+        </div>
+        <div style="padding:20px">
+          <div style="font-size:12.5px;color:var(--text-light);margin-bottom:14px">
+            Shows how many leads came from each tracked link's source — only counts leads that came through a tracked social link below.
+          </div>
+          <div id="leadsByChannelList" style="display:flex;gap:14px;flex-wrap:wrap"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">📣 Content Calendar</div>
+          <button class="btn btn-primary btn-sm" onclick="openMarketingPostModal()">+ New Post</button>
+        </div>
+        <div style="padding:20px">
+          <div style="font-size:12.5px;color:var(--text-light);margin-bottom:14px">
+            Plan and draft posts for Facebook, LinkedIn, and Instagram — write with AI, track performance, and get a trackable link that shows exactly how many leads each post brings in.
+          </div>
+          <div id="marketingPostsList"><div style="padding:20px;text-align:center;color:var(--text-light)">No posts yet. Add your first one above.</div></div>
         </div>
       </div>
     </div>
@@ -3503,7 +3574,7 @@ function showSection(id, el) {
     dashboard:'Dashboard', contacts:'Contacts', companies:'Companies', lists:'Lists',
     deals:'Deals & Pipeline', categories:'Service Categories & Pipelines', tasks:'Tasks', email:'Email Tracking',
     products:'Products', automation:'AI Automation', reports:'Reports', importexport:'Import / Export',
-    team:'Team & Roles', properties:'Properties', formspages:'Forms & Pages', visitors:'Website Visitors'
+    team:'Team & Roles', properties:'Properties', formspages:'Forms & Pages', visitors:'Website Visitors', tracking:'Tracking', marketing:'Marketing'
   };
   document.getElementById('pageTitle').textContent = titles[id] || id;
   closeSidebar();
@@ -3522,6 +3593,8 @@ function showSection(id, el) {
   if (id === 'properties') renderPropertiesManager();
   if (id === 'formspages') loadLandingPagesFromSupabase();
   if (id === 'visitors') loadTrackedWebsitesFromSupabase();
+  if (id === 'tracking') renderCrmHealthTracker();
+  if (id === 'marketing') { loadMarketingPostsFromSupabase(); renderLeadsByChannel(); }
 }
 
 // MODAL
@@ -6013,19 +6086,22 @@ function renderDeals() {
   const kanban = document.getElementById('kanbanPipeline');
   kanban.innerHTML = stageNames.map(stageName => {
     const s = PIPELINE_STAGES.find(ps => ps.name === stageName) || { name: stageName, color: getColor(stageName) };
-    const stageDeals = list.filter(d => d.stage === s.name);
+    const stageDeals = list.filter(d => d.stage === s.name)
+      .sort((a, b) => getExpectedRevenue(b) - getExpectedRevenue(a));
     return `
       <div class="kanban-col" style="--stage-color:${s.color}" data-stage="${s.name}" ondragover="kanbanDragOver(event)" ondragleave="kanbanDragLeave(event)" ondrop="kanbanDrop(event,'${s.name.replace(/'/g,"\\'")}')">
         <div class="kanban-col-title"><span class="dot"></span><span class="name">${s.name}</span><span class="pipeline-count">${stageDeals.length}</span></div>
         <div class="kanban-col-body">
-          ${stageDeals.map(d => {
+          ${stageDeals.map((d, idx) => {
             const stuck = getStuckStatus(d);
             const stuckClass = stuck === 'critical' ? 'stuck-critical' : stuck === 'warning' ? 'stuck-warning' : '';
             const stuckBadge = stuck === 'critical' ? '<span class="badge badge-critical">Critical</span>' : stuck === 'warning' ? '<span class="badge badge-stuck">Stuck</span>' : '';
+            const isTopValue = idx === 0 && stageDeals.length > 1 && parseFloat(d.value) > 0 && getExpectedRevenue(d) > 0;
+            const topValueBadge = isTopValue ? '<span class="badge" style="background:#F59E0B;color:#fff">🔥 Top Value</span>' : '';
             const daysInStage = getCurrentStageDays(d);
             return `
             <div class="deal-card2 ${stuckClass}" draggable="true" id="deal-${d.id}" ondragstart="kanbanDragStart(event,${d.id})" ondragend="kanbanDragEnd(event)">
-              <div class="deal-name">${escapeHtml(d.name)} ${stuckBadge}</div>
+              <div class="deal-name">${escapeHtml(d.name)} ${stuckBadge}${topValueBadge}</div>
               ${d.company ? `<div class="deal-company">${escapeHtml(d.company)}</div>` : ''}
               ${d.value ? `<div class="deal-value">$${parseInt(d.value).toLocaleString()}</div>` : ''}
               ${d.value ? `<div class="deal-days-tag" style="margin-top:2px">📊 ${getCloseProbability(d)}% → Exp. $${getExpectedRevenue(d).toLocaleString()}</div>` : ''}
@@ -7779,6 +7855,394 @@ async function viewWebsiteVisits(id) {
   } catch (err) {
     console.error(err);
     listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-light)">Something went wrong.</div>';
+  }
+}
+
+// ===================== CRM HEALTH TRACKER (rule-based, no AI needed) =====================
+function renderCrmHealthTracker() {
+  const el = document.getElementById('crmHealthList');
+  if (!el) return;
+
+  const issues = [];
+  const now = new Date();
+  const daysAgo = (dateStr) => dateStr ? Math.floor((now - new Date(dateStr)) / 86400000) : null;
+
+  // 1. Stalled deals — sitting in the same (non-Won/Lost) stage for 14+ days
+  const stalledDeals = deals.filter(d => {
+    if (d.stage === 'Won' || d.stage === 'Lost') return false;
+    const hist = d.pipelineHistory || [];
+    const lastEntry = hist.length ? hist[hist.length - 1] : null;
+    const sinceDays = lastEntry ? daysAgo(lastEntry.date) : null;
+    return sinceDays !== null && sinceDays >= 14;
+  });
+  if (stalledDeals.length) {
+    issues.push({
+      icon: '🐌', title: `${stalledDeals.length} deal${stalledDeals.length > 1 ? 's' : ''} stuck in the same stage for 14+ days`,
+      desc: stalledDeals.slice(0, 5).map(d => `${d.name}${d.company ? ' (' + d.company + ')' : ''} — stage: ${d.stage}`).join(', '),
+      actionLabel: 'Go to Deals', actionFn: `showSection('deals', null)`
+    });
+  }
+
+  // 2. Overdue tasks
+  const overdueTasks = tasks.filter(t => !t.done && getTaskStatus(t) === 'overdue');
+  if (overdueTasks.length) {
+    issues.push({
+      icon: '⚠️', title: `${overdueTasks.length} overdue task${overdueTasks.length > 1 ? 's' : ''}`,
+      desc: overdueTasks.slice(0, 5).map(t => t.title).join(', '),
+      actionLabel: 'Go to Tasks', actionFn: `showSection('tasks', null)`
+    });
+  }
+
+  // 3. Deals with no owner assigned
+  const unownedDeals = deals.filter(d => d.stage !== 'Won' && d.stage !== 'Lost' && !d.owner);
+  if (unownedDeals.length) {
+    issues.push({
+      icon: '👤', title: `${unownedDeals.length} open deal${unownedDeals.length > 1 ? 's' : ''} with no owner assigned`,
+      desc: unownedDeals.slice(0, 5).map(d => d.name).join(', '),
+      actionLabel: 'Go to Deals', actionFn: `showSection('deals', null)`
+    });
+  }
+
+  // 4. New leads with no next follow-up scheduled
+  const noFollowupLeads = contacts.filter(c => c.status === 'New' && !c.nextFollowup);
+  if (noFollowupLeads.length) {
+    issues.push({
+      icon: '📅', title: `${noFollowupLeads.length} new lead${noFollowupLeads.length > 1 ? 's' : ''} with no follow-up scheduled`,
+      desc: noFollowupLeads.slice(0, 5).map(c => c.name || c.email).join(', '),
+      actionLabel: 'Go to Contacts', actionFn: `showSection('contacts', null)`
+    });
+  }
+
+  // 5. Workflows that exist but are paused (not active)
+  const pausedWorkflows = workflows.filter(w => !w.active);
+  if (pausedWorkflows.length) {
+    issues.push({
+      icon: '⏸', title: `${pausedWorkflows.length} workflow${pausedWorkflows.length > 1 ? 's' : ''} paused — not running`,
+      desc: pausedWorkflows.slice(0, 5).map(w => w.name).join(', '),
+      actionLabel: 'Go to Automations', actionFn: `showSection('automation', null)`
+    });
+  }
+
+  // 6. Landing pages that are unpublished
+  const unpublishedPages = landingPages.filter(p => !p.published);
+  if (unpublishedPages.length) {
+    issues.push({
+      icon: '📝', title: `${unpublishedPages.length} landing page${unpublishedPages.length > 1 ? 's' : ''} unpublished — not accepting leads`,
+      desc: unpublishedPages.slice(0, 5).map(p => p.title).join(', '),
+      actionLabel: 'Go to Forms & Pages', actionFn: `showSection('formspages', null)`
+    });
+  }
+
+  if (!issues.length) {
+    el.innerHTML = '<div style="padding:20px;text-align:center;color:#16a34a;font-weight:600">✅ No issues found — everything looks healthy!</div>';
+    return;
+  }
+
+  el.innerHTML = issues.map(i => `
+    <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:220px">
+        <div style="font-weight:600;font-size:13px">${i.icon} ${escapeHtml(i.title)}</div>
+        ${i.desc ? `<div style="font-size:11.5px;color:var(--text-light);margin-top:4px">${escapeHtml(i.desc)}</div>` : ''}
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="${i.actionFn}">${escapeHtml(i.actionLabel)}</button>
+    </div>`).join('');
+}
+
+// ===================== AI REVENUE GROWTH ADVISOR =====================
+async function runRevenueAdvisor() {
+  const el = document.getElementById('revenueAdvisorOutput');
+  if (!el) return;
+  if (!deals.length) {
+    el.innerHTML = '<div style="color:var(--text-light);font-size:12.5px">No deals found yet — add some deals first so the AI has something to analyze.</div>';
+    return;
+  }
+  el.innerHTML = '<div style="color:var(--text-light);font-size:12.5px">🤖 AI analyzing your pipeline and priorities…</div>';
+
+  const openDeals = deals.filter(d => d.stage !== 'Won' && d.stage !== 'Lost');
+  const wonDeals = deals.filter(d => d.stage === 'Won');
+  const wonValue = wonDeals.reduce((s, d) => s + (parseFloat(d.value) || 0), 0);
+  const openValue = openDeals.reduce((s, d) => s + (parseFloat(d.value) || 0), 0);
+  const stageBreakdown = {};
+  openDeals.forEach(d => { stageBreakdown[d.stage] = (stageBreakdown[d.stage] || 0) + 1; });
+  const stageSummary = Object.entries(stageBreakdown).map(([stage, count]) => `${stage}: ${count}`).join(', ');
+  const overdueTaskCount = tasks.filter(t => !t.done && getTaskStatus(t) === 'overdue').length;
+  const topDeals = openDeals.slice().sort((a, b) => (parseFloat(b.value) || 0) - (parseFloat(a.value) || 0)).slice(0, 8)
+    .map(d => `${d.name} ($${d.value || 0}, stage: ${d.stage}${d.company ? ', ' + d.company : ''})`).join('; ');
+
+  const prompt = `You are a sales advisor reviewing a CRM pipeline. Won revenue so far: $${wonValue}. Open pipeline value: $${openValue} across ${openDeals.length} deals. Stage breakdown: ${stageSummary || 'none'}. Overdue tasks: ${overdueTaskCount}. Top open deals by value: ${topDeals || 'none'}. Based on this, give a prioritized list of the 5 most impactful things to work on THIS WEEK to grow revenue — be specific about which deals or actions, not generic advice. Format as a numbered list.`;
+
+  try {
+    const raw = await callAI(prompt, 'revenue-priority');
+    el.innerHTML = aiTextToHtml(raw);
+  } catch (err) {
+    el.innerHTML = `<div style="color:#dc2626;font-size:12.5px">⚠️ ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+// ===================== MARKETING: CONTENT CALENDAR + UTM TRACKING =====================
+let marketingPosts = [];
+const MP_PLATFORM_ICON = { Facebook: '📘', LinkedIn: '💼', Instagram: '📸' };
+
+function mapMarketingPostFromDb(row) {
+  return {
+    id: row.id,
+    platform: row.platform || 'Facebook',
+    caption: row.caption || '',
+    hashtags: row.hashtags || '',
+    imageUrl: row.image_url || '',
+    scheduledDate: row.scheduled_date || '',
+    status: row.status || 'Draft',
+    landingPageId: row.landing_page_id || null,
+    utmCampaign: row.utm_campaign || '',
+    likes: row.likes || 0,
+    comments: row.comments || 0,
+    shares: row.shares || 0,
+    clicks: row.clicks || 0
+  };
+}
+
+function mapMarketingPostToDb(p, userId) {
+  return {
+    platform: p.platform || null,
+    caption: p.caption || null,
+    hashtags: p.hashtags || null,
+    image_url: p.imageUrl || null,
+    scheduled_date: p.scheduledDate || null,
+    status: p.status || 'Draft',
+    landing_page_id: p.landingPageId || null,
+    utm_campaign: p.utmCampaign || null,
+    likes: p.likes || 0,
+    comments: p.comments || 0,
+    shares: p.shares || 0,
+    clicks: p.clicks || 0,
+    user_id: userId
+  };
+}
+
+async function loadMarketingPostsFromSupabase() {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const { data, error } = await supabaseClient
+      .from('marketing_posts')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .order('id', { ascending: false });
+    if (error) { console.error('Could not load marketing posts:', error); return; }
+    marketingPosts = (data || []).map(mapMarketingPostFromDb);
+    renderMarketingPostsList();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function marketingPostTrackedLink(p) {
+  if (!p.landingPageId) return '';
+  const base = landingPageUrl(p.landingPageId);
+  const sep = base.includes('?') ? '&' : '?';
+  return `${base}${sep}utm_source=${encodeURIComponent(p.platform.toLowerCase())}&utm_campaign=${encodeURIComponent(p.utmCampaign || ('post-' + p.id))}`;
+}
+
+function renderMarketingPostsList() {
+  const el = document.getElementById('marketingPostsList');
+  if (!el) return;
+  if (!marketingPosts.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-light)">No posts yet. Add your first one above.</div>'; return; }
+
+  const statusColor = { Draft: '#94A3B8', Scheduled: '#F59E0B', Posted: '#16A34A' };
+  el.innerHTML = marketingPosts.map(p => {
+    const link = marketingPostTrackedLink(p);
+    return `
+    <div style="border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:8px">
+        <div>
+          <span style="font-weight:700;font-size:13.5px">${MP_PLATFORM_ICON[p.platform] || '📣'} ${escapeHtml(p.platform)}</span>
+          <span style="background:${statusColor[p.status] || '#94A3B8'};color:#fff;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:8px">${escapeHtml(p.status)}</span>
+          ${p.scheduledDate ? `<span style="font-size:11.5px;color:var(--text-light);margin-left:8px">📅 ${escapeHtml(p.scheduledDate)}</span>` : ''}
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-outline btn-sm" onclick="openMarketingPostModal(${p.id})">✏️ Edit</button>
+          <button class="btn btn-outline btn-sm" style="color:#dc2626;border-color:#dc2626" onclick="deleteMarketingPost(${p.id})">🗑️</button>
+        </div>
+      </div>
+      <div style="font-size:12.5px;color:var(--text);white-space:pre-wrap;margin-bottom:8px">${escapeHtml(p.caption)}</div>
+      ${p.hashtags ? `<div style="font-size:11.5px;color:var(--primary);margin-bottom:8px">${escapeHtml(p.hashtags)}</div>` : ''}
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;background:var(--bg);border-radius:8px;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:4px;font-size:11.5px"><span>👍</span><input type="number" min="0" value="${p.likes}" style="width:55px;border:1px solid var(--border);border-radius:4px;padding:2px 4px" onchange="updateMarketingPostMetric(${p.id},'likes',this.value)"></div>
+        <div style="display:flex;align-items:center;gap:4px;font-size:11.5px"><span>💬</span><input type="number" min="0" value="${p.comments}" style="width:55px;border:1px solid var(--border);border-radius:4px;padding:2px 4px" onchange="updateMarketingPostMetric(${p.id},'comments',this.value)"></div>
+        <div style="display:flex;align-items:center;gap:4px;font-size:11.5px"><span>🔁</span><input type="number" min="0" value="${p.shares}" style="width:55px;border:1px solid var(--border);border-radius:4px;padding:2px 4px" onchange="updateMarketingPostMetric(${p.id},'shares',this.value)"></div>
+        <div style="display:flex;align-items:center;gap:4px;font-size:11.5px"><span>🖱️</span><input type="number" min="0" value="${p.clicks}" style="width:55px;border:1px solid var(--border);border-radius:4px;padding:2px 4px" onchange="updateMarketingPostMetric(${p.id},'clicks',this.value)"></div>
+        ${link ? `<div style="flex:1;min-width:200px;display:flex;gap:6px">
+          <input class="form-control" readonly value="${escapeHtml(link)}" style="font-size:11px;background:#fff" onclick="this.select()">
+          <button class="btn btn-outline btn-sm" onclick="copyMarketingPostLink(${p.id})">📋</button>
+        </div>` : `<div style="font-size:11px;color:var(--text-light);font-style:italic">No landing page linked — edit to add trackable link</div>`}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function updateMarketingPostMetric(id, field, value) {
+  const p = marketingPosts.find(p => p.id === id);
+  if (!p) return;
+  p[field] = parseInt(value) || 0;
+  try {
+    const { error } = await supabaseClient.from('marketing_posts').update({ [field]: p[field] }).eq('id', id);
+    if (error) console.error('Could not update metric:', error);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function copyMarketingPostLink(id) {
+  const p = marketingPosts.find(p => p.id === id);
+  if (!p) return;
+  const link = marketingPostTrackedLink(p);
+  if (!link) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(link).then(() => showToast('✅ Tracked link copied')).catch(() => {});
+  }
+}
+
+function openMarketingPostModal(id) {
+  const lpSelect = document.getElementById('mp-landingpage');
+  lpSelect.innerHTML = '<option value="">None</option>' + landingPages.map(lp => `<option value="${lp.id}">${escapeHtml(lp.title)}</option>`).join('');
+
+  document.getElementById('mp-edit-id').value = '';
+  document.getElementById('mp-platform').value = 'Facebook';
+  document.getElementById('mp-topic').value = '';
+  document.getElementById('mp-caption').value = '';
+  document.getElementById('mp-hashtags').value = '';
+  document.getElementById('mp-image').value = '';
+  document.getElementById('mp-date').value = '';
+  document.getElementById('mp-status').value = 'Draft';
+  lpSelect.value = '';
+  document.getElementById('mp-error').style.display = 'none';
+
+  if (id) {
+    const p = marketingPosts.find(p => p.id === id);
+    if (p) {
+      document.getElementById('mp-edit-id').value = p.id;
+      document.getElementById('mp-platform').value = p.platform;
+      document.getElementById('mp-caption').value = p.caption;
+      document.getElementById('mp-hashtags').value = p.hashtags;
+      document.getElementById('mp-image').value = p.imageUrl;
+      document.getElementById('mp-date').value = p.scheduledDate;
+      document.getElementById('mp-status').value = p.status;
+      lpSelect.value = p.landingPageId || '';
+      document.getElementById('marketingPostModalTitle').textContent = 'Edit Post';
+    }
+  } else {
+    document.getElementById('marketingPostModalTitle').textContent = 'New Post';
+  }
+  openModal('marketingPostModal');
+}
+
+async function aiWriteMarketingPost() {
+  const platform = document.getElementById('mp-platform').value;
+  const topic = document.getElementById('mp-topic').value.trim();
+  if (!topic) { alert('Enter a topic or idea first so the AI knows what to write about.'); return; }
+  const captionEl = document.getElementById('mp-caption');
+  const originalText = captionEl.value;
+  captionEl.value = 'Writing...';
+  captionEl.disabled = true;
+  try {
+    const platformNotes = {
+      Facebook: 'conversational and friendly, 2-4 short sentences, can include an emoji or two, end with a soft call to action',
+      LinkedIn: 'professional and value-driven, 3-5 sentences, can use line breaks, establish credibility, end with a clear call to action',
+      Instagram: 'punchy and visual-first, short lines, emoji-friendly, end with a call to action and note that hashtags go separately'
+    };
+    const prompt = `Write a ${platform} post caption about: "${topic}". Style: ${platformNotes[platform] || ''}. Do not include hashtags in the caption itself. Return only the caption text, nothing else.`;
+    const raw = await callAI(prompt, 'social-post-writer');
+    captionEl.value = raw.trim();
+  } catch (err) {
+    captionEl.value = originalText;
+    alert('AI request failed: ' + err.message);
+  } finally {
+    captionEl.disabled = false;
+  }
+}
+
+async function saveMarketingPost() {
+  const platform = document.getElementById('mp-platform').value;
+  const caption = document.getElementById('mp-caption').value.trim();
+  const errEl = document.getElementById('mp-error');
+  errEl.style.display = 'none';
+  if (!caption) { errEl.textContent = 'Caption is required.'; errEl.style.display = 'block'; return; }
+  const editId = document.getElementById('mp-edit-id').value;
+  const landingPageId = document.getElementById('mp-landingpage').value || null;
+  const p = {
+    platform, caption,
+    hashtags: document.getElementById('mp-hashtags').value.trim(),
+    imageUrl: document.getElementById('mp-image').value.trim(),
+    scheduledDate: document.getElementById('mp-date').value || null,
+    status: document.getElementById('mp-status').value,
+    landingPageId: landingPageId ? parseInt(landingPageId) : null,
+    utmCampaign: '',
+    likes: 0, comments: 0, shares: 0, clicks: 0
+  };
+  try {
+    const session = window.__currentSession;
+    if (!session) { alert('Session expired. Please log in again.'); return; }
+    if (editId) {
+      const existing = marketingPosts.find(m => m.id == editId);
+      if (existing) { p.likes = existing.likes; p.comments = existing.comments; p.shares = existing.shares; p.clicks = existing.clicks; p.utmCampaign = existing.utmCampaign; }
+      const dbRow = mapMarketingPostToDb(p, session.user.id);
+      const { error } = await supabaseClient.from('marketing_posts').update(dbRow).eq('id', editId);
+      if (error) { errEl.textContent = 'Could not save: ' + error.message; errEl.style.display = 'block'; return; }
+    } else {
+      p.utmCampaign = platform.toLowerCase() + '-' + Date.now();
+      const dbRow = mapMarketingPostToDb(p, session.user.id);
+      const { error } = await supabaseClient.from('marketing_posts').insert(dbRow);
+      if (error) { errEl.textContent = 'Could not save: ' + error.message; errEl.style.display = 'block'; return; }
+    }
+    closeModal('marketingPostModal');
+    await loadMarketingPostsFromSupabase();
+    showToast('✅ Post saved');
+  } catch (err) {
+    console.error(err);
+    errEl.textContent = 'Something went wrong.';
+    errEl.style.display = 'block';
+  }
+}
+
+async function deleteMarketingPost(id) {
+  if (!confirm('Delete this post?')) return;
+  try {
+    const { error } = await supabaseClient.from('marketing_posts').delete().eq('id', id);
+    if (error) { alert('Could not delete: ' + error.message); return; }
+    await loadMarketingPostsFromSupabase();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function renderLeadsByChannel() {
+  const el = document.getElementById('leadsByChannelList');
+  if (!el) return;
+  el.innerHTML = '<div style="color:var(--text-light);font-size:12.5px">Loading…</div>';
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const { data, error } = await supabaseClient
+      .from('leads')
+      .select('utm_source')
+      .eq('user_id', session.user.id)
+      .not('utm_source', 'is', null);
+    if (error) { el.innerHTML = '<div style="color:var(--text-light);font-size:12.5px">Could not load channel data.</div>'; return; }
+    if (!data || !data.length) {
+      el.innerHTML = '<div style="color:var(--text-light);font-size:12.5px">No tracked leads yet — share a post\'s tracked link to start seeing data here.</div>';
+      return;
+    }
+    const counts = {};
+    data.forEach(row => { const src = row.utm_source || 'unknown'; counts[src] = (counts[src] || 0) + 1; });
+    const platformIcons = { facebook: '📘', linkedin: '💼', instagram: '📸' };
+    el.innerHTML = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([src, count]) => `
+      <div style="background:var(--bg);border-radius:8px;padding:12px 20px;min-width:120px;text-align:center">
+        <div style="font-size:20px;font-weight:700">${count}</div>
+        <div style="font-size:11.5px;color:var(--text-light)">${platformIcons[src] || '🔗'} ${escapeHtml(src.charAt(0).toUpperCase() + src.slice(1))}</div>
+      </div>`).join('');
+  } catch (err) {
+    console.error(err);
+    el.innerHTML = '<div style="color:var(--text-light);font-size:12.5px">Something went wrong.</div>';
   }
 }
 
@@ -12413,6 +12877,69 @@ function copyScriptCode() {
       <div style="display:flex;gap:10px;margin-top:16px">
         <button class="btn btn-primary" style="flex:1" onclick="closeModal('trackedWebsiteModal')">Done</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Marketing Post Modal -->
+<div class="modal-overlay" id="marketingPostModal">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-header">
+      <div class="modal-title" id="marketingPostModalTitle">New Post</div>
+      <button class="modal-close" onclick="closeModal('marketingPostModal')">✕</button>
+    </div>
+    <input type="hidden" id="mp-edit-id">
+    <div class="form-group">
+      <label class="form-label">Platform *</label>
+      <select class="form-control" id="mp-platform">
+        <option value="Facebook">📘 Facebook</option>
+        <option value="LinkedIn">💼 LinkedIn</option>
+        <option value="Instagram">📸 Instagram</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Topic / Idea (for AI)</label>
+      <div style="display:flex;gap:8px">
+        <input class="form-control" id="mp-topic" placeholder="e.g. Free HubSpot CRM audit offer">
+        <button class="btn btn-outline btn-sm" style="white-space:nowrap" onclick="aiWriteMarketingPost()">🤖 AI Write</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Caption *</label>
+      <textarea class="form-control" id="mp-caption" rows="5" placeholder="Post caption..."></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Hashtags</label>
+      <input class="form-control" id="mp-hashtags" placeholder="#hubspot #crm #leadgen">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Image URL</label>
+      <input class="form-control" id="mp-image" placeholder="https://...">
+    </div>
+    <div style="display:flex;gap:10px">
+      <div class="form-group" style="flex:1">
+        <label class="form-label">Scheduled Date</label>
+        <input class="form-control" id="mp-date" type="date">
+      </div>
+      <div class="form-group" style="flex:1">
+        <label class="form-label">Status</label>
+        <select class="form-control" id="mp-status">
+          <option value="Draft">Draft</option>
+          <option value="Scheduled">Scheduled</option>
+          <option value="Posted">Posted</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Link to Landing Page (for trackable link + lead count)</label>
+      <select class="form-control" id="mp-landingpage">
+        <option value="">None</option>
+      </select>
+    </div>
+    <div id="mp-error" style="display:none;color:#dc2626;font-size:12px;margin-bottom:8px"></div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button class="btn btn-primary" style="flex:1" onclick="saveMarketingPost()">💾 Save Post</button>
+      <button class="btn btn-outline" onclick="closeModal('marketingPostModal')">Cancel</button>
     </div>
   </div>
 </div>

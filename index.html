@@ -800,6 +800,9 @@
     <div class="nav-item" onclick="showSection('marketing', this)">
       <span class="icon">📣</span> Marketing
     </div>
+    <div class="nav-item" onclick="showSection('integrations', this)">
+      <span class="icon">🔌</span> Integrations
+    </div>
     <div class="nav-item" onclick="showSection('automation', this)">
       <span class="icon">🤖</span> AI Automation
     </div>
@@ -1572,6 +1575,70 @@ Leadnovaai</textarea>
           <div id="marketingPostsList"><div style="padding:20px;text-align:center;color:var(--text-light)">No posts yet. Add your first one above.</div></div>
         </div>
       </div>
+    </div>
+
+    <!-- INTEGRATIONS -->
+    <div class="section" id="section-integrations">
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header">
+          <div class="card-title">📅 Google Calendar</div>
+        </div>
+        <div style="padding:20px">
+          <div style="font-size:12.5px;color:var(--text-light);margin-bottom:12px">
+            Uses the same Google Apps Script you already set up for email (Email → Sender Setup). No separate connection needed — just make sure that Web App URL is saved, and update the Apps Script code to the latest version (see Setup Guide there) so it can create Calendar events too.
+          </div>
+          <div style="font-size:12.5px;color:var(--text-light)">Once set up, use the <b>"📅 Create Calendar Event"</b> action inside any Workflow to automatically schedule meetings.</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header">
+          <div class="card-title">⚡ Zapier / Make Webhook</div>
+        </div>
+        <div style="padding:20px">
+          <div style="font-size:12.5px;color:var(--text-light);margin-bottom:12px">Paste a Zapier "Catch Hook" or Make.com webhook URL. Then use the <b>"⚡ Send to Webhook"</b> action inside any Workflow to push data to 5000+ apps.</div>
+          <label class="form-label">Webhook URL</label>
+          <input class="form-control" id="int-zapier-url" placeholder="https://hooks.zapier.com/hooks/catch/...">
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header">
+          <div class="card-title">💬 Slack Notifications</div>
+        </div>
+        <div style="padding:20px">
+          <div style="font-size:12.5px;color:var(--text-light);margin-bottom:12px">Paste a Slack Incoming Webhook URL (Slack → Apps → Incoming Webhooks). Then use the <b>"💬 Send to Slack"</b> action inside any Workflow.</div>
+          <label class="form-label">Slack Webhook URL</label>
+          <input class="form-control" id="int-slack-url" placeholder="https://hooks.slack.com/services/...">
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header">
+          <div class="card-title">🗓️ Calendly Booking Link</div>
+        </div>
+        <div style="padding:20px">
+          <div style="font-size:12.5px;color:var(--text-light);margin-bottom:12px">Your default booking link — shown as a "Book a Meeting" button after someone submits a Landing Page form (unless that page has its own booking link set).</div>
+          <label class="form-label">Calendly URL</label>
+          <input class="form-control" id="int-calendly-url" placeholder="https://calendly.com/yourname/intro-call">
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header">
+          <div class="card-title">🐵 Mailchimp Sync</div>
+        </div>
+        <div style="padding:20px">
+          <div style="font-size:12.5px;color:var(--text-light);margin-bottom:12px">Requires the same Google Apps Script (used for Email/Calendar) to relay the request — update it to the latest version from the Setup Guide. Then use the <b>"🐵 Sync to Mailchimp"</b> action inside any Workflow to add contacts to your audience automatically.</div>
+          <label class="form-label">Mailchimp API Key</label>
+          <input class="form-control" id="int-mailchimp-key" style="margin-bottom:10px" placeholder="e.g. abc123def456-us21">
+          <label class="form-label">Audience / List ID</label>
+          <input class="form-control" id="int-mailchimp-list" placeholder="e.g. a1b2c3d4e5">
+        </div>
+      </div>
+
+      <button class="btn btn-primary" onclick="saveIntegrationSettings()">💾 Save All Integration Settings</button>
+      <span id="integrationSettingsSaved" style="margin-left:10px;font-size:12px;color:#16a34a"></span>
     </div>
 
     <!-- AI AUTOMATION -->
@@ -3178,6 +3245,8 @@ function doPost(e) {
       case 'updateScheduled': return handleUpdateScheduled(req);
       case 'getStatus': return handleGetStatus();
       case 'deleteEmailLog': return handleDeleteEmailLog(req);
+      case 'createCalendarEvent': return handleCreateCalendarEvent(req);
+      case 'mailchimpSync': return handleMailchimpSync(req);
       default: return jsonOut({ success: false, error: 'Unknown action: ' + req.action });
     }
   } catch (err) {
@@ -3346,6 +3415,52 @@ function notifyReply(email) {
       muteHttpExceptions: true
     });
   } catch (err) { /* silent */ }
+}
+
+// ---------- Integrations: Google Calendar ----------
+function handleCreateCalendarEvent(req) {
+  try {
+    const options = {};
+    if (req.description) options.description = req.description;
+    if (req.guestEmail) options.guests = req.guestEmail;
+    CalendarApp.getDefaultCalendar().createEvent(
+      req.title || 'Meeting',
+      new Date(req.startTime),
+      new Date(req.endTime),
+      options
+    );
+    return jsonOut({ success: true });
+  } catch (err) {
+    return jsonOut({ success: false, error: err.message });
+  }
+}
+
+// ---------- Integrations: Mailchimp Sync ----------
+function handleMailchimpSync(req) {
+  try {
+    const dc = (req.apiKey || '').split('-')[1];
+    if (!dc) return jsonOut({ success: false, error: 'Invalid Mailchimp API key — should look like abc123-us21' });
+    const url = 'https://' + dc + '.api.mailchimp.com/3.0/lists/' + req.listId + '/members';
+    const payload = {
+      email_address: req.email,
+      status_if_new: 'subscribed',
+      status: 'subscribed',
+      merge_fields: { FNAME: req.firstName || '', LNAME: req.lastName || '' }
+    };
+    const options = {
+      method: 'put',
+      contentType: 'application/json',
+      headers: { Authorization: 'Basic ' + Utilities.base64Encode('anystring:' + req.apiKey) },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    };
+    const hashBytes = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, req.email.toLowerCase());
+    const hash = hashBytes.map(function (b) { b = (b < 0) ? b + 256 : b; return (b.toString(16).length === 1 ? '0' : '') + b.toString(16); }).join('');
+    const resp = UrlFetchApp.fetch(url + '/' + hash, options);
+    return jsonOut({ success: true, status: resp.getResponseCode() });
+  } catch (err) {
+    return jsonOut({ success: false, error: err.message });
+  }
 }</pre>
       </div>
       <p style="font-size:12px;color:var(--text-light);margin-bottom:14px">Only one thing to edit before deploying: paste your Account ID into <code>MY_ACCOUNT_ID</code> near the top (Step 5 below shows where to copy it from). Everything else is ready as-is.</p>
@@ -3371,6 +3486,7 @@ function notifyReply(email) {
           <li>This script only ever uses your own Gmail account — no one's email or password is ever requested.</li>
           <li>If you ever redeploy and get a new URL, remember to update it again in Sender Setup above.</li>
           <li>Reply Detection only works for emails sent through this script (Campaigns, Workflows, Sequences) after this update — it can't see replies to emails sent before you added this code.</li>
+          <li>Google Calendar and Mailchimp actions need this updated script — if you added this code after already deploying once, redeploy (Deploy → Manage deployments → Edit → New version → Deploy) and re-authorize when asked, since Calendar access is a new permission.</li>
         </ul>
       </div>
     </div>
@@ -3474,12 +3590,13 @@ const WF_TRIGGER_LABELS = {
   task_overdue: 'A task becomes overdue',
   custom_condition: 'Custom Condition (field-based)'
 };
-const WF_ACTION_LABELS = { send_email: '✉️ Send Email', create_task: '✅ Create Task', notify: '🔔 Notification', assign_owner: '👤 Assign Owner', send_whatsapp: '💬 Send WhatsApp', send_sms: '📩 Send SMS', enroll_sequence: '🔁 Enroll in Sequence' };
+const WF_ACTION_LABELS = { send_email: '✉️ Send Email', create_task: '✅ Create Task', notify: '🔔 Notification', assign_owner: '👤 Assign Owner', send_whatsapp: '💬 Send WhatsApp', send_sms: '📩 Send SMS', enroll_sequence: '🔁 Enroll in Sequence', create_calendar_event: '📅 Create Calendar Event', send_webhook: '⚡ Send to Webhook', send_slack: '💬 Send to Slack', sync_mailchimp: '🐵 Sync to Mailchimp' };
 
 // ===== WHATSAPP / SMS + LEAD ASSIGNMENT SETTINGS =====
 let automationSettings = {
   twilioProxyUrl: '', twilioAccountSid: '', twilioAuthToken: '', twilioWhatsappFrom: '', twilioSmsFrom: '',
-  roundRobinEnabled: false, roundRobinTeamIds: [], roundRobinIndex: 0
+  roundRobinEnabled: false, roundRobinTeamIds: [], roundRobinIndex: 0,
+  zapierWebhookUrl: '', slackWebhookUrl: '', calendlyUrl: '', mailchimpApiKey: '', mailchimpListId: ''
 }; // now loaded from Supabase (see loadCampaignSettingsFromSupabase)
 
 const PERMISSION_MODULES = [
@@ -3574,7 +3691,7 @@ function showSection(id, el) {
     dashboard:'Dashboard', contacts:'Contacts', companies:'Companies', lists:'Lists',
     deals:'Deals & Pipeline', categories:'Service Categories & Pipelines', tasks:'Tasks', email:'Email Tracking',
     products:'Products', automation:'AI Automation', reports:'Reports', importexport:'Import / Export',
-    team:'Team & Roles', properties:'Properties', formspages:'Forms & Pages', visitors:'Website Visitors', tracking:'Tracking', marketing:'Marketing'
+    team:'Team & Roles', properties:'Properties', formspages:'Forms & Pages', visitors:'Website Visitors', tracking:'Tracking', marketing:'Marketing', integrations:'Integrations'
   };
   document.getElementById('pageTitle').textContent = titles[id] || id;
   closeSidebar();
@@ -3595,6 +3712,7 @@ function showSection(id, el) {
   if (id === 'visitors') loadTrackedWebsitesFromSupabase();
   if (id === 'tracking') renderCrmHealthTracker();
   if (id === 'marketing') { loadMarketingPostsFromSupabase(); renderLeadsByChannel(); }
+  if (id === 'integrations') loadIntegrationSettingsUI();
 }
 
 // MODAL
@@ -7229,7 +7347,12 @@ const WF_INSERT_TYPE_OPTIONS = `
   <option value="send_sms">📩 Send an SMS</option>
   <option value="create_task">✅ Create a task</option>
   <option value="notify">🔔 Show a notification</option>
-  <option value="assign_owner">👤 Assign owner</option>`;
+  <option value="assign_owner">👤 Assign owner</option>
+  <option value="enroll_sequence">🔁 Enroll in a sequence</option>
+  <option value="create_calendar_event">📅 Create a Calendar event</option>
+  <option value="send_webhook">⚡ Send to Webhook (Zapier/Make)</option>
+  <option value="send_slack">💬 Send to Slack</option>
+  <option value="sync_mailchimp">🐵 Sync to Mailchimp</option>`;
 
 function wfActionDefaults(type) {
   const defaults = {
@@ -7239,7 +7362,11 @@ function wfActionDefaults(type) {
     create_task: { type, title: '', delayDays: 2, priority: 'Medium' },
     notify: { type, message: '' },
     assign_owner: { type, owner: '' },
-    enroll_sequence: { type, sequenceId: '' }
+    enroll_sequence: { type, sequenceId: '' },
+    create_calendar_event: { type, title: '', delayDays: 1, durationMinutes: 30, description: '' },
+    send_webhook: { type },
+    send_slack: { type, message: '' },
+    sync_mailchimp: { type }
   };
   return defaults[type];
 }
@@ -7282,6 +7409,24 @@ function wfActionFieldsHtml(a, idx) {
       <option value="">Select a sequence</option>
       ${sequences.map(s => `<option value="${s.id}" ${String(a.sequenceId) === String(s.id) ? 'selected' : ''}>${escapeHtml(s.name)} (${s.steps.length} emails)</option>`).join('')}
     </select>`;
+  } else if (a.type === 'create_calendar_event') {
+    return `
+      <input class="form-control" style="margin-bottom:6px" placeholder="Event title — use {{name}}, {{company}}" value="${escapeHtml(a.title || '')}" oninput="updateWfAction(${idx},'title',this.value)">
+      <textarea class="form-control" rows="2" style="margin-bottom:6px" placeholder="Description (optional)" oninput="updateWfAction(${idx},'description',this.value)">${escapeHtml(a.description || '')}</textarea>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:11.5px;color:var(--text-light)">Starts in (days):</span>
+        <input type="number" min="0" max="60" class="form-control" style="max-width:70px" value="${a.delayDays !== undefined ? a.delayDays : 1}" oninput="updateWfAction(${idx},'delayDays',this.value)">
+        <span style="font-size:11.5px;color:var(--text-light)">Duration (min):</span>
+        <input type="number" min="5" max="480" class="form-control" style="max-width:80px" value="${a.durationMinutes !== undefined ? a.durationMinutes : 30}" oninput="updateWfAction(${idx},'durationMinutes',this.value)">
+      </div>
+      <div style="font-size:11px;color:var(--text-light);margin-top:4px">Uses your Google Calendar via the same Apps Script as email — make sure it's updated (Email &gt; Sender Setup &gt; Setup Guide).</div>`;
+  } else if (a.type === 'send_webhook') {
+    return `<div style="font-size:12px;color:var(--text-light)">Sends this record's data as JSON to the Webhook URL saved in Integrations &gt; Zapier/Make. No extra fields needed.</div>`;
+  } else if (a.type === 'send_slack') {
+    return `<textarea class="form-control" rows="2" placeholder="Message — use {{name}}, {{company}}" oninput="updateWfAction(${idx},'message',this.value)">${escapeHtml(a.message || '')}</textarea>
+      <div style="font-size:11px;color:var(--text-light);margin-top:4px">Sent to the Slack Webhook URL saved in Integrations.</div>`;
+  } else if (a.type === 'sync_mailchimp') {
+    return `<div style="font-size:12px;color:var(--text-light)">Adds this contact's name and email to your Mailchimp audience (set up in Integrations &gt; Mailchimp Sync). No extra fields needed.</div>`;
   }
   return '';
 }
@@ -7460,7 +7605,8 @@ function mapLandingPageFromDb(row) {
     submitText: row.submit_text || 'Submit',
     themeColor: row.theme_color || '#2563EB',
     successMessage: row.success_message || 'Thank you! We will be in touch shortly.',
-    published: row.published !== false
+    published: row.published !== false,
+    bookingLink: row.booking_link || ''
   };
 }
 
@@ -7476,6 +7622,7 @@ function mapLandingPageToDb(p, userId) {
     theme_color: p.themeColor || null,
     success_message: p.successMessage || null,
     published: !!p.published,
+    booking_link: p.bookingLink || null,
     user_id: userId
   };
 }
@@ -7550,6 +7697,7 @@ function openLandingPageModal(id) {
   document.getElementById('lp-submit-text').value = 'Get Started';
   document.getElementById('lp-color').value = '#2563EB';
   document.getElementById('lp-success').value = 'Thank you! We will be in touch shortly.';
+  document.getElementById('lp-booking').value = automationSettings.calendlyUrl || '';
   document.getElementById('lp-published').checked = true;
   document.getElementById('lp-error').style.display = 'none';
   if (id) {
@@ -7567,6 +7715,7 @@ function openLandingPageModal(id) {
       document.getElementById('lp-submit-text').value = p.submitText;
       document.getElementById('lp-color').value = p.themeColor || '#2563EB';
       document.getElementById('lp-success').value = p.successMessage;
+      document.getElementById('lp-booking').value = p.bookingLink || '';
       document.getElementById('lp-published').checked = p.published;
       document.getElementById('landingPageModalTitle').textContent = 'Edit Page';
     }
@@ -7597,6 +7746,7 @@ async function saveLandingPage() {
     submitText: document.getElementById('lp-submit-text').value.trim() || 'Submit',
     themeColor: document.getElementById('lp-color').value || '#2563EB',
     successMessage: document.getElementById('lp-success').value.trim() || 'Thank you!',
+    bookingLink: document.getElementById('lp-booking').value.trim(),
     published: document.getElementById('lp-published').checked
   };
   try {
@@ -8314,8 +8464,88 @@ async function executeWorkflowAction(action, record) {
     else if (action.type === 'notify') wfNotify(action, record);
     else if (action.type === 'assign_owner') await wfAssignOwner(action, record);
     else if (action.type === 'enroll_sequence') await wfEnrollSequence(action, record);
+    else if (action.type === 'create_calendar_event') await wfCreateCalendarEvent(action, record);
+    else if (action.type === 'send_webhook') await wfSendWebhook(action, record);
+    else if (action.type === 'send_slack') await wfSendSlack(action, record);
+    else if (action.type === 'sync_mailchimp') await wfSyncMailchimp(action, record);
   } catch (err) {
     console.error('Workflow action failed:', err);
+  }
+}
+
+async function wfCreateCalendarEvent(action, record) {
+  if (!campaignSettings.webAppUrl) { console.warn('Workflow: no Apps Script URL configured, skipping create_calendar_event action'); return; }
+  const contact = wfResolveContact(record) || record;
+  const title = mergeTags(action.title || 'Meeting', contact);
+  const description = mergeTags(action.description || '', contact);
+  const start = new Date();
+  start.setDate(start.getDate() + (parseInt(action.delayDays) || 0));
+  const end = new Date(start.getTime() + (parseInt(action.durationMinutes) || 30) * 60000);
+  try {
+    await fetch(campaignSettings.webAppUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'createCalendarEvent',
+        title, description,
+        startTime: start.toISOString(),
+        endTime: end.toISOString(),
+        guestEmail: contact.email || ''
+      })
+    });
+  } catch (err) {
+    console.error('Calendar event creation failed:', err);
+  }
+}
+
+async function wfSendWebhook(action, record) {
+  if (!automationSettings.zapierWebhookUrl) { console.warn('Workflow: no Zapier/Make webhook URL configured, skipping send_webhook action'); return; }
+  try {
+    await fetch(automationSettings.zapierWebhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(record)
+    });
+  } catch (err) {
+    console.error('Webhook send failed:', err);
+  }
+}
+
+async function wfSendSlack(action, record) {
+  if (!automationSettings.slackWebhookUrl) { console.warn('Workflow: no Slack webhook URL configured, skipping send_slack action'); return; }
+  const contact = wfResolveContact(record) || record;
+  const text = mergeTags(action.message || 'Workflow triggered', contact);
+  try {
+    await fetch(automationSettings.slackWebhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+  } catch (err) {
+    console.error('Slack send failed:', err);
+  }
+}
+
+async function wfSyncMailchimp(action, record) {
+  if (!campaignSettings.webAppUrl) { console.warn('Workflow: no Apps Script URL configured, skipping sync_mailchimp action'); return; }
+  if (!automationSettings.mailchimpApiKey || !automationSettings.mailchimpListId) { console.warn('Workflow: Mailchimp not configured, skipping sync_mailchimp action'); return; }
+  const contact = wfResolveContact(record) || record;
+  if (!contact || !contact.email) { console.warn('Workflow: no contact email found, skipping sync_mailchimp action'); return; }
+  try {
+    await fetch(campaignSettings.webAppUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'mailchimpSync',
+        apiKey: automationSettings.mailchimpApiKey,
+        listId: automationSettings.mailchimpListId,
+        email: contact.email,
+        firstName: (contact.name || '').split(' ')[0] || '',
+        lastName: (contact.name || '').split(' ').slice(1).join(' ') || ''
+      })
+    });
+  } catch (err) {
+    console.error('Mailchimp sync failed:', err);
   }
 }
 
@@ -8485,6 +8715,40 @@ function checkOverdueTaskWorkflows() {
 setInterval(checkOverdueTaskWorkflows, 5 * 60 * 1000);
 
 // ===================== WHATSAPP / SMS (Twilio) =====================
+function loadIntegrationSettingsUI() {
+  if (document.getElementById('int-zapier-url')) document.getElementById('int-zapier-url').value = automationSettings.zapierWebhookUrl || '';
+  if (document.getElementById('int-slack-url')) document.getElementById('int-slack-url').value = automationSettings.slackWebhookUrl || '';
+  if (document.getElementById('int-calendly-url')) document.getElementById('int-calendly-url').value = automationSettings.calendlyUrl || '';
+  if (document.getElementById('int-mailchimp-key')) document.getElementById('int-mailchimp-key').value = automationSettings.mailchimpApiKey || '';
+  if (document.getElementById('int-mailchimp-list')) document.getElementById('int-mailchimp-list').value = automationSettings.mailchimpListId || '';
+}
+
+async function saveIntegrationSettings() {
+  automationSettings.zapierWebhookUrl = document.getElementById('int-zapier-url').value.trim();
+  automationSettings.slackWebhookUrl = document.getElementById('int-slack-url').value.trim();
+  automationSettings.calendlyUrl = document.getElementById('int-calendly-url').value.trim();
+  automationSettings.mailchimpApiKey = document.getElementById('int-mailchimp-key').value.trim();
+  automationSettings.mailchimpListId = document.getElementById('int-mailchimp-list').value.trim();
+  const msg = document.getElementById('integrationSettingsSaved');
+  try {
+    const session = window.__currentSession;
+    if (!session) { alert('Session expired. Please log in again.'); return; }
+    const { error } = await supabaseClient.from('campaign_settings').upsert({
+      user_id: session.user.id,
+      zapier_webhook_url: automationSettings.zapierWebhookUrl || null,
+      slack_webhook_url: automationSettings.slackWebhookUrl || null,
+      calendly_url: automationSettings.calendlyUrl || null,
+      mailchimp_api_key: automationSettings.mailchimpApiKey || null,
+      mailchimp_list_id: automationSettings.mailchimpListId || null
+    }, { onConflict: 'user_id' });
+    if (error) { alert('Could not save: ' + error.message); return; }
+    if (msg) { msg.textContent = '✓ Saved'; setTimeout(() => msg.textContent = '', 2000); }
+  } catch (err) {
+    alert('Something went wrong while saving.');
+    console.error(err);
+  }
+}
+
 function loadAutomationSettingsUI() {
   document.getElementById('twilioProxyUrl').value = automationSettings.twilioProxyUrl || '';
   document.getElementById('twilioAccountSid').value = automationSettings.twilioAccountSid || '';
@@ -8898,10 +9162,16 @@ async function loadCampaignSettingsFromSupabase() {
       twilioSmsFrom: (data && data.twilio_sms_from) || '',
       roundRobinEnabled: !!(data && data.round_robin_enabled),
       roundRobinTeamIds: (data && data.round_robin_team_ids) || [],
-      roundRobinIndex: (data && data.round_robin_index) || 0
+      roundRobinIndex: (data && data.round_robin_index) || 0,
+      zapierWebhookUrl: (data && data.zapier_webhook_url) || '',
+      slackWebhookUrl: (data && data.slack_webhook_url) || '',
+      calendlyUrl: (data && data.calendly_url) || '',
+      mailchimpApiKey: (data && data.mailchimp_api_key) || '',
+      mailchimpListId: (data && data.mailchimp_list_id) || ''
     };
     if (document.getElementById('campaignWebAppUrl')) loadCampaignSettings();
     if (document.getElementById('twilioProxyUrl')) loadAutomationSettingsUI();
+    if (document.getElementById('int-zapier-url')) loadIntegrationSettingsUI();
   } catch (err) {
     console.error(err);
   }
@@ -12831,6 +13101,10 @@ function copyScriptCode() {
     <div class="form-group">
       <label class="form-label">Success Message</label>
       <input class="form-control" id="lp-success" placeholder="Thanks! We'll be in touch shortly.">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Booking Link (Calendly) — shown as a "Book a Meeting" button after submit</label>
+      <input class="form-control" id="lp-booking" placeholder="https://calendly.com/yourname/intro-call">
     </div>
     <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;margin-bottom:14px;cursor:pointer">
       <input type="checkbox" id="lp-published" checked> Published (live and accepting submissions)

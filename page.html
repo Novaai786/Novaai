@@ -223,6 +223,7 @@
         <div class="lp-success">
           <div class="lp-success-icon">✅</div>
           <div class="lp-success-msg">${escapeHtml(pageData.success_message || 'Thank you! We will be in touch shortly.')}</div>
+          ${pageData.booking_link ? `<a href="${escapeHtml(pageData.booking_link)}" target="_blank" style="display:inline-block;margin-top:18px;background:${escapeHtml(pageData.theme_color || '#2563EB')};color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 24px;border-radius:8px">📅 Book a Meeting</a>` : ''}
         </div>
       </div>`;
   }

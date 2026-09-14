@@ -803,6 +803,9 @@
     <div class="nav-item" onclick="showSection('integrations', this)">
       <span class="icon">🔌</span> Integrations
     </div>
+    <div class="nav-item" onclick="showSection('salesagent', this)">
+      <span class="icon">🤖</span> NovaAi Sales Agent
+    </div>
     <div class="nav-item" onclick="showSection('automation', this)">
       <span class="icon">🤖</span> AI Automation
     </div>
@@ -1639,6 +1642,65 @@ Leadnovaai</textarea>
 
       <button class="btn btn-primary" onclick="saveIntegrationSettings()">💾 Save All Integration Settings</button>
       <span id="integrationSettingsSaved" style="margin-left:10px;font-size:12px;color:#16a34a"></span>
+    </div>
+
+    <!-- NOVAAI SALES AGENT -->
+    <div class="section" id="section-salesagent">
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header">
+          <div class="card-title">🤖 NovaAi Sales Agent — How It Works</div>
+        </div>
+        <div style="padding:20px;font-size:12.5px;color:var(--text-light);line-height:1.7">
+          For each lead you start it on: <b>Score</b> the lead → if score is too low, skip it → otherwise <b>write &amp; send</b> an opening email → wait for a reply → if none comes, automatically <b>send a follow-up</b> (up to your limit) → once a reply arrives, <b>read &amp; classify</b> it → then <b>decide</b>: positive → create a meeting task, not interested → send one polite closing email and stop, unclear/negative → flag for you to handle personally. It never overwrites your other features — it just calls them in sequence for you.
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header">
+          <div class="card-title">⚙️ Agent Settings</div>
+        </div>
+        <div style="padding:20px">
+          <div style="display:flex;gap:14px;flex-wrap:wrap">
+            <div class="form-group" style="flex:1;min-width:180px">
+              <label class="form-label">Skip leads scoring below</label>
+              <input class="form-control" id="agent-min-score" type="number" min="0" max="100" value="40">
+            </div>
+            <div class="form-group" style="flex:1;min-width:180px">
+              <label class="form-label">Max follow-ups per lead</label>
+              <input class="form-control" id="agent-max-followups" type="number" min="0" max="10" value="3">
+            </div>
+            <div class="form-group" style="flex:1;min-width:180px">
+              <label class="form-label">Days between follow-ups</label>
+              <input class="form-control" id="agent-followup-days" type="number" min="1" max="30" value="3">
+            </div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="saveAgentSettings()">💾 Save Settings</button>
+          <span id="agentSettingsSaved" style="margin-left:10px;font-size:12px;color:#16a34a"></span>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header">
+          <div class="card-title">▶️ Start Agent on Leads</div>
+          <button class="btn btn-primary btn-sm" onclick="runAgentOnSelectedLeads()">🤖 Run Agent</button>
+        </div>
+        <div style="padding:20px">
+          <div style="font-size:12.5px;color:var(--text-light);margin-bottom:10px">Pick leads that haven't been started yet (e.g. a fresh CSV import). The Agent scores each one and, if it passes your threshold, writes and sends the opening email.</div>
+          <div id="agentLeadPicker" style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px"></div>
+          <div id="agentRunLog" style="font-size:12px;color:var(--text-light)"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">📋 Agent Activity</div>
+          <button class="btn btn-outline btn-sm" onclick="runAgentCheckCycle(); renderAgentActivity();">🔄 Check Replies &amp; Follow-ups Now</button>
+        </div>
+        <div style="padding:20px">
+          <div style="font-size:12.5px;color:var(--text-light);margin-bottom:10px">This also runs automatically every couple of minutes while the CRM tab is open.</div>
+          <div id="agentActivityList"><div style="padding:20px;text-align:center;color:var(--text-light)">No leads started yet.</div></div>
+        </div>
+      </div>
     </div>
 
     <!-- AI AUTOMATION -->
@@ -3399,19 +3461,20 @@ function checkForReplies() {
       if (messages.length &lt; 2) continue;
       const last = messages[messages.length - 1];
       if (last.getFrom().indexOf(myEmail) !== -1) continue;
-      notifyReply(to);
+      const replyText = last.getPlainBody().substring(0, 3000);
+      notifyReply(to, replyText);
       sh.getRange(i + 1, 9).setValue(new Date());
     } catch (err) { /* skip this row */ }
   }
 }
 
-function notifyReply(email) {
+function notifyReply(email, replyText) {
   try {
     UrlFetchApp.fetch(SUPABASE_URL + '/rest/v1/rpc/mark_email_replied', {
       method: 'post',
       contentType: 'application/json',
       headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + SUPABASE_ANON_KEY },
-      payload: JSON.stringify({ p_user_id: MY_ACCOUNT_ID, p_email: email }),
+      payload: JSON.stringify({ p_user_id: MY_ACCOUNT_ID, p_email: email, p_reply_text: replyText || '' }),
       muteHttpExceptions: true
     });
   } catch (err) { /* silent */ }
@@ -3596,7 +3659,8 @@ const WF_ACTION_LABELS = { send_email: '✉️ Send Email', create_task: '✅ Cr
 let automationSettings = {
   twilioProxyUrl: '', twilioAccountSid: '', twilioAuthToken: '', twilioWhatsappFrom: '', twilioSmsFrom: '',
   roundRobinEnabled: false, roundRobinTeamIds: [], roundRobinIndex: 0,
-  zapierWebhookUrl: '', slackWebhookUrl: '', calendlyUrl: '', mailchimpApiKey: '', mailchimpListId: ''
+  zapierWebhookUrl: '', slackWebhookUrl: '', calendlyUrl: '', mailchimpApiKey: '', mailchimpListId: '',
+  agentMinScore: 40, agentMaxFollowups: 3, agentFollowupDays: 3
 }; // now loaded from Supabase (see loadCampaignSettingsFromSupabase)
 
 const PERMISSION_MODULES = [
@@ -3691,7 +3755,7 @@ function showSection(id, el) {
     dashboard:'Dashboard', contacts:'Contacts', companies:'Companies', lists:'Lists',
     deals:'Deals & Pipeline', categories:'Service Categories & Pipelines', tasks:'Tasks', email:'Email Tracking',
     products:'Products', automation:'AI Automation', reports:'Reports', importexport:'Import / Export',
-    team:'Team & Roles', properties:'Properties', formspages:'Forms & Pages', visitors:'Website Visitors', tracking:'Tracking', marketing:'Marketing', integrations:'Integrations'
+    team:'Team & Roles', properties:'Properties', formspages:'Forms & Pages', visitors:'Website Visitors', tracking:'Tracking', marketing:'Marketing', integrations:'Integrations', salesagent:'NovaAi Sales Agent'
   };
   document.getElementById('pageTitle').textContent = titles[id] || id;
   closeSidebar();
@@ -3713,6 +3777,7 @@ function showSection(id, el) {
   if (id === 'tracking') renderCrmHealthTracker();
   if (id === 'marketing') { loadMarketingPostsFromSupabase(); renderLeadsByChannel(); }
   if (id === 'integrations') loadIntegrationSettingsUI();
+  if (id === 'salesagent') { loadAgentSettingsUI(); renderAgentLeadPicker(); renderAgentActivity(); }
 }
 
 // MODAL
@@ -4043,7 +4108,13 @@ function mapLeadFromDb(row) {
     notes: row.notes || '',
     customFields: row.custom_fields || {},
     enrichmentNotes: row.enrichment_notes || '',
-    date: row.created_at ? new Date(row.created_at).toLocaleDateString() : ''
+    date: row.created_at ? new Date(row.created_at).toLocaleDateString() : '',
+    replyText: row.reply_text || '',
+    replyReceivedAt: row.reply_received_at || '',
+    agentScore: (row.agent_score !== null && row.agent_score !== undefined) ? row.agent_score : null,
+    agentStatus: row.agent_status || 'not_started',
+    agentFollowupCount: row.agent_followup_count || 0,
+    agentLastRun: row.agent_last_run || ''
   };
 }
 
@@ -8396,6 +8467,237 @@ async function renderLeadsByChannel() {
   }
 }
 
+// ===================== NOVAAI SALES AGENT =====================
+const AGENT_TERMINAL_STATUSES = ['skipped_low_score', 'positive', 'closed_not_interested', 'needs_human', 'cold'];
+
+async function agentUpdateLead(id, fields) {
+  const dbFields = {};
+  if ('agentScore' in fields) dbFields.agent_score = fields.agentScore;
+  if ('agentStatus' in fields) dbFields.agent_status = fields.agentStatus;
+  if ('agentFollowupCount' in fields) dbFields.agent_followup_count = fields.agentFollowupCount;
+  if ('agentLastRun' in fields) dbFields.agent_last_run = fields.agentLastRun;
+  if ('status' in fields) dbFields.status = fields.status;
+  try {
+    const { error } = await supabaseClient.from('leads').update(dbFields).eq('id', id);
+    if (error) console.error('Agent could not update lead:', error);
+  } catch (err) {
+    console.error(err);
+  }
+  const c = contacts.find(c => c.id === id);
+  if (c) Object.assign(c, fields);
+}
+
+function renderAgentLeadPicker() {
+  const el = document.getElementById('agentLeadPicker');
+  if (!el) return;
+  const pending = contacts.filter(c => !c.agentStatus || c.agentStatus === 'not_started');
+  if (!pending.length) { el.innerHTML = '<div style="color:var(--text-light);font-size:12.5px">No un-started leads — every contact already has an Agent status.</div>'; return; }
+  el.innerHTML = `<label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;margin-bottom:8px;cursor:pointer">
+      <input type="checkbox" onchange="document.querySelectorAll('.agent-lead-checkbox').forEach(cb=>cb.checked=this.checked)"> Select All (${pending.length})
+    </label>` +
+    pending.map(c => `<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;padding:4px 0;cursor:pointer">
+      <input type="checkbox" class="agent-lead-checkbox" value="${c.id}">
+      ${escapeHtml(c.name || c.email)} ${c.company ? '— ' + escapeHtml(c.company) : ''}
+    </label>`).join('');
+}
+
+function agentLeadContext(lead) {
+  const parts = [];
+  parts.push(`Name: ${lead.name || lead.email}`);
+  if (lead.company) parts.push(`Company: ${lead.company}`);
+  if (lead.title) parts.push(`Title: ${lead.title}`);
+  if (lead.companySize) parts.push(`Company size: ${lead.companySize}`);
+  if (lead.country) parts.push(`Location: ${lead.country}`);
+  if (lead.icp) parts.push(`ICP/Industry fit: ${lead.icp}`);
+  if (lead.source) parts.push(`How they came in: ${lead.source}`);
+  if (lead.painPoint) parts.push(`Known pain point: ${lead.painPoint}`);
+  if (lead.budget) parts.push(`Budget signal: ${lead.budget}`);
+  if (lead.decisionMaker) parts.push(`Decision maker: ${lead.decisionMaker}`);
+  if (lead.website) parts.push(`Website: ${lead.website}`);
+  if (lead.notes) parts.push(`Notes: ${lead.notes}`);
+  return parts.join('\n');
+}
+
+async function agentScoreLead(lead) {
+  const productsContext = products.length
+    ? `\n\nThe business selling to this lead offers: ${products.map(p => p.name).join(', ')}.`
+    : '';
+  const prompt = `You are a sales AI scoring one lead for a CRM. Give a score from 0-100 based on status, company presence, pain point clarity, budget signal, and likely buying intent, and a one-line reason. Respond ONLY as JSON like {"score":85,"reason":"..."}, nothing else.\n\n${agentLeadContext(lead)}\nStatus: ${lead.status}${productsContext}`;
+  const raw = await callAI(prompt, 'agent-lead-scoring');
+  const clean = raw.replace(/```json|```/g, '').trim();
+  return JSON.parse(clean);
+}
+
+const AGENT_HUMAN_TONE_RULES = `Write like a real person emailing from their own inbox, not a marketing team. Rules: use the specific details given about this lead (their pain point, industry, how they found us) instead of generic language — reference something concrete about them if it's provided. Vary your opening line — do not default to "I hope this email finds you well" or "I hope you're doing well". Keep sentences short and conversational, contractions are fine (I'm, we've, don't). No corporate buzzwords (synergy, seamless, cutting-edge, game-changer, robust solution). No emojis. Sound like someone who actually read this lead's info, not a template with fields swapped in.`;
+
+async function agentGenerateEmail(lead) {
+  const productsContext = products.length
+    ? `\n\nMention this only if it's genuinely relevant to their pain point: we offer ${products.map(p => p.name).join(', ')}.`
+    : '';
+  const prompt = `Write a short, warm opening cold email to this sales lead. ${AGENT_HUMAN_TONE_RULES} Respond ONLY as JSON like {"subject":"...","body":"..."}, nothing else. Body should be plain text, 3-5 sentences, end with a soft, low-pressure call to action.\n\n${agentLeadContext(lead)}${productsContext}`;
+  const raw = await callAI(prompt, 'agent-email-writer');
+  const clean = raw.replace(/```json|```/g, '').trim();
+  return JSON.parse(clean);
+}
+
+async function agentGenerateFollowup(lead) {
+  const prompt = `Write a brief, polite follow-up email to this sales lead who has not replied to a previous email yet (this is follow-up #${(lead.agentFollowupCount || 0) + 1}). ${AGENT_HUMAN_TONE_RULES} Respond ONLY as JSON like {"subject":"...","body":"..."}, nothing else. Keep it short (2-4 sentences), no pressure, plain text. Don't just repeat the first email — add a small new angle (e.g. reference their pain point differently, or ask a direct yes/no question).\n\n${agentLeadContext(lead)}`;
+  const raw = await callAI(prompt, 'agent-followup-writer');
+  const clean = raw.replace(/```json|```/g, '').trim();
+  return JSON.parse(clean);
+}
+
+async function agentClassifyReply(lead) {
+  const prompt = `Classify this email reply from a sales lead into exactly one of: positive, not_interested, negative, neutral, question. Respond ONLY as JSON like {"classification":"positive","reason":"..."}, nothing else.\n\n${agentLeadContext(lead)}\n\nReply text: """${(lead.replyText || '').substring(0, 1500)}"""`;
+  const raw = await callAI(prompt, 'agent-reply-classifier');
+  const clean = raw.replace(/```json|```/g, '').trim();
+  return JSON.parse(clean);
+}
+
+async function agentSendLeadEmail(lead, subject, body) {
+  if (!campaignSettings.webAppUrl) throw new Error('No Apps Script URL configured in Email > Sender Setup.');
+  const res = await fetch(campaignSettings.webAppUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action: 'sendEmail', to: lead.email, subject, body, fromName: campaignSettings.fromName || 'NovaAICRM' })
+  });
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || 'Send failed');
+}
+
+async function runAgentStart(lead, logEl) {
+  const line = document.createElement('div');
+  logEl.appendChild(line);
+  try {
+    line.textContent = `🎯 Scoring ${lead.name || lead.email}...`;
+    const scoreResult = await agentScoreLead(lead);
+    const score = Math.max(0, Math.min(100, parseInt(scoreResult.score) || 0));
+    await agentUpdateLead(lead.id, { agentScore: score });
+
+    if (score < automationSettings.agentMinScore) {
+      await agentUpdateLead(lead.id, { agentStatus: 'skipped_low_score' });
+      line.textContent = `⏭️ ${lead.name || lead.email} — score ${score} (below ${automationSettings.agentMinScore}) — skipped`;
+      return;
+    }
+
+    line.textContent = `✉️ ${lead.name || lead.email} — score ${score} — writing email...`;
+    const email = await agentGenerateEmail(lead);
+    await agentSendLeadEmail(lead, email.subject, email.body);
+    await agentUpdateLead(lead.id, { agentStatus: 'email_sent', agentLastRun: new Date().toISOString() });
+    line.textContent = `✅ ${lead.name || lead.email} — score ${score} — opening email sent`;
+  } catch (err) {
+    line.textContent = `⚠️ ${lead.name || lead.email} — error: ${err.message}`;
+  }
+}
+
+async function runAgentOnSelectedLeads() {
+  const ids = Array.from(document.querySelectorAll('.agent-lead-checkbox:checked')).map(cb => parseInt(cb.value));
+  if (!ids.length) { alert('Select at least one lead first.'); return; }
+  const logEl = document.getElementById('agentRunLog');
+  logEl.innerHTML = '';
+  const selected = contacts.filter(c => ids.includes(c.id));
+  for (const lead of selected) {
+    await runAgentStart(lead, logEl);
+  }
+  renderAgentLeadPicker();
+  renderAgentActivity();
+}
+
+async function agentDecideAndAct(lead, classification) {
+  const contactRecord = { ...lead, _wfObjectType: 'contact' };
+  if (classification === 'positive') {
+    await agentUpdateLead(lead.id, { agentStatus: 'positive', status: 'Meeting Requested' });
+    await wfCreateTask({ title: `🎯 Meeting requested by ${lead.name || lead.email}`, delayDays: 0, priority: 'High' }, contactRecord);
+    addNotification('🎯 Positive Reply', `${lead.name || lead.email} responded positively — meeting task created`);
+  } else if (classification === 'not_interested') {
+    if ((lead.agentFollowupCount || 0) === 0) {
+      try {
+        const prompt = `Write a very short, polite, no-pressure closing email to this lead who said they are not interested right now. ${AGENT_HUMAN_TONE_RULES} Respond ONLY as JSON like {"subject":"...","body":"..."}, nothing else. 2-3 sentences, leave the door open for the future, reference their reply if it gives a reason.\n\n${agentLeadContext(lead)}\n\nTheir reply: """${(lead.replyText || '').substring(0, 800)}"""`;
+        const raw = await callAI(prompt, 'agent-closing-writer');
+        const email = JSON.parse(raw.replace(/```json|```/g, '').trim());
+        await agentSendLeadEmail(lead, email.subject, email.body);
+      } catch (err) { console.error('Closing email failed:', err); }
+    }
+    await agentUpdateLead(lead.id, { agentStatus: 'closed_not_interested', status: 'Closed - Not Interested' });
+    addNotification('👋 Not Interested', `${lead.name || lead.email} isn't interested — closing email sent, sequence stopped`);
+  } else {
+    await agentUpdateLead(lead.id, { agentStatus: 'needs_human' });
+    addNotification('🙋 Needs Your Reply', `${lead.name || lead.email} replied — the Agent isn't sure how to respond, please review`);
+  }
+}
+
+async function agentProcessReply(lead) {
+  try {
+    const result = await agentClassifyReply(lead);
+    await agentDecideAndAct(lead, result.classification);
+  } catch (err) {
+    console.error('Reply classification failed for', lead.email, err);
+  }
+}
+
+async function runAgentCheckCycle() {
+  const session = window.__currentSession;
+  if (!session) return;
+  const repliedPending = contacts.filter(c => c.agentStatus === 'replied_pending_classification');
+  for (const lead of repliedPending) {
+    await agentProcessReply(lead);
+  }
+
+  const awaitingReply = contacts.filter(c => c.agentStatus === 'email_sent' || c.agentStatus === 'followup_sent');
+  const now = new Date();
+  for (const lead of awaitingReply) {
+    if (!lead.agentLastRun) continue;
+    const daysSince = Math.floor((now - new Date(lead.agentLastRun)) / 86400000);
+    if (daysSince < automationSettings.agentFollowupDays) continue;
+    if ((lead.agentFollowupCount || 0) >= automationSettings.agentMaxFollowups) {
+      await agentUpdateLead(lead.id, { agentStatus: 'cold' });
+      continue;
+    }
+    try {
+      const followup = await agentGenerateFollowup(lead);
+      await agentSendLeadEmail(lead, followup.subject, followup.body);
+      await agentUpdateLead(lead.id, {
+        agentStatus: 'followup_sent',
+        agentFollowupCount: (lead.agentFollowupCount || 0) + 1,
+        agentLastRun: new Date().toISOString()
+      });
+    } catch (err) {
+      console.error('Follow-up failed for', lead.email, err);
+    }
+  }
+}
+
+function renderAgentActivity() {
+  const el = document.getElementById('agentActivityList');
+  if (!el) return;
+  const active = contacts.filter(c => c.agentStatus && c.agentStatus !== 'not_started');
+  if (!active.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-light)">No leads started yet.</div>'; return; }
+
+  const statusLabels = {
+    email_sent: '✉️ Awaiting reply', followup_sent: '🔁 Follow-up sent, awaiting reply',
+    replied_pending_classification: '💬 Reply received — processing...', positive: '🎯 Positive — meeting task created',
+    closed_not_interested: '👋 Not interested — closed', needs_human: '🙋 Needs your reply',
+    skipped_low_score: '⏭️ Skipped (low score)', cold: '🧊 Cold — no reply after follow-ups'
+  };
+  const statusColor = {
+    positive: '#16A34A', closed_not_interested: '#94A3B8', needs_human: '#F59E0B',
+    skipped_low_score: '#94A3B8', cold: '#94A3B8', email_sent: '#2563EB', followup_sent: '#2563EB',
+    replied_pending_classification: '#F59E0B'
+  };
+
+  el.innerHTML = active.map(c => `
+    <div style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <div>
+        <div style="font-weight:600;font-size:12.5px">${escapeHtml(c.name || c.email)} ${c.company ? '— ' + escapeHtml(c.company) : ''}</div>
+        <div style="font-size:11px;color:var(--text-light);margin-top:2px">Score: ${c.agentScore !== null && c.agentScore !== undefined ? c.agentScore : '—'} ${c.agentFollowupCount ? '· Follow-ups sent: ' + c.agentFollowupCount : ''}</div>
+      </div>
+      <span style="background:${statusColor[c.agentStatus] || '#94A3B8'};color:#fff;font-size:10.5px;font-weight:700;padding:3px 10px;border-radius:10px">${statusLabels[c.agentStatus] || c.agentStatus}</span>
+    </div>`).join('');
+}
+
+// Background check every 2 minutes while the CRM tab is open (alongside notifications)
+setInterval(runAgentCheckCycle, 2 * 60 * 1000);
+
 // ----- Engine: called whenever a trigger event happens elsewhere in the app -----
 async function runWorkflows(triggerType, record) {
   if (!record) return;
@@ -8715,6 +9017,34 @@ function checkOverdueTaskWorkflows() {
 setInterval(checkOverdueTaskWorkflows, 5 * 60 * 1000);
 
 // ===================== WHATSAPP / SMS (Twilio) =====================
+function loadAgentSettingsUI() {
+  if (document.getElementById('agent-min-score')) document.getElementById('agent-min-score').value = automationSettings.agentMinScore;
+  if (document.getElementById('agent-max-followups')) document.getElementById('agent-max-followups').value = automationSettings.agentMaxFollowups;
+  if (document.getElementById('agent-followup-days')) document.getElementById('agent-followup-days').value = automationSettings.agentFollowupDays;
+}
+
+async function saveAgentSettings() {
+  automationSettings.agentMinScore = parseInt(document.getElementById('agent-min-score').value) || 0;
+  automationSettings.agentMaxFollowups = parseInt(document.getElementById('agent-max-followups').value) || 0;
+  automationSettings.agentFollowupDays = parseInt(document.getElementById('agent-followup-days').value) || 1;
+  const msg = document.getElementById('agentSettingsSaved');
+  try {
+    const session = window.__currentSession;
+    if (!session) { alert('Session expired. Please log in again.'); return; }
+    const { error } = await supabaseClient.from('campaign_settings').upsert({
+      user_id: session.user.id,
+      agent_min_score: automationSettings.agentMinScore,
+      agent_max_followups: automationSettings.agentMaxFollowups,
+      agent_followup_days: automationSettings.agentFollowupDays
+    }, { onConflict: 'user_id' });
+    if (error) { alert('Could not save: ' + error.message); return; }
+    if (msg) { msg.textContent = '✓ Saved'; setTimeout(() => msg.textContent = '', 2000); }
+  } catch (err) {
+    alert('Something went wrong while saving.');
+    console.error(err);
+  }
+}
+
 function loadIntegrationSettingsUI() {
   if (document.getElementById('int-zapier-url')) document.getElementById('int-zapier-url').value = automationSettings.zapierWebhookUrl || '';
   if (document.getElementById('int-slack-url')) document.getElementById('int-slack-url').value = automationSettings.slackWebhookUrl || '';
@@ -9167,11 +9497,15 @@ async function loadCampaignSettingsFromSupabase() {
       slackWebhookUrl: (data && data.slack_webhook_url) || '',
       calendlyUrl: (data && data.calendly_url) || '',
       mailchimpApiKey: (data && data.mailchimp_api_key) || '',
-      mailchimpListId: (data && data.mailchimp_list_id) || ''
+      mailchimpListId: (data && data.mailchimp_list_id) || '',
+      agentMinScore: (data && data.agent_min_score !== null && data.agent_min_score !== undefined) ? data.agent_min_score : 40,
+      agentMaxFollowups: (data && data.agent_max_followups !== null && data.agent_max_followups !== undefined) ? data.agent_max_followups : 3,
+      agentFollowupDays: (data && data.agent_followup_days !== null && data.agent_followup_days !== undefined) ? data.agent_followup_days : 3
     };
     if (document.getElementById('campaignWebAppUrl')) loadCampaignSettings();
     if (document.getElementById('twilioProxyUrl')) loadAutomationSettingsUI();
     if (document.getElementById('int-zapier-url')) loadIntegrationSettingsUI();
+    if (document.getElementById('agent-min-score')) loadAgentSettingsUI();
   } catch (err) {
     console.error(err);
   }
@@ -12469,6 +12803,7 @@ checkTaskReminders();
       checkOverdueTaskWorkflows();
       checkTaskReminders();
       checkLandingPageLeadWorkflows();
+      runAgentCheckCycle();
       await loadNotificationsFromSupabase();
     }
   } catch (err) {

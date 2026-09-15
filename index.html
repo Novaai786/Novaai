@@ -1030,21 +1030,21 @@
         </div>
         <div id="contactColumnsPanel" style="display:none;background:#f8f9fb;border:1px solid var(--border,#e2e5eb);border-radius:8px;padding:10px 14px;margin-bottom:10px;gap:14px;flex-wrap:wrap" >
           <div style="font-size:12px;font-weight:700;width:100%;margin-bottom:4px;color:var(--text-light)">Show/Hide Columns:</div>
-          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" checked data-col="companySize" onchange="toggleContactColumn(this)"> Company Size</label>
-          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" checked data-col="country" onchange="toggleContactColumn(this)"> Country</label>
-          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" checked data-col="phone" onchange="toggleContactColumn(this)"> Phone</label>
-          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" checked data-col="source" onchange="toggleContactColumn(this)"> Lead Source</label>
-          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" checked data-col="icp" onchange="toggleContactColumn(this)"> ICP Tag</label>
-          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" checked data-col="leadScore" onchange="toggleContactColumn(this)"> Lead Score</label>
-          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" checked data-col="website" onchange="toggleContactColumn(this)"> Company Website</label>
-          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" checked data-col="linkedin" onchange="toggleContactColumn(this)"> LinkedIn</label>
-          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" checked data-col="painPoint" onchange="toggleContactColumn(this)"> Pain Point</label>
-          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" checked data-col="lastContacted" onchange="toggleContactColumn(this)"> Last Contacted</label>
-          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" checked data-col="nextFollowup" onchange="toggleContactColumn(this)"> Next Follow-up</label>
-          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" checked data-col="decisionMaker" onchange="toggleContactColumn(this)"> Decision Maker?</label>
-          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" checked data-col="budget" onchange="toggleContactColumn(this)"> Budget Range</label>
-          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" checked data-col="priority" onchange="toggleContactColumn(this)"> Priority Level</label>
-          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" checked data-col="pipelineStage" onchange="toggleContactColumn(this)"> Pipeline / Stage</label>
+          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" data-col="companySize" onchange="toggleContactColumn(this)"> Company Size</label>
+          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" data-col="country" onchange="toggleContactColumn(this)"> Country</label>
+          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" data-col="phone" onchange="toggleContactColumn(this)"> Phone</label>
+          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" data-col="source" onchange="toggleContactColumn(this)"> Lead Source</label>
+          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" data-col="icp" onchange="toggleContactColumn(this)"> ICP Tag</label>
+          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" data-col="leadScore" onchange="toggleContactColumn(this)"> Lead Score</label>
+          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" data-col="website" onchange="toggleContactColumn(this)"> Company Website</label>
+          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" data-col="linkedin" onchange="toggleContactColumn(this)"> LinkedIn</label>
+          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" data-col="painPoint" onchange="toggleContactColumn(this)"> Pain Point</label>
+          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" data-col="lastContacted" onchange="toggleContactColumn(this)"> Last Contacted</label>
+          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" data-col="nextFollowup" onchange="toggleContactColumn(this)"> Next Follow-up</label>
+          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" data-col="decisionMaker" onchange="toggleContactColumn(this)"> Decision Maker?</label>
+          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" data-col="budget" onchange="toggleContactColumn(this)"> Budget Range</label>
+          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" data-col="priority" onchange="toggleContactColumn(this)"> Priority Level</label>
+          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" data-col="pipelineStage" onchange="toggleContactColumn(this)"> Pipeline / Stage</label>
         </div>
         <style>
           #contactColumnsPanel.open{display:flex !important}
@@ -2321,7 +2321,7 @@ Leadnovaai</textarea>
       <input class="form-control" id="c-email" type="email" placeholder="john@company.com">
     </div>
     <div class="form-row">
-      <div class="form-group">
+      <div class="form-group" data-colfield="phone">
         <label class="form-label">Phone</label>
         <input class="form-control" id="c-phone" placeholder="+1 234 567 890">
       </div>
@@ -2331,7 +2331,7 @@ Leadnovaai</textarea>
       </div>
     </div>
     <div class="form-row">
-      <div class="form-group">
+      <div class="form-group" data-colfield="companySize">
         <label class="form-label">Company Size</label>
         <select class="form-control" id="c-companysize">
           <option value="">Select size</option>
@@ -2343,7 +2343,7 @@ Leadnovaai</textarea>
           <option>1000+</option>
         </select>
       </div>
-      <div class="form-group">
+      <div class="form-group" data-colfield="country">
         <label class="form-label">Country</label>
         <input class="form-control" id="c-country" placeholder="e.g. USA, Canada, UK">
       </div>
@@ -2365,7 +2365,7 @@ Leadnovaai</textarea>
       </div>
     </div>
     <div class="form-row">
-      <div class="form-group">
+      <div class="form-group" data-colfield="source">
         <label class="form-label">Lead Source</label>
         <select class="form-control" id="c-source">
           <option value="">Select source</option>
@@ -2376,7 +2376,7 @@ Leadnovaai</textarea>
           <option>Cold Email</option>
         </select>
       </div>
-      <div class="form-group">
+      <div class="form-group" data-colfield="icp">
         <label class="form-label">ICP Tag</label>
         <select class="form-control" id="c-icp">
           <option value="">Select ICP</option>
@@ -2388,7 +2388,7 @@ Leadnovaai</textarea>
         </select>
       </div>
     </div>
-    <div class="form-group">
+    <div class="form-group" data-colfield="leadScore">
       <label class="form-label">Lead Score</label>
       <select class="form-control" id="c-leadscore">
         <option value="">Select score</option>
@@ -2409,19 +2409,19 @@ Leadnovaai</textarea>
         <option value="">Unassigned</option>
       </select>
     </div>
-    <div class="form-group">
+    <div class="form-group" data-colfield="pipelineStage">
       <label class="form-label">Pipeline Stage</label>
       <select class="form-control" id="c-stage"></select>
     </div>
-    <div class="form-group">
+    <div class="form-group" data-colfield="website">
       <label class="form-label">Company Website</label>
       <input class="form-control" id="c-website" placeholder="e.g. company.com">
     </div>
-    <div class="form-group">
+    <div class="form-group" data-colfield="linkedin">
       <label class="form-label">LinkedIn URL</label>
       <input class="form-control" id="c-linkedin" placeholder="linkedin.com/in/...">
     </div>
-    <div class="form-group">
+    <div class="form-group" data-colfield="painPoint">
       <label class="form-label">Pain Point</label>
       <select class="form-control" id="c-painpoint">
         <option value="">Select pain point</option>
@@ -2434,17 +2434,17 @@ Leadnovaai</textarea>
       </select>
     </div>
     <div class="form-row">
-      <div class="form-group">
+      <div class="form-group" data-colfield="lastContacted">
         <label class="form-label">Last Contacted Date</label>
         <input class="form-control" id="c-lastcontacted" type="date">
       </div>
-      <div class="form-group">
+      <div class="form-group" data-colfield="nextFollowup">
         <label class="form-label">Next Follow-up Date</label>
         <input class="form-control" id="c-nextfollowup" type="date">
       </div>
     </div>
     <div class="form-row">
-      <div class="form-group">
+      <div class="form-group" data-colfield="decisionMaker">
         <label class="form-label">Decision Maker?</label>
         <select class="form-control" id="c-decisionmaker">
           <option value="">Select</option>
@@ -2453,7 +2453,7 @@ Leadnovaai</textarea>
           <option>Influencer</option>
         </select>
       </div>
-      <div class="form-group">
+      <div class="form-group" data-colfield="budget">
         <label class="form-label">Budget Range</label>
         <select class="form-control" id="c-budget">
           <option value="">Select budget</option>
@@ -2466,7 +2466,7 @@ Leadnovaai</textarea>
         </select>
       </div>
     </div>
-    <div class="form-group">
+    <div class="form-group" data-colfield="priority">
       <label class="form-label">Priority Level</label>
       <select class="form-control" id="c-priority">
         <option value="">Select priority</option>
@@ -4369,6 +4369,32 @@ function toggleContactColumn(checkbox) {
   const col = checkbox.getAttribute('data-col');
   if (checkbox.checked) table.classList.remove('hide-' + col);
   else table.classList.add('hide-' + col);
+
+  const formField = document.querySelector('#contactModal [data-colfield="' + col + '"]');
+  if (formField) formField.style.display = checkbox.checked ? '' : 'none';
+
+  saveContactColumnPrefs();
+}
+
+function saveContactColumnPrefs() {
+  const enabled = [...document.querySelectorAll('#contactColumnsPanel input[type="checkbox"]')]
+    .filter(cb => cb.checked)
+    .map(cb => cb.getAttribute('data-col'));
+  try { localStorage.setItem('novaai_contact_cols', JSON.stringify(enabled)); } catch (err) { /* ignore */ }
+}
+
+function initContactColumnPrefs() {
+  let enabled = [];
+  try { enabled = JSON.parse(localStorage.getItem('novaai_contact_cols') || '[]'); } catch (err) { enabled = []; }
+  document.querySelectorAll('#contactColumnsPanel input[type="checkbox"]').forEach(cb => {
+    const col = cb.getAttribute('data-col');
+    const on = enabled.includes(col);
+    cb.checked = on;
+    const table = document.getElementById('contactsTableEl');
+    if (table) { if (on) table.classList.remove('hide-' + col); else table.classList.add('hide-' + col); }
+    const formField = document.querySelector('#contactModal [data-colfield="' + col + '"]');
+    if (formField) formField.style.display = on ? '' : 'none';
+  });
 }
 
 // ===================== CONTACT PROFILE =====================
@@ -12772,6 +12798,7 @@ populateRoleDropdown();
 updateBadges();
 updateReminderBtnLabel();
 checkTaskReminders();
+initContactColumnPrefs();
 
 (async function initLeadsLoad() {
   try {

@@ -4403,6 +4403,9 @@ function openContactProfile(id) {
   currentProfileTab = 'catchup';
   renderContactProfile();
   openModal('contactProfileModal');
+  if (campaignSettings.webAppUrl) {
+    refreshCampaignTracking().then(() => renderContactProfile());
+  }
 }
 
 function switchProfileTab(tab) {
@@ -4561,7 +4564,7 @@ function getProfileActivityFeed(c) {
   const manual = (c.timeline || []).map((n, i) => ({ ...n, type: n.type || 'Note', _idx: i }));
   const matchName = (c.name || '').toLowerCase();
   const matchEmail = (c.email || '').toLowerCase();
-  const auto = (emails || []).filter(e => {
+  const autoManualEmails = (emails || []).filter(e => {
     const cn = (e.contact || '').toLowerCase();
     const em = (e.email || '').toLowerCase();
     return (matchName && cn === matchName) || (matchEmail && em === matchEmail);
@@ -4572,7 +4575,21 @@ function getProfileActivityFeed(c) {
     type: 'Email',
     auto: true
   }));
-  return manual.concat(auto).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  const sentCampaignEmails = (campaignLogs || []).filter(l => (l.email || '').toLowerCase() === matchEmail).map(l => ({
+    note: `✉️ Sent: "${l.subject || 'No subject'}" · ${l.status || 'Sent'}`,
+    date: l.date && l.date !== '-' ? l.date : '',
+    ts: l.date && l.date !== '-' ? new Date(l.date).getTime() : 0,
+    type: 'Email',
+    auto: true
+  }));
+  const replyItem = c.replyText ? [{
+    note: `💬 Replied: "${c.replyText.substring(0, 300)}${c.replyText.length > 300 ? '...' : ''}"`,
+    date: c.replyReceivedAt ? new Date(c.replyReceivedAt).toLocaleString() : '',
+    ts: c.replyReceivedAt ? new Date(c.replyReceivedAt).getTime() : 0,
+    type: 'Reply',
+    auto: true
+  }] : [];
+  return manual.concat(autoManualEmails, sentCampaignEmails, replyItem).sort((a, b) => (b.ts || 0) - (a.ts || 0));
 }
 
 function renderProfileDashboard(c) {
@@ -5633,7 +5650,7 @@ function setTimelineFilter(f) {
   renderTimeline();
 }
 
-const TIMELINE_TYPE_ICON = { Call: '📞', Email: '📧', Meeting: '📅', Note: '📝' };
+const TIMELINE_TYPE_ICON = { Call: '📞', Email: '📧', Meeting: '📅', Note: '📝', Reply: '💬' };
 
 function getAutoEmailActivities(entity) {
   // Auto-pull from the Email Log for this contact (read-only entries)

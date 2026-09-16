@@ -2929,6 +2929,21 @@ Leadnovaai</textarea>
   </div>
 </div>
 
+<!-- Company Profile Modal -->
+<div class="modal-overlay" id="companyProfileModal">
+  <div class="modal" style="max-width:1280px;width:95vw;max-height:90vh;padding:0;display:flex;flex-direction:column;overflow:hidden">
+    <div class="modal-header" style="padding:16px 20px;margin:0;border-bottom:1.5px solid var(--border);flex-shrink:0">
+      <div class="modal-title" id="coProfileTitle">Company Record</div>
+      <button class="modal-close" onclick="closeModal('companyProfileModal')">✕</button>
+    </div>
+    <div class="cp-grid">
+      <div class="cp-col" id="coLeftCol"></div>
+      <div class="cp-col cp-col-center" id="coCenterCol"></div>
+      <div class="cp-col" id="coRightCol"></div>
+    </div>
+  </div>
+</div>
+
 <!-- Ticket Modal -->
 <div class="modal-overlay" id="ticketModal">
   <div class="modal">
@@ -3628,6 +3643,8 @@ let tasks = [];
 let tickets = []; // now loaded from Supabase (see loadTicketsFromSupabase)
 let currentProfileContactId = null;
 let currentProfileTab = 'overview';
+let currentProfileCompanyId = null;
+let currentCoProfileTab = 'catchup';
 let emails = []; // now loaded from Supabase (see loadEmailsFromSupabase)
 let campaignSettings = {}; // now loaded from Supabase (see loadCampaignSettingsFromSupabase)
 let campaignLogs = JSON.parse(localStorage.getItem('crm_campaign_logs') || '[]'); // mirrors Apps Script/Google Sheets tracking data — not Supabase-backed
@@ -5563,7 +5580,7 @@ function renderCompanies() {
     const opp = getOpportunityScore(c);
     return `
     <tr>
-      <td><div style="font-weight:600">${escapeHtml(c.name)}</div><div style="font-size:11px;color:var(--text-light)">${escapeHtml(c.location||'')}</div></td>
+      <td><div style="font-weight:600;color:var(--primary);cursor:pointer" onclick="openCompanyProfile(${c.id})">${escapeHtml(c.name)}</div><div style="font-size:11px;color:var(--text-light)">${escapeHtml(c.location||'')}</div></td>
       <td style="font-size:12px">${escapeHtml(c.industry||'-')}</td>
       <td style="font-size:12px">${c.website ? `<a href="https://${escapeHtml(c.website.replace(/^https?:\/\//,''))}" target="_blank" style="color:var(--primary)">${escapeHtml(c.website)}</a>` : '-'}</td>
       <td>${(c.crm||'').includes('HubSpot') ? '<span style="color:#059669;font-weight:700">✅ HubSpot</span>' : (c.crm||'').includes('No CRM') ? '<span style="color:#dc2626;font-weight:700">❌ No CRM</span>' : escapeHtml(c.crm||'-')}</td>
@@ -5582,6 +5599,219 @@ function renderCompanies() {
       </td>
     </tr>`;
   }).join('');
+}
+
+// ===================== COMPANY PROFILE =====================
+function openCompanyProfile(id) {
+  currentProfileCompanyId = id;
+  currentCoProfileTab = 'catchup';
+  renderCompanyProfile();
+  openModal('companyProfileModal');
+}
+
+function switchCoProfileTab(tab) {
+  currentCoProfileTab = tab;
+  renderCoCenterCol();
+}
+
+function renderCompanyProfile() {
+  const co = companies.find(co => co.id === currentProfileCompanyId);
+  if (!co) return;
+  document.getElementById('coProfileTitle').textContent = co.name || 'Company Record';
+  renderCoLeftCol(co);
+  renderCoCenterCol();
+  renderCoRightCol(co);
+}
+
+function renderCompanyProfileBody() {
+  const co = companies.find(co => co.id === currentProfileCompanyId);
+  if (!co) return;
+  renderCoLeftCol(co);
+  renderCoCenterCol();
+  renderCoRightCol(co);
+}
+
+function renderCoLeftCol(co) {
+  const opp = getOpportunityScore(co);
+  document.getElementById('coLeftCol').innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="width:48px;height:48px;border-radius:12px;background:${getColor(co.name)};color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;flex-shrink:0">${initials(co.name)}</div>
+      <div>
+        <div style="font-weight:700;font-size:15px">${escapeHtml(co.name || '')}</div>
+        <div style="font-size:11px;color:var(--text-light)">${escapeHtml(co.industry || '')}</div>
+      </div>
+    </div>
+    ${co.website ? `<div style="font-size:12px;margin-top:8px;word-break:break-all"><a href="https://${escapeHtml(co.website.replace(/^https?:\/\//,''))}" target="_blank">${escapeHtml(co.website)}</a></div>` : ''}
+    <div style="margin-top:8px"><span class="badge ${opp.cls}">${opp.icon} ${escapeHtml(opp.label)}</span></div>
+
+    <div class="cp-action-row">
+      <button class="cp-action-btn" onclick="closeModal('companyProfileModal');openTimeline('company', ${co.id})"><span>📝</span><span class="cp-action-label">Note</span></button>
+      <button class="cp-action-btn" onclick="quickAddTaskForCompany(${co.id})"><span>✅</span><span class="cp-action-label">Task</span></button>
+      <button class="cp-action-btn" onclick="quickAddDealForCompany(${co.id})"><span>💼</span><span class="cp-action-label">Deal</span></button>
+    </div>
+
+    <div class="cp-keyinfo">
+      <div class="cp-keyinfo-title">Key Information</div>
+      <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Industry</div><div class="cp-keyinfo-val">${escapeHtml(co.industry || '--')}</div></div>
+      <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Company Size</div><div class="cp-keyinfo-val">${escapeHtml(co.size || '--')}</div></div>
+      <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Country</div><div class="cp-keyinfo-val">${escapeHtml(co.country || '--')}</div></div>
+      <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Location</div><div class="cp-keyinfo-val">${escapeHtml(co.location || '--')}</div></div>
+      <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Employees</div><div class="cp-keyinfo-val">${escapeHtml(co.employees || '--')}</div></div>
+      <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Revenue</div><div class="cp-keyinfo-val">${escapeHtml(co.revenue || '--')}</div></div>
+      <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">CRM</div><div class="cp-keyinfo-val">${escapeHtml(co.crm || '--')}</div></div>
+      <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Tech Stack</div><div class="cp-keyinfo-val">${escapeHtml(co.techstack || '--')}</div></div>
+      <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Automation Level</div><div class="cp-keyinfo-val">${escapeHtml(co.automation || '--')}</div></div>
+      <button class="btn btn-outline btn-sm" style="width:100%" onclick="closeModal('companyProfileModal');editCompany(${co.id})">✏️ Edit Company</button>
+    </div>`;
+}
+
+function renderCoCenterCol() {
+  const co = companies.find(co => co.id === currentProfileCompanyId);
+  if (!co) return;
+  const col = document.getElementById('coCenterCol');
+  col.innerHTML = `
+    <div class="cp-subtabs">
+      <div class="cp-subtab ${currentCoProfileTab === 'catchup' ? 'active' : ''}" onclick="switchCoProfileTab('catchup')">Catch-up</div>
+      <div class="cp-subtab ${currentCoProfileTab === 'activities' ? 'active' : ''}" onclick="switchCoProfileTab('activities')">Activities</div>
+    </div>
+    <div id="coCenterBody"></div>`;
+  document.getElementById('coCenterBody').innerHTML = currentCoProfileTab === 'activities' ? renderCoProfileActivitiesTab(co) : renderCoProfileDashboard(co);
+}
+
+function getCoProfileActivityFeed(co) {
+  return ((co.timeline || []).map((n, i) => ({ ...n, type: n.type || 'Note', _idx: i }))).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+}
+
+function renderCoProfileActivitiesTab(co) {
+  const feed = getCoProfileActivityFeed(co);
+  return `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+      <button class="btn btn-outline btn-sm" onclick="closeModal('companyProfileModal');openTimeline('company', ${co.id})">+ Log Activity</button>
+    </div>
+    ${feed.length ? feed.map(n => `
+      <div class="timeline-item">
+        <div class="timeline-dot"></div>
+        <div class="timeline-date">${TIMELINE_TYPE_ICON[n.type] || '📝'} ${n.type} · ${n.date}</div>
+        <div class="timeline-note"><span>${n.note}</span></div>
+      </div>`).join('') : `<div style="text-align:center;color:var(--text-light);font-size:13px;padding:24px">No activity logged yet.</div>`}`;
+}
+
+function renderCoProfileDashboard(co) {
+  const cDeals = deals.filter(d => (d.company || '').toLowerCase() === (co.name || '').toLowerCase());
+  const openDeals = cDeals.filter(d => d.stage !== 'Won' && d.stage !== 'Lost');
+  const wonDeals = cDeals.filter(d => d.stage === 'Won');
+  const pipelineValue = openDeals.reduce((s, d) => s + (parseFloat(d.value) || 0), 0);
+  const wonValue = wonDeals.reduce((s, d) => s + (parseFloat(d.value) || 0), 0);
+  const coContacts = contacts.filter(c => (c.company || '').toLowerCase() === (co.name || '').toLowerCase());
+  const feed = getCoProfileActivityFeed(co).slice(0, 8);
+
+  return `
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px">
+      <div style="border:1.5px solid var(--border);border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:20px;font-weight:700">${openDeals.length}</div>
+        <div style="font-size:11px;color:var(--text-light);text-transform:uppercase">Open Deals</div>
+      </div>
+      <div style="border:1.5px solid var(--border);border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:20px;font-weight:700">$${pipelineValue.toLocaleString()}</div>
+        <div style="font-size:11px;color:var(--text-light);text-transform:uppercase">Pipeline Value</div>
+      </div>
+      <div style="border:1.5px solid var(--border);border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:20px;font-weight:700;color:#16a34a">$${wonValue.toLocaleString()}</div>
+        <div style="font-size:11px;color:var(--text-light);text-transform:uppercase">Won Value</div>
+      </div>
+      <div style="border:1.5px solid var(--border);border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:20px;font-weight:700">${coContacts.length}</div>
+        <div style="font-size:11px;color:var(--text-light);text-transform:uppercase">Contacts</div>
+      </div>
+    </div>
+
+    <div style="border:1.5px solid var(--border);border-radius:10px;padding:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase">Recent Activity</div>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('companyProfileModal');openTimeline('company', ${co.id})">+ Log Activity</button>
+      </div>
+      ${feed.length ? feed.map(n => `
+        <div class="timeline-item">
+          <div class="timeline-dot"></div>
+          <div class="timeline-date">${TIMELINE_TYPE_ICON[n.type] || '📝'} ${n.type} · ${n.date}</div>
+          <div class="timeline-note"><span>${n.note}</span></div>
+        </div>`).join('') : `<div style="text-align:center;color:var(--text-light);font-size:13px;padding:14px">No activity logged yet.</div>`}
+    </div>`;
+}
+
+function renderCoRightCol(co) {
+  const coContacts = contacts.filter(c => (c.company || '').toLowerCase() === (co.name || '').toLowerCase());
+  const cDeals = deals.filter(d => (d.company || '').toLowerCase() === (co.name || '').toLowerCase());
+  const linkableContacts = contacts.filter(c => !coContacts.some(x => x.id === c.id));
+
+  document.getElementById('coRightCol').innerHTML = `
+    <div class="cp-widget">
+      <div class="cp-widget-header"><span>👤 Contacts (${coContacts.length})</span></div>
+      <div class="cp-widget-body">
+        ${linkableContacts.length ? `
+          <div style="margin-bottom:10px;display:flex;gap:6px">
+            <select id="link-contact-select-${co.id}" class="form-control" style="flex:1;font-size:12px">
+              ${linkableContacts.map(c => `<option value="${c.id}">${escapeHtml(c.name || c.email)}</option>`).join('')}
+            </select>
+            <button class="btn btn-outline btn-sm" onclick="linkContactToCompany(${co.id}, document.getElementById('link-contact-select-${co.id}').value)">🔗 Link</button>
+          </div>` : ''}
+        ${coContacts.length ? coContacts.map(c => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+            <div style="cursor:pointer" onclick="closeModal('companyProfileModal');openContactProfile(${c.id})">
+              <div style="font-size:12.5px;font-weight:600;color:var(--primary)">${escapeHtml(c.name || c.email)}</div>
+              <div style="font-size:11px;color:var(--text-light)">${escapeHtml(c.title || '')}</div>
+            </div>
+          </div>`).join('') : `<div style="font-size:12px;color:var(--text-light)">No contacts linked yet.</div>`}
+      </div>
+    </div>
+
+    <div class="cp-widget">
+      <div class="cp-widget-header"><span>💼 Deals (${cDeals.length})</span><button class="btn-link" onclick="quickAddDealForCompany(${co.id})">+ Add</button></div>
+      <div class="cp-widget-body">
+        ${cDeals.length ? cDeals.map(d => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+            <div>
+              <div style="font-size:12.5px;font-weight:600">${escapeHtml(d.name)}</div>
+              <div style="font-size:11px;color:var(--text-light)">${escapeHtml(d.stage || '')} · $${(parseFloat(d.value) || 0).toLocaleString()}</div>
+            </div>
+          </div>`).join('') : `<div style="font-size:12px;color:var(--text-light)">No deals yet for this company.</div>`}
+      </div>
+    </div>`;
+}
+
+function quickAddDealForCompany(companyId) {
+  const co = companies.find(co => co.id === companyId);
+  if (!co) return;
+  clearDealForm();
+  document.getElementById('d-name').value = co.name + ' - New Deal';
+  document.getElementById('d-company').value = co.name || '';
+  closeModal('companyProfileModal');
+  openModal('dealModal');
+}
+
+function quickAddTaskForCompany(companyId) {
+  const co = companies.find(co => co.id === companyId);
+  if (!co) return;
+  document.getElementById('t-title').value = '';
+  document.getElementById('t-date').value = '';
+  document.getElementById('t-contact').value = co.name || '';
+  document.getElementById('t-notes').value = '';
+  closeModal('companyProfileModal');
+  openModal('taskModal');
+}
+
+async function linkContactToCompany(companyId, contactId) {
+  const co = companies.find(co => co.id === companyId);
+  const c = contacts.find(c => c.id == contactId);
+  if (!co || !c) return;
+  c.company = co.name;
+  try {
+    const { error } = await supabaseClient.from('leads').update({ company: co.name }).eq('id', c.id);
+    if (error) { alert('Could not link contact: ' + error.message); return; }
+    renderCompanyProfileBody();
+  } catch (err) {
+    console.error(err);
+  }
 }
 
 async function deleteCompany(id) {
@@ -6730,10 +6960,14 @@ function getSavedFieldList(storageKey) {
 }
 
 function renderContactExtraFieldsPanel() {
-  // The old "choose which extra fields to show" checklist has been removed — only the
-  // 5 default fields (First/Last/Email/Country/Phone) ever show in the Add Contact form now.
-  // Anything else the user needs should be added as a Custom Property instead.
-  applyContactExtraFieldVisibility([]);
+  // Shows/hides the "extra" contact fields in the Add/Edit form to match whatever
+  // is currently checked in Contacts > Show/Hide Columns (kept in sync via data-colfield).
+  let enabled = [];
+  try { enabled = JSON.parse(localStorage.getItem('novaai_contact_cols') || '[]'); } catch (e) { enabled = []; }
+  document.querySelectorAll('#contactModal [data-colfield]').forEach(el => {
+    const col = el.getAttribute('data-colfield');
+    el.style.display = enabled.includes(col) ? '' : 'none';
+  });
 }
 
 function applyContactExtraFieldVisibility(saved) {

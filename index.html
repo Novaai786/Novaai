@@ -2956,9 +2956,16 @@ Leadnovaai</textarea>
       <button class="modal-close" onclick="closeModal('ticketModal')">✕</button>
     </div>
     <input type="hidden" id="tk-contact-id">
+    <input type="hidden" id="tk-company-id">
     <div class="form-group">
       <label class="form-label">Subject *</label>
       <input class="form-control" id="tk-subject" placeholder="e.g. CRM login issue">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Related Deal (optional)</label>
+      <select class="form-control" id="tk-deal-id">
+        <option value="">None</option>
+      </select>
     </div>
     <div class="form-row">
       <div class="form-group">
@@ -4577,8 +4584,9 @@ function renderCenterCol() {
 
 function renderRightCol(c) {
   const co = companies.find(co => (co.name || '').toLowerCase() === (c.company || '').toLowerCase() && c.company);
-  const cDeals = c.company ? deals.filter(d => (d.company || '').toLowerCase() === c.company.toLowerCase()) : [];
-  const cTasks = c.name ? tasks.filter(t => (t.contact || '').toLowerCase() === c.name.toLowerCase()) : [];
+  // Same match rule as renderProfileDeals()/renderProfileTasks() bodies, so the header count always agrees with what's listed below it.
+  const cDeals = deals.filter(d => d.contactId === c.id || (c.company && (d.company || '').toLowerCase() === c.company.toLowerCase()));
+  const cTasks = tasks.filter(t => t.contactId === c.id || (c.name && (t.contact || '').toLowerCase() === c.name.toLowerCase()));
   const cTickets = tickets.filter(t => t.contactId === c.id);
   if (!c.attachments) c.attachments = [];
 
@@ -4688,12 +4696,12 @@ function getProfileActivityFeed(c) {
 }
 
 function renderProfileDashboard(c) {
-  const cDeals = c.company ? deals.filter(d => (d.company || '').toLowerCase() === c.company.toLowerCase()) : [];
+  const cDeals = deals.filter(d => d.contactId === c.id || (c.company && (d.company || '').toLowerCase() === c.company.toLowerCase()));
   const openDeals = cDeals.filter(d => d.stage !== 'Won' && d.stage !== 'Lost');
   const wonDeals = cDeals.filter(d => d.stage === 'Won');
   const dealValue = openDeals.reduce((s, d) => s + (Number(d.value) || 0), 0);
   const wonValue = wonDeals.reduce((s, d) => s + (Number(d.value) || 0), 0);
-  const cTasks = c.name ? tasks.filter(t => (t.contact || '').toLowerCase() === c.name.toLowerCase()) : [];
+  const cTasks = tasks.filter(t => t.contactId === c.id || (c.name && (t.contact || '').toLowerCase() === c.name.toLowerCase()));
   const openTasks = cTasks.filter(t => !t.done);
   const cTickets = tickets.filter(t => t.contactId === c.id);
   const openTickets = cTickets.filter(t => t.status !== 'Resolved');
@@ -4956,12 +4964,24 @@ function renderProfileTickets(c) {
       </div>`; }).join('') : `<div style="text-align:center;color:var(--text-light);font-size:13px;padding:20px">No tickets yet.</div>`}`;
 }
 
-function openTicketForm(contactId) {
-  document.getElementById('tk-contact-id').value = contactId;
+function openTicketForm(contactId, companyId) {
+  document.getElementById('tk-contact-id').value = contactId || '';
+  const c = contactId ? contacts.find(c => c.id === contactId) : null;
+  const co = companyId
+    ? companies.find(co => co.id === companyId)
+    : (c && c.company ? companies.find(co => (co.name || '').toLowerCase() === c.company.toLowerCase()) : null);
+  document.getElementById('tk-company-id').value = co ? co.id : '';
   document.getElementById('tk-subject').value = '';
   document.getElementById('tk-status').value = 'Open';
   document.getElementById('tk-priority').value = 'Medium';
   document.getElementById('tk-description').value = '';
+  // Related-deal picker: this contact/company's deals first, then everything else
+  const relatedDeals = deals.filter(d => (c && d.contactId === c.id) || (co && (d.company || '').toLowerCase() === (co.name || '').toLowerCase()));
+  const otherDeals = deals.filter(d => !relatedDeals.some(x => x.id === d.id));
+  const dealSelect = document.getElementById('tk-deal-id');
+  dealSelect.innerHTML = '<option value="">None</option>'
+    + (relatedDeals.length ? `<optgroup label="This contact/company">${relatedDeals.map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('')}</optgroup>` : '')
+    + (otherDeals.length ? `<optgroup label="Other deals">${otherDeals.map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('')}</optgroup>` : '');
   openModal('ticketModal');
 }
 
@@ -4969,6 +4989,8 @@ function mapTicketFromDb(row) {
   return {
     id: row.id,
     contactId: row.contactid || null,
+    companyId: row.companyid || null,
+    dealId: row.dealid || null,
     subject: row.subject || '',
     status: row.status || 'Open',
     priority: row.priority || 'Medium',
@@ -4980,6 +5002,8 @@ function mapTicketFromDb(row) {
 function mapTicketToDb(data, userId) {
   return {
     contactid: data.contactId || null,
+    companyid: data.companyId || null,
+    dealid: data.dealId || null,
     subject: data.subject || null,
     status: data.status || null,
     priority: data.priority || null,
@@ -5008,11 +5032,15 @@ async function loadTicketsFromSupabase() {
 }
 
 async function saveTicket() {
-  const contactId = Number(document.getElementById('tk-contact-id').value);
+  const contactId = Number(document.getElementById('tk-contact-id').value) || null;
+  const companyIdRaw = document.getElementById('tk-company-id').value;
+  const dealIdRaw = document.getElementById('tk-deal-id').value;
   const subject = document.getElementById('tk-subject').value.trim();
   if (!subject) { alert('Subject required!'); return; }
   const data = {
     contactId,
+    companyId: companyIdRaw ? companyIdRaw : null,
+    dealId: dealIdRaw ? Number(dealIdRaw) : null,
     subject,
     status: document.getElementById('tk-status').value,
     priority: document.getElementById('tk-priority').value,
@@ -5820,6 +5848,9 @@ function renderCoProfileDashboard(co) {
 function renderCoRightCol(co) {
   const coContacts = contacts.filter(c => (c.company || '').toLowerCase() === (co.name || '').toLowerCase());
   const cDeals = deals.filter(d => (d.company || '').toLowerCase() === (co.name || '').toLowerCase());
+  const linkableDeals = deals.filter(d => !cDeals.some(x => x.id === d.id));
+  const coContactIds = new Set(coContacts.map(c => c.id));
+  const cTickets = tickets.filter(t => t.companyId === co.id || coContactIds.has(t.contactId));
   const linkableContacts = contacts.filter(c => !coContacts.some(x => x.id === c.id));
 
   document.getElementById('coRightCol').innerHTML = `
@@ -5846,15 +5877,56 @@ function renderCoRightCol(co) {
     <div class="cp-widget">
       <div class="cp-widget-header"><span>💼 Deals (${cDeals.length})</span><button class="btn-link" onclick="quickAddDealForCompany(${co.id})">+ Add</button></div>
       <div class="cp-widget-body">
+        ${linkableDeals.length ? `
+          <div style="margin-bottom:10px;display:flex;gap:6px">
+            <select id="link-deal-select-co-${co.id}" class="form-control" style="flex:1;font-size:12px">
+              ${linkableDeals.map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('')}
+            </select>
+            <button class="btn btn-outline btn-sm" onclick="linkExistingDealToCompany(${co.id}, document.getElementById('link-deal-select-co-${co.id}').value)">🔗 Link</button>
+          </div>` : ''}
         ${cDeals.length ? cDeals.map(d => `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
-            <div>
+            <div style="cursor:pointer" onclick="closeModal('companyProfileModal');editDeal('${d.id}')">
               <div style="font-size:12.5px;font-weight:600">${escapeHtml(d.name)}</div>
               <div style="font-size:11px;color:var(--text-light)">${escapeHtml(d.stage || '')} · $${(parseFloat(d.value) || 0).toLocaleString()}</div>
             </div>
           </div>`).join('') : `<div style="font-size:12px;color:var(--text-light)">No deals yet for this company.</div>`}
       </div>
+    </div>
+
+    <div class="cp-widget">
+      <div class="cp-widget-header"><span>🎫 Tickets (${cTickets.length})</span><button class="btn-link" onclick="openTicketForm(null, ${co.id})">+ Add</button></div>
+      <div class="cp-widget-body">
+        ${cTickets.length ? cTickets.map(t => {
+          const ticketStatusColor = { Open: ['#fef3c7', '#92400e'], 'In Progress': ['#dbeafe', '#1e40af'], Resolved: ['#dcfce7', '#166534'] };
+          const sc = ticketStatusColor[t.status] || ['#f1f5f9', '#475569'];
+          return `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+            <div>
+              <div style="font-size:12.5px;font-weight:600">${escapeHtml(t.subject)}</div>
+              <div style="font-size:11px;color:var(--text-light)">${escapeHtml(t.priority || '')} priority${t.date ? ' · ' + escapeHtml(t.date) : ''}</div>
+            </div>
+            <span class="badge" style="background:${sc[0]};color:${sc[1]};font-size:10px">${escapeHtml(t.status)}</span>
+          </div>`; }).join('') : `<div style="font-size:12px;color:var(--text-light)">No tickets yet for this company.</div>`}
+      </div>
     </div>`;
+}
+
+// Links an already-existing deal to this company by name (kept as string match, same
+// convention the rest of the app already uses for deal↔company linking).
+async function linkExistingDealToCompany(companyId, dealId) {
+  const co = companies.find(co => String(co.id) === String(companyId));
+  const d = deals.find(d => String(d.id) === String(dealId));
+  if (!co || !d) return;
+  d.company = co.name;
+  renderCompanyProfileBody();
+  renderDeals();
+  try {
+    const { error } = await supabaseClient.from('deals').update({ company: d.company }).eq('id', d.id);
+    if (error) console.error('Could not link deal to company:', error);
+  } catch (err) {
+    console.error(err);
+  }
 }
 
 function quickAddDealForCompany(companyId) {

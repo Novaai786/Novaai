@@ -1045,6 +1045,7 @@
           <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" data-col="budget" onchange="toggleContactColumn(this)"> Budget Range</label>
           <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" data-col="priority" onchange="toggleContactColumn(this)"> Priority Level</label>
           <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" data-col="pipelineStage" onchange="toggleContactColumn(this)"> Pipeline / Stage</label>
+          <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" data-col="lifecycleStage" onchange="toggleContactColumn(this)"> Lifecycle Stage</label>
         </div>
         <style>
           #contactColumnsPanel.open{display:flex !important}
@@ -1063,10 +1064,11 @@
           table.hide-budget .col-budget{display:none}
           table.hide-priority .col-priority{display:none}
           table.hide-pipelineStage .col-pipelineStage{display:none}
+          table.hide-lifecycleStage .col-lifecycleStage{display:none}
         </style>
         <div class="table-wrap">
           <table id="contactsTableEl">
-            <thead><tr><th>First Name</th><th>Last Name</th><th>Email</th><th>Company</th><th class="col-companySize">Company Size</th><th class="col-country">Country</th><th class="col-phone">Phone</th><th>Status</th><th class="col-source">Lead Source</th><th class="col-icp">ICP Tag</th><th class="col-leadScore">Lead Score</th><th class="col-website">Company Website</th><th class="col-linkedin">LinkedIn</th><th class="col-painPoint">Pain Point</th><th class="col-lastContacted">Last Contacted</th><th class="col-nextFollowup">Next Follow-up</th><th class="col-decisionMaker">Decision Maker?</th><th class="col-budget">Budget Range</th><th class="col-priority">Priority</th><th class="col-pipelineStage">Pipeline / Stage</th><th>Action</th></tr></thead>
+            <thead><tr><th>First Name</th><th>Last Name</th><th>Email</th><th>Company</th><th class="col-companySize">Company Size</th><th class="col-country">Country</th><th class="col-phone">Phone</th><th>Status</th><th class="col-source">Lead Source</th><th class="col-icp">ICP Tag</th><th class="col-leadScore">Lead Score</th><th class="col-website">Company Website</th><th class="col-linkedin">LinkedIn</th><th class="col-painPoint">Pain Point</th><th class="col-lastContacted">Last Contacted</th><th class="col-nextFollowup">Next Follow-up</th><th class="col-decisionMaker">Decision Maker?</th><th class="col-budget">Budget Range</th><th class="col-priority">Priority</th><th class="col-pipelineStage">Pipeline / Stage</th><th class="col-lifecycleStage">Lifecycle Stage</th><th>Action</th></tr></thead>
             <tbody id="contactsTable"><tr><td colspan="21" style="text-align:center;color:var(--text-light);padding:20px">No contacts yet. Add your first lead!</td></tr></tbody>
           </table>
         </div>
@@ -3662,6 +3664,42 @@ let workflows = []; // now loaded from Supabase (see loadWorkflowsFromSupabase)
 let wfActionDraft = []; // temp working array while building/editing a workflow in the modal
 let wfInserterPos = null; // position index currently showing the "add step" picker on the canvas, or null
 let firedOverdueWorkflowTaskIds = new Set(); // prevents a task_overdue workflow from firing more than once per task
+// ===== LIFECYCLE STAGE ENGINE =====
+const LIFECYCLE_STAGES = ["Subscriber", "Lead", "MQL", "SQL", "Opportunity", "Customer", "Evangelist"];
+const LIFECYCLE_STAGE_COLOR = {
+  Subscriber: '#94A3B8', Lead: '#2563EB', MQL: '#7C3AED', SQL: '#DB2777',
+  Opportunity: '#EA580C', Customer: '#16A34A', Evangelist: '#059669'
+};
+
+// Moves a contact's lifecycle stage forward only — never downgrades a Customer back to Lead, etc.
+// Safe to call from anywhere (AI scoring, reply classification, deal creation, deal won, ...).
+async function advanceLifecycleStage(contact, newStage) {
+  if (!contact || !newStage) return;
+  const curIdx = LIFECYCLE_STAGES.indexOf(contact.lifecycleStage || 'Lead');
+  const newIdx = LIFECYCLE_STAGES.indexOf(newStage);
+  if (newIdx === -1 || newIdx <= curIdx) return;
+  contact.lifecycleStage = newStage;
+  try {
+    const { error } = await supabaseClient.from('leads').update({ lifecycle_stage: newStage }).eq('id', contact.id);
+    if (error) console.error('Could not update lifecycle stage:', error);
+    else addNotification('🔄 Lifecycle Stage Updated', (contact.name || contact.email) + ' → ' + newStage);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+// Finds the CRM contact record that best matches a deal (by linked contactId, else by company name).
+function findContactForDeal(deal) {
+  if (deal.contactId) {
+    const byId = contacts.find(c => c.id == deal.contactId);
+    if (byId) return byId;
+  }
+  if (deal.company) {
+    return contacts.find(c => (c.company || '').toLowerCase() === deal.company.toLowerCase());
+  }
+  return null;
+}
+
 const WF_TRIGGER_LABELS = {
   deal_stage_changed: 'Deal reaches stage',
   deal_won: 'Deal is marked Won',
@@ -4133,7 +4171,8 @@ function mapLeadFromDb(row) {
     agentScore: (row.agent_score !== null && row.agent_score !== undefined) ? row.agent_score : null,
     agentStatus: row.agent_status || 'not_started',
     agentFollowupCount: row.agent_followup_count || 0,
-    agentLastRun: row.agent_last_run || ''
+    agentLastRun: row.agent_last_run || '',
+    lifecycleStage: row.lifecycle_stage || 'Lead'
   };
 }
 
@@ -4164,6 +4203,7 @@ function mapLeadToDb(data, userId) {
     priority: data.priority || null,
     notes: data.notes || null,
     custom_fields: data.customFields || {},
+    lifecycle_stage: data.lifecycleStage || 'Lead',
     user_id: userId
   };
 }
@@ -4231,6 +4271,11 @@ async function saveContact() {
       const { error } = await supabaseClient.from('leads').update(dbRow).eq('id', editId);
       if (error) { alert('Could not update lead: ' + error.message); return; }
       data.id = editId;
+      const existing = contacts.find(c => c.id == editId);
+      if (existing) {
+        existing.lifecycleStage = data.lifecycleStage || existing.lifecycleStage;
+        if (data.leadScore === 'Hot 🔥') await advanceLifecycleStage(existing, 'MQL');
+      }
       runWorkflows('custom_condition', { ...data, _wfObjectType: 'contact' });
       await applyListPickerSelection('c', 'contact', editId);
     } else {
@@ -4238,9 +4283,11 @@ async function saveContact() {
       if (error) { alert('Could not save lead: ' + error.message); return; }
       if (insertedRows && insertedRows[0]) data.id = insertedRows[0].id;
       data.name = fn + (lnameVal ? ' ' + lnameVal : '');
+      data.lifecycleStage = 'Lead';
       runWorkflows('contact_created', data);
       runWorkflows('custom_condition', { ...data, _wfObjectType: 'contact' });
       addNotification('🆕 New Contact', data.name + (data.company ? ' — ' + data.company : ''));
+      if (data.leadScore === 'Hot 🔥') await advanceLifecycleStage(data, 'MQL');
       if (automationSettings.roundRobinEnabled && (automationSettings.roundRobinTeamIds || []).length) {
         await autoAssignLeadRoundRobin(data.id);
       }
@@ -4372,6 +4419,7 @@ function renderContacts() {
       <td class="col-budget" style="font-size:12px">${escapeHtml(c.budget||'-')}</td>
       <td class="col-priority" style="font-size:12px">${c.priority ? `<span class="badge ${c.priority==='High'?'badge-high':c.priority==='Medium'?'badge-medium':'badge-low'}">${escapeHtml(c.priority)}</span>` : '-'}</td>
       <td class="col-pipelineStage" style="font-size:12px">${c.category ? `<div>${escapeHtml((categories.find(cat=>cat.id==c.category)||{}).name||'-')}</div><div style="font-size:11px;color:var(--text-light)">${escapeHtml(c.stage||'-')}</div>` : '<span style="color:var(--text-light)">-</span>'}</td>
+      <td class="col-lifecycleStage" style="font-size:12px"><span class="badge" style="background:${LIFECYCLE_STAGE_COLOR[c.lifecycleStage] || '#94A3B8'};color:#fff">${escapeHtml(c.lifecycleStage || 'Lead')}</span></td>
       ${customCellsHtml('contact', c)}
       <td style="display:flex;gap:6px">
         <button class="btn btn-outline btn-sm" onclick="openContactProfile(${c.id})">👤 Profile</button>
@@ -4478,7 +4526,7 @@ function renderLeftCol(c) {
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Pipeline Stage</div><div class="cp-keyinfo-val">${c.stage || '-'}</div></div>
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Phone Number</div><div class="cp-keyinfo-val">${c.phone || '--'}</div></div>
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Country</div><div class="cp-keyinfo-val">${c.country || '--'}</div></div>
-      <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Lifecycle Stage</div><div class="cp-keyinfo-val">${badge(c.status)}</div></div>
+      <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Lifecycle Stage</div><div class="cp-keyinfo-val"><span class="badge" style="background:${LIFECYCLE_STAGE_COLOR[c.lifecycleStage] || '#94A3B8'};color:#fff">${escapeHtml(c.lifecycleStage || 'Lead')}</span></div></div>
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Lead Score</div><div class="cp-keyinfo-val">${c.leadScore || '--'}</div></div>
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Last Contacted</div><div class="cp-keyinfo-val">${c.lastContacted || '--'}</div></div>
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Next Follow-up</div><div class="cp-keyinfo-val">${c.nextFollowup || '--'}</div></div>
@@ -6206,6 +6254,8 @@ async function saveDeal() {
       addNotification('💼 New Deal', newDeal.name + (newDeal.company ? ' — ' + newDeal.company : ''));
       runWorkflows('deal_created', newDeal);
       runWorkflows('custom_condition', { ...newDeal, _wfObjectType: 'deal' });
+      const dealContact = findContactForDeal(newDeal);
+      if (dealContact) await advanceLifecycleStage(dealContact, 'Opportunity');
     }
 
     closeModal('dealModal'); clearDealForm();
@@ -6274,7 +6324,12 @@ async function moveDeal(id, newStage) {
   renderDeals(); renderDashboard();
   runWorkflows('deal_stage_changed', d);
   runWorkflows('custom_condition', { ...d, _wfObjectType: 'deal' });
-  if (newStage === 'Won') { runWorkflows('deal_won', d); addNotification('🎉 Deal Won', d.name + (d.company ? ' — ' + d.company : '')); }
+  if (newStage === 'Won') {
+    runWorkflows('deal_won', d);
+    addNotification('🎉 Deal Won', d.name + (d.company ? ' — ' + d.company : ''));
+    const wonContact = findContactForDeal(d);
+    if (wonContact) await advanceLifecycleStage(wonContact, 'Customer');
+  }
   if (newStage === 'Lost') { runWorkflows('deal_lost', d); addNotification('❌ Deal Lost', d.name + (d.company ? ' — ' + d.company : '')); }
   try {
     const session = window.__currentSession;
@@ -8881,6 +8936,8 @@ async function runAgentStart(lead, logEl) {
     const scoreResult = await agentScoreLead(lead);
     const score = Math.max(0, Math.min(100, parseInt(scoreResult.score) || 0));
     await agentUpdateLead(lead.id, { agentScore: score });
+    lead.agentScore = score;
+    if (score >= 80) await advanceLifecycleStage(lead, 'MQL');
 
     if (score < automationSettings.agentMinScore) {
       await agentUpdateLead(lead.id, { agentStatus: 'skipped_low_score' });
@@ -8915,6 +8972,7 @@ async function agentDecideAndAct(lead, classification) {
   const contactRecord = { ...lead, _wfObjectType: 'contact' };
   if (classification === 'positive') {
     await agentUpdateLead(lead.id, { agentStatus: 'positive', status: 'Meeting Requested' });
+    await advanceLifecycleStage(lead, 'SQL');
     await wfCreateTask({ title: `🎯 Meeting requested by ${lead.name || lead.email}`, delayDays: 0, priority: 'High' }, contactRecord);
     addNotification('🎯 Positive Reply', `${lead.name || lead.email} responded positively — meeting task created`);
   } else if (classification === 'not_interested') {

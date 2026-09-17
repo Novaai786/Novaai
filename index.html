@@ -1372,6 +1372,14 @@ Leadnovaai</textarea>
               <div style="font-size:22px;font-weight:700;color:#1d4ed8" id="statReplied">0</div>
               <div style="font-size:11px;color:var(--text-light)">Replied</div>
             </div>
+            <div style="flex:1;min-width:140px;background:#fef2f2;border-radius:8px;padding:12px;text-align:center">
+              <div style="font-size:22px;font-weight:700;color:#dc2626" id="statBounced">0</div>
+              <div style="font-size:11px;color:var(--text-light)">Bounced</div>
+            </div>
+            <div style="flex:1;min-width:140px;background:#f1f5f9;border-radius:8px;padding:12px;text-align:center">
+              <div style="font-size:22px;font-weight:700;color:#475569" id="statUnsubscribed">0</div>
+              <div style="font-size:11px;color:var(--text-light)">Unsubscribed</div>
+            </div>
           </div>
 
           <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;font-size:13px">
@@ -3671,7 +3679,66 @@ let currentProfileCompanyId = null;
 let currentCoProfileTab = 'catchup';
 let emails = []; // now loaded from Supabase (see loadEmailsFromSupabase)
 let campaignSettings = {}; // now loaded from Supabase (see loadCampaignSettingsFromSupabase)
-let campaignLogs = JSON.parse(localStorage.getItem('crm_campaign_logs') || '[]'); // mirrors Apps Script/Google Sheets tracking data — not Supabase-backed
+let campaignLogs = JSON.parse(localStorage.getItem('crm_campaign_logs') || '[]'); // seeded from localStorage, then hydrated/kept in sync with Supabase (see loadEmailEventsFromSupabase / upsertEmailEventToSupabase)
+
+// Real Email Tracking Engine: every send/open/reply/bounce/unsubscribe touches this table too,
+// so campaign history survives a cleared browser / a different device — not just localStorage.
+async function upsertEmailEventToSupabase(log) {
+  try {
+    const session = window.__currentSession;
+    if (!session || !log || !log.trackId) return;
+    const dbRow = {
+      track_id: String(log.trackId),
+      contact_id: log.contactId || null,
+      name: log.name || null,
+      email: log.email || null,
+      company: log.company || null,
+      subject: log.subject || null,
+      status: log.status || null,
+      sent_at: log.date || null,
+      user_id: session.user.id
+    };
+    const { error } = await supabaseClient.from('email_events').upsert(dbRow, { onConflict: 'track_id' });
+    if (error) console.error('Could not sync email event to Supabase:', error);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function loadEmailEventsFromSupabase() {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const { data, error } = await supabaseClient
+      .from('email_events')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .order('sent_at', { ascending: false });
+    if (error) { console.error('Could not load email events:', error); return; }
+    if (!data || !data.length) return;
+    // Merge into whatever's already in memory (e.g. from localStorage) rather than wiping it,
+    // preferring the Supabase copy of any log that exists in both.
+    const byTrackId = new Map(campaignLogs.map(l => [String(l.trackId), l]));
+    data.forEach(row => {
+      byTrackId.set(String(row.track_id), {
+        id: row.track_id,
+        trackId: row.track_id,
+        contactId: row.contact_id,
+        name: row.name || '-',
+        email: row.email,
+        company: row.company || '-',
+        subject: row.subject,
+        status: row.status,
+        date: row.sent_at || '-'
+      });
+    });
+    campaignLogs = [...byTrackId.values()];
+    localStorage.setItem('crm_campaign_logs', JSON.stringify(campaignLogs));
+    renderCampaignTrackingTable();
+  } catch (err) {
+    console.error(err);
+  }
+}
 let sequences = []; // now loaded from Supabase (see loadSequencesFromSupabase)
 let sequenceEnrollments = []; // now loaded from Supabase (see loadSequenceEnrollmentsFromSupabase)
 let seqSelectedIds = new Set();
@@ -4170,7 +4237,7 @@ function toggleApiKeyVisibility() {
 
 // STATUS BADGE
 function badge(status) {
-  const map = {'New':'badge-new','Contacted':'badge-contacted','Interested':'badge-interested','Closed':'badge-closed','Lost':'badge-lost','Won':'badge-won','Pending':'badge-pending','Sent':'badge-open','Opened':'badge-interested','Replied':'badge-closed','No Reply':'badge-lost','High':'badge-high','Medium':'badge-medium','Low':'badge-low'};
+  const map = {'New':'badge-new','Contacted':'badge-contacted','Interested':'badge-interested','Closed':'badge-closed','Lost':'badge-lost','Won':'badge-won','Pending':'badge-pending','Sent':'badge-open','Opened':'badge-interested','Replied':'badge-closed','No Reply':'badge-lost','High':'badge-high','Medium':'badge-medium','Low':'badge-low','Bounced':'badge-lost','Unsubscribed':'badge-lost','Failed':'badge-lost'};
   return `<span class="badge ${map[status]||'badge-new'}">${status}</span>`;
 }
 
@@ -10464,7 +10531,7 @@ async function sendCampaign() {
       if (data.success) {
         sent++;
         line.textContent = `✅ Sent to ${c.email}`;
-        campaignLogs.push({
+        const newLog = {
           id: Date.now() + Math.random(),
           contactId: c.id,
           name: c.name || c.fname,
@@ -10475,7 +10542,9 @@ async function sendCampaign() {
           status: 'Sent',
           repliedManually: false,
           date: new Date().toLocaleString()
-        });
+        };
+        campaignLogs.push(newLog);
+        upsertEmailEventToSupabase(newLog);
         emails.push({
           id: Date.now() + Math.random(), contact: c.name || c.fname, email: c.email,
           subject: subject, type: 'Sent', status: 'Sent', notes: 'Sent via Email Campaign', date: new Date().toLocaleDateString()
@@ -11187,6 +11256,9 @@ async function refreshCampaignTracking() {
         };
       });
       save();
+      // Push every fetched row into Supabase too, so status changes (Sent → Opened → Replied)
+      // are visible from any device, not just this browser's localStorage.
+      campaignLogs.forEach(l => upsertEmailEventToSupabase(l));
     }
   } catch (err) {
     box.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-light)">Status fetch failed: ${err.message}</div>`;
@@ -11199,7 +11271,21 @@ function markCampaignReplied(trackId) {
   repliedTrackIds.add(trackId);
   localStorage.setItem('crm_replied_trackids', JSON.stringify([...repliedTrackIds]));
   const log = campaignLogs.find(l => l.trackId === trackId);
-  if (log) log.status = 'Replied';
+  if (log) { log.status = 'Replied'; upsertEmailEventToSupabase(log); }
+  save();
+  renderCampaignTrackingTable();
+}
+
+function markCampaignBounced(trackId) {
+  const log = campaignLogs.find(l => l.trackId === trackId);
+  if (log) { log.status = 'Bounced'; upsertEmailEventToSupabase(log); }
+  save();
+  renderCampaignTrackingTable();
+}
+
+function markCampaignUnsubscribed(trackId) {
+  const log = campaignLogs.find(l => l.trackId === trackId);
+  if (log) { log.status = 'Unsubscribed'; upsertEmailEventToSupabase(log); }
   save();
   renderCampaignTrackingTable();
 }
@@ -11216,6 +11302,12 @@ async function deleteCampaignLog(trackId) {
     repliedTrackIds.delete(trackId);
     localStorage.setItem('crm_replied_trackids', JSON.stringify([...repliedTrackIds]));
     save();
+    try {
+      const session = window.__currentSession;
+      if (session) await supabaseClient.from('email_events').delete().eq('track_id', String(trackId)).eq('user_id', session.user.id);
+    } catch (err) {
+      console.error('Could not delete email event from Supabase:', err);
+    }
     renderCampaignTrackingTable();
   } catch (err) {
     alert('Delete failed: ' + err.message);
@@ -11231,11 +11323,15 @@ function updateCampaignStats() {
   }).length;
   const opened = campaignLogs.filter(l => l.status === 'Opened' || l.status === 'Replied').length;
   const replied = campaignLogs.filter(l => l.status === 'Replied').length;
+  const bounced = campaignLogs.filter(l => l.status === 'Bounced').length;
+  const unsubscribed = campaignLogs.filter(l => l.status === 'Unsubscribed').length;
 
   document.getElementById('statTotalSent').textContent = total;
   document.getElementById('statSentToday').textContent = sentToday;
   document.getElementById('statOpened').textContent = opened;
   document.getElementById('statReplied').textContent = replied;
+  document.getElementById('statBounced').textContent = bounced;
+  document.getElementById('statUnsubscribed').textContent = unsubscribed;
 
   const goal = parseInt(campaignSettings.campaignGoal || '');
   const goalInput = document.getElementById('campaignGoalInput');
@@ -11291,6 +11387,8 @@ function renderCampaignTrackingTable() {
           <td style="padding:8px">${l.date}</td>
           <td style="padding:8px">
             ${l.status !== 'Replied' ? `<button class="btn btn-outline btn-sm" onclick="markCampaignReplied('${l.trackId}')">Mark Replied</button>` : ''}
+            ${l.status !== 'Bounced' ? `<button class="btn btn-outline btn-sm" onclick="markCampaignBounced('${l.trackId}')">Mark Bounced</button>` : ''}
+            ${l.status !== 'Unsubscribed' ? `<button class="btn btn-outline btn-sm" onclick="markCampaignUnsubscribed('${l.trackId}')">Mark Unsubscribed</button>` : ''}
             <button class="btn btn-primary btn-sm" onclick="openFollowupModal('${l.trackId}')">🔁 Add Follow-up</button>
             <button class="btn btn-outline btn-sm" style="color:#dc2626;border-color:#dc2626" onclick="deleteCampaignLog('${l.trackId}')">🗑️ Delete</button>
           </td>
@@ -12028,11 +12126,13 @@ async function sendOrScheduleSingleEmail(contact, subject, body, scheduledAt) {
     const data = await res.json();
     if (!data.success) return { success: false, error: data.error || 'Unknown error' };
     if (!scheduledAt) {
-      campaignLogs.push({
+      const newLog = {
         id: Date.now() + Math.random(), contactId: contact.id, name: contact.name || contact.fname,
         email: contact.email, company: contact.company, subject: subject, trackId: data.trackId,
         status: 'Sent', repliedManually: false, date: new Date().toLocaleString()
-      });
+      };
+      campaignLogs.push(newLog);
+      upsertEmailEventToSupabase(newLog);
       emails.push({
         id: Date.now() + Math.random(), contact: contact.name || contact.fname, email: contact.email,
         subject: subject, type: 'Sent', status: 'Sent', notes: 'Sent via AI Automation', date: new Date().toLocaleDateString()
@@ -13576,6 +13676,7 @@ initContactColumnPrefs();
       await loadTeamFromSupabase();
       await loadEmailsFromSupabase();
       await loadCampaignSettingsFromSupabase();
+      await loadEmailEventsFromSupabase();
       await loadSequencesFromSupabase();
       await loadSequenceEnrollmentsFromSupabase();
       await loadWorkflowsFromSupabase();

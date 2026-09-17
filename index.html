@@ -3688,6 +3688,34 @@ async function advanceLifecycleStage(contact, newStage) {
   }
 }
 
+// Manual override — lets a user set a contact's lifecycle stage to ANY stage (forward or backward),
+// unlike advanceLifecycleStage() which only ever moves a contact forward automatically.
+async function setLifecycleStageManually(contactId, newStage) {
+  const contact = contacts.find(c => c.id == contactId);
+  if (!contact || !newStage) return;
+  const curStage = contact.lifecycleStage || 'Lead';
+  if (newStage === curStage) return;
+  const curIdx = LIFECYCLE_STAGES.indexOf(curStage);
+  const newIdx = LIFECYCLE_STAGES.indexOf(newStage);
+  if (newIdx < curIdx) {
+    if (!confirm(`Move ${contact.name || contact.email || 'this contact'} backward from "${curStage}" to "${newStage}"?\n\nThis is a manual override — normally lifecycle stages only move forward automatically.`)) {
+      renderContactProfileBody();
+      return;
+    }
+  }
+  try {
+    const { error } = await supabaseClient.from('leads').update({ lifecycle_stage: newStage }).eq('id', contact.id);
+    if (error) { alert('Could not update lifecycle stage: ' + error.message); renderContactProfileBody(); return; }
+    contact.lifecycleStage = newStage;
+    addNotification('🔄 Lifecycle Stage Updated', (contact.name || contact.email) + ' → ' + newStage + ' (manual)');
+    renderContactProfileBody();
+    renderContacts();
+  } catch (err) {
+    console.error(err);
+    renderContactProfileBody();
+  }
+}
+
 // Finds the CRM contact record that best matches a deal (by linked contactId, else by company name).
 function findContactForDeal(deal) {
   if (deal.contactId) {
@@ -4526,7 +4554,7 @@ function renderLeftCol(c) {
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Pipeline Stage</div><div class="cp-keyinfo-val">${c.stage || '-'}</div></div>
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Phone Number</div><div class="cp-keyinfo-val">${c.phone || '--'}</div></div>
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Country</div><div class="cp-keyinfo-val">${c.country || '--'}</div></div>
-      <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Lifecycle Stage</div><div class="cp-keyinfo-val"><span class="badge" style="background:${LIFECYCLE_STAGE_COLOR[c.lifecycleStage] || '#94A3B8'};color:#fff">${escapeHtml(c.lifecycleStage || 'Lead')}</span></div></div>
+      <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Lifecycle Stage</div><div class="cp-keyinfo-val"><select onchange="setLifecycleStageManually(${c.id}, this.value)" style="font-size:11px;font-weight:600;padding:3px 8px;border-radius:10px;border:none;color:#fff;cursor:pointer;background:${LIFECYCLE_STAGE_COLOR[c.lifecycleStage] || '#94A3B8'}">${LIFECYCLE_STAGES.map(s => `<option value="${s}" ${s === (c.lifecycleStage || 'Lead') ? 'selected' : ''} style="background:#fff;color:#0F172A">${s}</option>`).join('')}</select></div></div>
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Lead Score</div><div class="cp-keyinfo-val">${c.leadScore || '--'}</div></div>
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Last Contacted</div><div class="cp-keyinfo-val">${c.lastContacted || '--'}</div></div>
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Next Follow-up</div><div class="cp-keyinfo-val">${c.nextFollowup || '--'}</div></div>
@@ -8337,6 +8365,40 @@ async function deleteTrackedWebsite(id) {
   }
 }
 
+// Bridges the "Website Subscribers" list (captured by the tracking snippet) into real CRM leads,
+// so a website subscribe genuinely feeds the Lifecycle Stage Engine's "Subscriber" stage instead of
+// sitting in a separate table the rest of the CRM never sees.
+async function syncWebsiteSubscribersToLeads(subscribers) {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const userId = session.user.id;
+    let didCreateAny = false;
+    for (const s of subscribers) {
+      if (!s.email) continue;
+      const email = s.email.trim().toLowerCase();
+      const existing = contacts.find(c => (c.email || '').trim().toLowerCase() === email);
+      if (existing) {
+        await advanceLifecycleStage(existing, 'Subscriber');
+        continue;
+      }
+      const namePart = email.split('@')[0] || 'Subscriber';
+      const dbRow = mapLeadToDb({
+        fname: namePart.charAt(0).toUpperCase() + namePart.slice(1),
+        email: s.email,
+        source: 'Website Subscribe',
+        status: 'New',
+        lifecycleStage: 'Subscriber'
+      }, userId);
+      const { error } = await supabaseClient.from('leads').insert(dbRow);
+      if (!error) didCreateAny = true;
+    }
+    if (didCreateAny) await loadContactsFromSupabase();
+  } catch (err) {
+    console.error('syncWebsiteSubscribersToLeads failed:', err);
+  }
+}
+
 async function viewWebsiteVisits(id) {
   const w = trackedWebsites.find(w => w.id === id);
   if (!w) return;
@@ -8371,6 +8433,7 @@ async function viewWebsiteVisits(id) {
       .order('subscribed_at', { ascending: false })
       .limit(500);
     const subscribers = subsError ? [] : (subsData || []);
+    if (subscribers.length) await syncWebsiteSubscribersToLeads(subscribers);
 
     subsEl.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">

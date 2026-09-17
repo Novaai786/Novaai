@@ -1975,6 +1975,19 @@ Leadnovaai</textarea>
 
       <div class="card" style="margin-bottom:20px">
         <div class="card-header">
+          <div class="card-title">📜 Automation History</div>
+          <button class="btn btn-outline btn-sm" onclick="loadAutomationLogsFromSupabase()">🔄 Refresh</button>
+        </div>
+        <div style="padding:20px">
+          <div style="font-size:12.5px;color:var(--text-light);margin-bottom:14px">
+            A log of every time a workflow fired — which one, on which record, and whether it completed or failed. Useful for debugging automations that don't seem to be running.
+          </div>
+          <div id="automationHistoryList"><div style="padding:20px;text-align:center;color:var(--text-light)">No automation runs logged yet.</div></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header">
           <div class="card-title">📱 WhatsApp & SMS Automation</div>
           <button class="btn btn-outline btn-sm" onclick="openModal('twilioGuideModal')">📘 Setup Guide</button>
         </div>
@@ -7779,9 +7792,15 @@ function renderWorkflows() {
   el.innerHTML = workflows.map(w => {
     let trigDesc = WF_TRIGGER_LABELS[w.triggerType] || w.triggerType;
     if (w.triggerType === 'deal_stage_changed' && w.triggerConfig.toStage) trigDesc += ` "${escapeHtml(w.triggerConfig.toStage)}"`;
-    if (w.triggerType === 'custom_condition' && w.triggerConfig.field) {
-      const fLabel = w.triggerConfig.field.startsWith('cf__') ? w.triggerConfig.field.slice(4) : w.triggerConfig.field;
-      trigDesc += ` — ${escapeHtml(w.triggerConfig.object || '')}.${escapeHtml(fLabel)} ${escapeHtml(w.triggerConfig.operator || 'equals')} "${escapeHtml(w.triggerConfig.value || '')}"`;
+    if (w.triggerType === 'custom_condition') {
+      const cfg = w.triggerConfig || {};
+      const conditions = (cfg.conditions && cfg.conditions.length) ? cfg.conditions : (cfg.field ? [{ object: cfg.object, field: cfg.field, operator: cfg.operator, value: cfg.value }] : []);
+      if (conditions.length) {
+        trigDesc += ' — ' + conditions.map(cond => {
+          const fLabel = (cond.field || '').startsWith('cf__') ? cond.field.slice(4) : cond.field;
+          return `${escapeHtml(cond.object || '')}.${escapeHtml(fLabel || '')} ${escapeHtml(cond.operator || 'equals')} "${escapeHtml(cond.value || '')}"`;
+        }).join(' AND ');
+      }
     }
     const actionsDesc = (w.actions || []).map(a => WF_ACTION_LABELS[a.type] || a.type).join(', ') || 'no actions';
     return `<div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
@@ -7819,16 +7838,67 @@ const WF_DEFAULT_FIELDS = {
   ]
 };
 
-function wfPopulateConditionFields() {
-  const objectType = document.getElementById('wf-cond-object').value;
-  const fieldSelect = document.getElementById('wf-cond-field');
+let wfConditionDraft = [];
+
+function wfFieldOptionsHtml(objectType, selectedField) {
   const defaults = WF_DEFAULT_FIELDS[objectType] || [];
   const custom = (typeof customProperties !== 'undefined' ? customProperties : []).filter(p => p.object_type === objectType);
-  const prevValue = fieldSelect.value;
-  fieldSelect.innerHTML =
-    defaults.map(f => `<option value="${f.key}">${escapeHtml(f.label)}</option>`).join('') +
-    custom.map(p => `<option value="cf__${escapeHtml(p.field_key)}">${escapeHtml(p.label)} (custom)</option>`).join('');
-  if (prevValue && [...fieldSelect.options].some(o => o.value === prevValue)) fieldSelect.value = prevValue;
+  return defaults.map(f => `<option value="${f.key}" ${f.key === selectedField ? 'selected' : ''}>${escapeHtml(f.label)}</option>`).join('') +
+    custom.map(p => `<option value="cf__${escapeHtml(p.field_key)}" ${('cf__' + p.field_key) === selectedField ? 'selected' : ''}>${escapeHtml(p.label)} (custom)</option>`).join('');
+}
+
+// Renders the AND-condition list for the Custom Condition trigger. Each row is one
+// {object, field, operator, value} condition; a workflow only fires when ALL rows match.
+function renderWfConditions() {
+  const el = document.getElementById('wf-conditions-container');
+  if (!el) return;
+  el.innerHTML = wfConditionDraft.map((cond, idx) => `
+    <div style="border:1.5px solid var(--border);border-radius:8px;padding:8px;margin-bottom:6px">
+      ${idx > 0 ? `<div style="font-size:10px;font-weight:700;color:var(--primary);margin-bottom:4px">AND</div>` : ''}
+      <select class="form-control" style="margin-bottom:6px" onchange="updateWfCondition(${idx},'object',this.value);refreshWfConditionFieldOptions(${idx})">
+        <option value="contact" ${cond.object === 'contact' ? 'selected' : ''}>Contact</option>
+        <option value="deal" ${cond.object === 'deal' ? 'selected' : ''}>Deal</option>
+      </select>
+      <select class="form-control" style="margin-bottom:6px" id="wf-cond-field-${idx}" onchange="updateWfCondition(${idx},'field',this.value)">
+        ${wfFieldOptionsHtml(cond.object || 'contact', cond.field)}
+      </select>
+      <div style="display:flex;gap:6px">
+        <select class="form-control" style="max-width:130px" onchange="updateWfCondition(${idx},'operator',this.value)">
+          <option value="equals" ${cond.operator === 'equals' ? 'selected' : ''}>Equals</option>
+          <option value="not_equals" ${cond.operator === 'not_equals' ? 'selected' : ''}>Not Equals</option>
+          <option value="contains" ${cond.operator === 'contains' ? 'selected' : ''}>Contains</option>
+        </select>
+        <input class="form-control" placeholder="Value — e.g. UAE" value="${escapeHtml(cond.value || '')}" oninput="updateWfCondition(${idx},'value',this.value)">
+        ${wfConditionDraft.length > 1 ? `<button type="button" class="btn btn-outline btn-sm" onclick="removeWfCondition(${idx})">✕</button>` : ''}
+      </div>
+    </div>`).join('');
+  // Sync any freshly-rendered row (empty field) to whatever its <select> defaulted to
+  wfConditionDraft.forEach((cond, idx) => {
+    if (!cond.field) {
+      const sel = document.getElementById('wf-cond-field-' + idx);
+      if (sel) cond.field = sel.value;
+    }
+  });
+}
+
+function refreshWfConditionFieldOptions(idx) {
+  const cond = wfConditionDraft[idx];
+  const sel = document.getElementById('wf-cond-field-' + idx);
+  if (!sel || !cond) return;
+  sel.innerHTML = wfFieldOptionsHtml(cond.object || 'contact', '');
+  cond.field = sel.value;
+}
+
+function addWfCondition() {
+  wfConditionDraft.push({ object: 'contact', field: '', operator: 'equals', value: '' });
+  renderWfConditions();
+}
+function removeWfCondition(idx) {
+  wfConditionDraft.splice(idx, 1);
+  renderWfConditions();
+}
+function updateWfCondition(idx, key, value) {
+  if (wfConditionDraft[idx]) wfConditionDraft[idx][key] = value;
 }
 
 function onWorkflowTriggerChange() {
@@ -7841,7 +7911,8 @@ function onWorkflowTriggerChange() {
     document.getElementById('wf-stage-options').innerHTML = [...stageSet].map(s => `<option value="${escapeHtml(s)}">`).join('');
   }
   if (trig === 'custom_condition') {
-    wfPopulateConditionFields();
+    if (!wfConditionDraft.length) wfConditionDraft = [{ object: 'contact', field: '', operator: 'equals', value: '' }];
+    renderWfConditions();
   }
 }
 
@@ -7989,11 +8060,9 @@ function openWorkflowModal(id) {
   document.getElementById('wf-name').value = '';
   document.getElementById('wf-trigger').value = 'deal_stage_changed';
   document.getElementById('wf-stage').value = '';
-  document.getElementById('wf-cond-object').value = 'contact';
-  document.getElementById('wf-cond-operator').value = 'equals';
-  document.getElementById('wf-cond-value').value = '';
   document.getElementById('wf-error').style.display = 'none';
   wfActionDraft = [];
+  wfConditionDraft = [];
   wfInserterPos = null;
   if (id) {
     const w = workflows.find(w => w.id === id);
@@ -8002,22 +8071,20 @@ function openWorkflowModal(id) {
       document.getElementById('wf-name').value = w.name;
       document.getElementById('wf-trigger').value = w.triggerType;
       document.getElementById('wf-stage').value = (w.triggerConfig || {}).toStage || '';
-      document.getElementById('wf-cond-object').value = (w.triggerConfig || {}).object || 'contact';
-      document.getElementById('wf-cond-operator').value = (w.triggerConfig || {}).operator || 'equals';
-      document.getElementById('wf-cond-value').value = (w.triggerConfig || {}).value || '';
+      if (w.triggerType === 'custom_condition') {
+        const cfg = w.triggerConfig || {};
+        wfConditionDraft = (cfg.conditions && cfg.conditions.length)
+          ? JSON.parse(JSON.stringify(cfg.conditions))
+          : (cfg.field ? [{ object: cfg.object || 'contact', field: cfg.field, operator: cfg.operator || 'equals', value: cfg.value || '' }] : []);
+      }
       wfActionDraft = JSON.parse(JSON.stringify(w.actions || []));
       document.getElementById('workflowModalTitle').textContent = 'Edit Workflow';
     }
   } else {
     document.getElementById('workflowModalTitle').textContent = 'Create Workflow';
   }
+  if (!wfConditionDraft.length) wfConditionDraft = [{ object: 'contact', field: '', operator: 'equals', value: '' }];
   onWorkflowTriggerChange();
-  if (id) {
-    const w = workflows.find(w => w.id === id);
-    if (w && w.triggerType === 'custom_condition') {
-      document.getElementById('wf-cond-field').value = (w.triggerConfig || {}).field || '';
-    }
-  }
   renderWfActionDraft();
   openModal('workflowModal');
 }
@@ -8036,13 +8103,14 @@ async function saveWorkflow() {
     triggerConfig.toStage = stage;
   }
   if (triggerType === 'custom_condition') {
-    const field = document.getElementById('wf-cond-field').value;
-    const value = document.getElementById('wf-cond-value').value.trim();
-    if (!field || !value) { errEl.textContent = 'Choose a field and enter a value for the condition.'; errEl.style.display = 'block'; return; }
-    triggerConfig.object = document.getElementById('wf-cond-object').value;
-    triggerConfig.field = field;
-    triggerConfig.operator = document.getElementById('wf-cond-operator').value;
-    triggerConfig.value = value;
+    const validConditions = wfConditionDraft.filter(c => c.field && String(c.value || '').trim());
+    if (!validConditions.length) { errEl.textContent = 'Add at least one condition with a field and value.'; errEl.style.display = 'block'; return; }
+    triggerConfig.conditions = validConditions.map(c => ({ object: c.object || 'contact', field: c.field, operator: c.operator || 'equals', value: c.value }));
+    // Legacy single-condition fields kept in sync too, in case anything else still reads them directly.
+    triggerConfig.object = validConditions[0].object;
+    triggerConfig.field = validConditions[0].field;
+    triggerConfig.operator = validConditions[0].operator;
+    triggerConfig.value = validConditions[0].value;
   }
   const editId = document.getElementById('wf-edit-id').value;
   try {
@@ -9200,15 +9268,79 @@ function renderAgentActivity() {
 setInterval(runAgentCheckCycle, 2 * 60 * 1000);
 
 // ----- Engine: called whenever a trigger event happens elsewhere in the app -----
+let automationLogs = [];
+
 async function runWorkflows(triggerType, record) {
   if (!record) return;
   const matches = workflows.filter(w => w.active && w.triggerType === triggerType);
   for (const w of matches) {
     if (!workflowConditionMatches(w, record)) continue;
+    let errorMsg = null;
     for (const action of (w.actions || [])) {
-      await executeWorkflowAction(action, record);
+      const result = await executeWorkflowAction(action, record);
+      if (result && !result.ok && !errorMsg) errorMsg = result.error;
     }
+    await logAutomationRun(w, record, triggerType, errorMsg);
   }
+}
+
+// Every workflow that fires leaves a row in automation_logs — this is what powers the
+// "Automation History" panel so users can see (and debug) exactly what ran and when.
+async function logAutomationRun(workflow, record, triggerType, errorMsg) {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const recordLabel = record.name || record.email || record.subject || record.company || ('Record #' + (record.id || '?'));
+    const dbRow = {
+      workflow_id: workflow.id,
+      workflow_name: workflow.name || '',
+      record_label: String(recordLabel).slice(0, 200),
+      trigger_type: triggerType || '',
+      status: errorMsg ? 'Failed' : 'Completed',
+      error: errorMsg || null,
+      user_id: session.user.id
+    };
+    const { error } = await supabaseClient.from('automation_logs').insert(dbRow);
+    if (error) { console.error('Could not log automation run:', error); return; }
+    await loadAutomationLogsFromSupabase();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function loadAutomationLogsFromSupabase() {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const { data, error } = await supabaseClient
+      .from('automation_logs')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .order('created_at', { ascending: false })
+      .limit(100);
+    if (error) { console.error('Could not load automation logs:', error); return; }
+    automationLogs = data || [];
+    renderAutomationHistory();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function renderAutomationHistory() {
+  const el = document.getElementById('automationHistoryList');
+  if (!el) return;
+  if (!automationLogs.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-light)">No automation runs logged yet. This fills up as your workflows fire.</div>'; return; }
+  el.innerHTML = automationLogs.map(l => {
+    const ok = l.status !== 'Failed';
+    return `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+      <div>
+        <div style="font-size:12.5px;font-weight:600">${escapeHtml(l.workflow_name || 'Workflow')} → ${escapeHtml(l.record_label || '')}</div>
+        <div style="font-size:11px;color:var(--text-light);margin-top:2px">Trigger: ${escapeHtml(l.trigger_type || '')} · ${l.created_at ? new Date(l.created_at).toLocaleString() : ''}</div>
+        ${l.error ? `<div style="font-size:11px;color:#dc2626;margin-top:2px">⚠️ ${escapeHtml(l.error)}</div>` : ''}
+      </div>
+      <span class="badge" style="background:${ok ? '#dcfce7' : '#fee2e2'};color:${ok ? '#166534' : '#991b1b'};font-size:10px;flex-shrink:0">${ok ? '✓ Completed' : '✕ Failed'}</span>
+    </div>`;
+  }).join('');
 }
 
 // Landing page leads are inserted directly by a Supabase function (bypassing the browser),
@@ -9240,20 +9372,24 @@ function workflowConditionMatches(w, record) {
     return (record.stage || '') === cfg.toStage;
   }
   if (w.triggerType === 'custom_condition') {
-    if (!cfg.field) return false;
-    if (cfg.object && record._wfObjectType && cfg.object !== record._wfObjectType) return false;
-    let fieldVal;
-    if (cfg.field.startsWith('cf__')) {
-      const key = cfg.field.slice(4);
-      fieldVal = (record.customFields && record.customFields[key] !== undefined && record.customFields[key] !== null) ? record.customFields[key] : '';
-    } else {
-      fieldVal = (record[cfg.field] !== undefined && record[cfg.field] !== null) ? record[cfg.field] : '';
-    }
-    fieldVal = String(fieldVal).toLowerCase();
-    const targetVal = String(cfg.value || '').toLowerCase();
-    if (cfg.operator === 'not_equals') return fieldVal !== targetVal;
-    if (cfg.operator === 'contains') return fieldVal.includes(targetVal);
-    return fieldVal === targetVal;
+    const conditions = (cfg.conditions && cfg.conditions.length) ? cfg.conditions : (cfg.field ? [{ object: cfg.object, field: cfg.field, operator: cfg.operator, value: cfg.value }] : []);
+    if (!conditions.length) return false;
+    // ALL conditions must match (AND) for the workflow to fire.
+    return conditions.every(cond => {
+      if (cond.object && record._wfObjectType && cond.object !== record._wfObjectType) return false;
+      let fieldVal;
+      if ((cond.field || '').startsWith('cf__')) {
+        const key = cond.field.slice(4);
+        fieldVal = (record.customFields && record.customFields[key] !== undefined && record.customFields[key] !== null) ? record.customFields[key] : '';
+      } else {
+        fieldVal = (record[cond.field] !== undefined && record[cond.field] !== null) ? record[cond.field] : '';
+      }
+      fieldVal = String(fieldVal).toLowerCase();
+      const targetVal = String(cond.value || '').toLowerCase();
+      if (cond.operator === 'not_equals') return fieldVal !== targetVal;
+      if (cond.operator === 'contains') return fieldVal.includes(targetVal);
+      return fieldVal === targetVal;
+    });
   }
   return true;
 }
@@ -9271,8 +9407,10 @@ async function executeWorkflowAction(action, record) {
     else if (action.type === 'send_webhook') await wfSendWebhook(action, record);
     else if (action.type === 'send_slack') await wfSendSlack(action, record);
     else if (action.type === 'sync_mailchimp') await wfSyncMailchimp(action, record);
+    return { ok: true };
   } catch (err) {
     console.error('Workflow action failed:', err);
+    return { ok: false, error: (err && err.message) ? err.message : String(err) };
   }
 }
 
@@ -13302,6 +13440,7 @@ initContactColumnPrefs();
       await loadSequencesFromSupabase();
       await loadSequenceEnrollmentsFromSupabase();
       await loadWorkflowsFromSupabase();
+      await loadAutomationLogsFromSupabase();
       checkOverdueTaskWorkflows();
       checkTaskReminders();
       checkLandingPageLeadWorkflows();
@@ -13861,19 +14000,8 @@ function copyScriptCode() {
           <datalist id="wf-stage-options"></datalist>
         </div>
         <div id="wf-condition-group" style="display:none;margin-top:8px">
-          <select class="form-control" id="wf-cond-object" style="margin-bottom:6px" onchange="wfPopulateConditionFields()">
-            <option value="contact">Contact</option>
-            <option value="deal">Deal</option>
-          </select>
-          <select class="form-control" id="wf-cond-field" style="margin-bottom:6px"></select>
-          <div style="display:flex;gap:6px">
-            <select class="form-control" id="wf-cond-operator" style="max-width:130px">
-              <option value="equals">Equals</option>
-              <option value="not_equals">Not Equals</option>
-              <option value="contains">Contains</option>
-            </select>
-            <input class="form-control" id="wf-cond-value" placeholder="Value — e.g. UAE">
-          </div>
+          <div id="wf-conditions-container"></div>
+          <button type="button" class="btn btn-outline btn-sm" style="margin-top:4px" onclick="addWfCondition()">+ Add AND Condition</button>
         </div>
       </div>
       <div id="wf-actions-list"></div>

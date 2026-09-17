@@ -1508,6 +1508,8 @@ Leadnovaai</textarea>
         </div>
         <div style="padding:20px">
           <div id="websiteVisitsStats" style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px"></div>
+          <div id="websiteSubscribersSection" style="margin-bottom:20px"></div>
+          <div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;margin-bottom:8px">All Visitors</div>
           <div id="websiteVisitsList"></div>
         </div>
       </div>
@@ -8207,6 +8209,10 @@ function buildTrackingSnippet(snippetId) {
   window.novaaiIdentify = function(email){
     send('identify_website_visitor', { p_snippet_id: SNIPPET_ID, p_visitor_id: vid, p_email: email });
   };
+  window.novaaiTrackSubscribe = function(email){
+    send('track_subscriber', { p_snippet_id: SNIPPET_ID, p_visitor_id: vid, p_email: email });
+    send('identify_website_visitor', { p_snippet_id: SNIPPET_ID, p_visitor_id: vid, p_email: email });
+  };
 })();
 <\/script>`;
 }
@@ -8282,9 +8288,11 @@ async function viewWebsiteVisits(id) {
   const card = document.getElementById('websiteVisitsCard');
   const statsEl = document.getElementById('websiteVisitsStats');
   const listEl = document.getElementById('websiteVisitsList');
+  const subsEl = document.getElementById('websiteSubscribersSection');
   document.getElementById('websiteVisitsTitle').textContent = '👥 Visitors — ' + w.name;
   card.style.display = '';
   statsEl.innerHTML = '';
+  subsEl.innerHTML = '';
   listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-light)">Loading...</div>';
   card.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
@@ -8299,6 +8307,25 @@ async function viewWebsiteVisits(id) {
       .order('created_at', { ascending: false })
       .limit(1000);
     if (error) { listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-light)">Could not load visits.</div>'; return; }
+
+    const { data: subsData, error: subsError } = await supabaseClient
+      .from('website_subscribers')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .eq('snippet_id', w.snippetId)
+      .order('subscribed_at', { ascending: false })
+      .limit(500);
+    const subscribers = subsError ? [] : (subsData || []);
+
+    subsEl.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase">📧 Subscribers (${subscribers.length})</div>
+      </div>
+      ${subscribers.length ? subscribers.map(s => `
+        <div style="display:flex;justify-content:space-between;align-items:center;border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:6px">
+          <div style="font-weight:600;font-size:12.5px">${escapeHtml(s.email)}</div>
+          <div style="font-size:11.5px;color:var(--text-light)">${escapeHtml(timeAgo(s.subscribed_at))}</div>
+        </div>`).join('') : `<div style="font-size:12px;color:var(--text-light);padding:8px 0">No subscribers yet — call window.novaaiTrackSubscribe('email') after a signup on the tracked site.</div>`}`;
 
     if (!data || !data.length) {
       listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-light)">No visits recorded yet — make sure the tracking code is on the site and pages have been viewed.</div>';
@@ -8332,6 +8359,10 @@ async function viewWebsiteVisits(id) {
       <div style="background:var(--bg);border-radius:8px;padding:12px 18px;min-width:120px">
         <div style="font-size:20px;font-weight:700">${identifiedCount}</div>
         <div style="font-size:11.5px;color:var(--text-light)">Identified (by email)</div>
+      </div>
+      <div style="background:var(--bg);border-radius:8px;padding:12px 18px;min-width:120px">
+        <div style="font-size:20px;font-weight:700">${subscribers.length}</div>
+        <div style="font-size:11.5px;color:var(--text-light)">Subscribers</div>
       </div>`;
 
     listEl.innerHTML = sessionList.map(s => {
@@ -13760,6 +13791,11 @@ function copyScriptCode() {
         <strong style="font-size:12.5px">💡 Optional — Identify a visitor by email:</strong>
         <p style="font-size:12px;color:var(--text-light);margin-top:6px">If the site has its own contact/signup form, call this after a successful submit so that visitor's earlier page views get linked to their email:</p>
         <pre style="background:#0F172A;color:#E2E8F0;padding:10px;border-radius:6px;font-size:11px;margin-top:6px">window.novaaiIdentify('visitor@example.com');</pre>
+      </div>
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:10px">
+        <strong style="font-size:12.5px">📧 Optional — Track a Subscriber:</strong>
+        <p style="font-size:12px;color:var(--text-light);margin-top:6px">If the site has a newsletter/subscribe form, call this after a successful subscribe so they show up in a separate "Subscribers" list in the CRM (also identifies them, same as above):</p>
+        <pre style="background:#0F172A;color:#E2E8F0;padding:10px;border-radius:6px;font-size:11px;margin-top:6px">window.novaaiTrackSubscribe('visitor@example.com');</pre>
       </div>
       <div style="display:flex;gap:10px;margin-top:16px">
         <button class="btn btn-primary" style="flex:1" onclick="closeModal('trackedWebsiteModal')">Done</button>

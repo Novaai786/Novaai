@@ -3758,7 +3758,7 @@ const WF_TRIGGER_LABELS = {
   task_overdue: 'A task becomes overdue',
   custom_condition: 'Custom Condition (field-based)'
 };
-const WF_ACTION_LABELS = { send_email: '✉️ Send Email', create_task: '✅ Create Task', notify: '🔔 Notification', assign_owner: '👤 Assign Owner', send_whatsapp: '💬 Send WhatsApp', send_sms: '📩 Send SMS', enroll_sequence: '🔁 Enroll in Sequence', create_calendar_event: '📅 Create Calendar Event', send_webhook: '⚡ Send to Webhook', send_slack: '💬 Send to Slack', sync_mailchimp: '🐵 Sync to Mailchimp' };
+const WF_ACTION_LABELS = { send_email: '✉️ Send Email', create_task: '✅ Create Task', notify: '🔔 Notification', assign_owner: '👤 Assign Owner', send_whatsapp: '💬 Send WhatsApp', send_sms: '📩 Send SMS', enroll_sequence: '🔁 Enroll in Sequence', create_calendar_event: '📅 Create Calendar Event', send_webhook: '⚡ Send to Webhook', send_slack: '💬 Send to Slack', sync_mailchimp: '🐵 Sync to Mailchimp', delay: '⏳ Wait / Delay', branch_condition: '🔀 IF Condition (else stop)' };
 
 // ===== WHATSAPP / SMS + LEAD ASSIGNMENT SETTINGS =====
 let automationSettings = {
@@ -7828,7 +7828,9 @@ const WF_DEFAULT_FIELDS = {
     { key: 'priority', label: 'Priority' },
     { key: 'decisionMaker', label: 'Decision Maker' },
     { key: 'budget', label: 'Budget' },
-    { key: 'icp', label: 'ICP' }
+    { key: 'icp', label: 'ICP' },
+    { key: 'lifecycleStage', label: 'Lifecycle Stage' },
+    { key: 'replyText', label: 'Reply Text (blank = no reply yet)' }
   ],
   deal: [
     { key: 'stage', label: 'Stage' },
@@ -7928,7 +7930,9 @@ const WF_INSERT_TYPE_OPTIONS = `
   <option value="create_calendar_event">📅 Create a Calendar event</option>
   <option value="send_webhook">⚡ Send to Webhook (Zapier/Make)</option>
   <option value="send_slack">💬 Send to Slack</option>
-  <option value="sync_mailchimp">🐵 Sync to Mailchimp</option>`;
+  <option value="sync_mailchimp">🐵 Sync to Mailchimp</option>
+  <option value="delay">⏳ Wait (delay)</option>
+  <option value="branch_condition">🔀 IF Condition (else stop)</option>`;
 
 function wfActionDefaults(type) {
   const defaults = {
@@ -7942,7 +7946,9 @@ function wfActionDefaults(type) {
     create_calendar_event: { type, title: '', delayDays: 1, durationMinutes: 30, description: '' },
     send_webhook: { type },
     send_slack: { type, message: '' },
-    sync_mailchimp: { type }
+    sync_mailchimp: { type },
+    delay: { type, delayValue: 2, delayUnit: 'days' },
+    branch_condition: { type, object: 'contact', field: '', operator: 'equals', value: '' }
   };
   return defaults[type];
 }
@@ -8003,8 +8009,47 @@ function wfActionFieldsHtml(a, idx) {
       <div style="font-size:11px;color:var(--text-light);margin-top:4px">Sent to the Slack Webhook URL saved in Integrations.</div>`;
   } else if (a.type === 'sync_mailchimp') {
     return `<div style="font-size:12px;color:var(--text-light)">Adds this contact's name and email to your Mailchimp audience (set up in Integrations &gt; Mailchimp Sync). No extra fields needed.</div>`;
+  } else if (a.type === 'delay') {
+    return `
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:11.5px;color:var(--text-light)">Wait</span>
+        <input type="number" min="1" max="90" class="form-control" style="max-width:70px" value="${a.delayValue !== undefined ? a.delayValue : 2}" oninput="updateWfAction(${idx},'delayValue',this.value)">
+        <select class="form-control" style="max-width:100px" onchange="updateWfAction(${idx},'delayUnit',this.value)">
+          <option value="hours" ${a.delayUnit === 'hours' ? 'selected' : ''}>Hours</option>
+          <option value="days" ${(!a.delayUnit || a.delayUnit === 'days') ? 'selected' : ''}>Days</option>
+        </select>
+        <span style="font-size:11.5px;color:var(--text-light)">before continuing</span>
+      </div>
+      <div style="font-size:11px;color:var(--text-light);margin-top:6px">⚠️ Steps after this run once the wait is over — checked every few minutes while someone has the CRM open in a browser tab.</div>`;
+  } else if (a.type === 'branch_condition') {
+    const objectType = a.object || 'contact';
+    return `
+      <div style="font-size:11.5px;color:var(--text-light);margin-bottom:6px">If this is FALSE, the workflow stops here — later steps are skipped. E.g. "Reply Text is blank" → send a follow-up only when there's been no reply.</div>
+      <select class="form-control" style="margin-bottom:6px" onchange="updateWfAction(${idx},'object',this.value);refreshWfActionFieldOptions(${idx})">
+        <option value="contact" ${objectType === 'contact' ? 'selected' : ''}>Contact</option>
+        <option value="deal" ${objectType === 'deal' ? 'selected' : ''}>Deal</option>
+      </select>
+      <select class="form-control" style="margin-bottom:6px" id="wf-action-field-${idx}" onchange="updateWfAction(${idx},'field',this.value)">
+        ${wfFieldOptionsHtml(objectType, a.field)}
+      </select>
+      <div style="display:flex;gap:6px">
+        <select class="form-control" style="max-width:130px" onchange="updateWfAction(${idx},'operator',this.value)">
+          <option value="equals" ${(!a.operator || a.operator === 'equals') ? 'selected' : ''}>Equals</option>
+          <option value="not_equals" ${a.operator === 'not_equals' ? 'selected' : ''}>Not Equals</option>
+          <option value="contains" ${a.operator === 'contains' ? 'selected' : ''}>Contains</option>
+        </select>
+        <input class="form-control" placeholder="Value (leave blank to check 'is empty')" value="${escapeHtml(a.value || '')}" oninput="updateWfAction(${idx},'value',this.value)">
+      </div>`;
   }
   return '';
+}
+
+function refreshWfActionFieldOptions(idx) {
+  const a = wfActionDraft[idx];
+  const sel = document.getElementById('wf-action-field-' + idx);
+  if (!sel || !a) return;
+  sel.innerHTML = wfFieldOptionsHtml(a.object || 'contact', '');
+  a.field = sel.value;
 }
 
 function wfConnectorHtml(pos) {
@@ -9275,18 +9320,120 @@ async function runWorkflows(triggerType, record) {
   const matches = workflows.filter(w => w.active && w.triggerType === triggerType);
   for (const w of matches) {
     if (!workflowConditionMatches(w, record)) continue;
-    let errorMsg = null;
-    for (const action of (w.actions || [])) {
-      const result = await executeWorkflowAction(action, record);
-      if (result && !result.ok && !errorMsg) errorMsg = result.error;
-    }
-    await logAutomationRun(w, record, triggerType, errorMsg);
+    await runWorkflowFromStep(w, record, triggerType, 0);
   }
 }
 
+// Executes a workflow's action list starting at startIndex.
+// - Hits a 'delay' step → saves the remaining steps + a snapshot of the record to workflow_runs
+//   and returns immediately; processScheduledWorkflowSteps() resumes it once the wait is over.
+// - Hits a 'branch_condition' step whose condition is false → stops (later steps are skipped).
+// - Otherwise runs every action in order and logs one Completed/Failed row when done.
+async function runWorkflowFromStep(workflow, record, triggerType, startIndex) {
+  const actions = workflow.actions || [];
+  let errorMsg = null;
+  for (let i = startIndex; i < actions.length; i++) {
+    const action = actions[i];
+    if (action.type === 'delay') {
+      const resumeAt = wfComputeResumeAt(action);
+      await saveWaitingWorkflowRun(workflow, record, triggerType, i + 1, resumeAt);
+      await logAutomationRun(workflow, record, triggerType, 'Waiting', null);
+      return;
+    }
+    if (action.type === 'branch_condition') {
+      if (!wfEvaluateCondition(action, record)) {
+        await logAutomationRun(workflow, record, triggerType, 'Stopped', null);
+        return;
+      }
+      continue;
+    }
+    const result = await executeWorkflowAction(action, record);
+    if (result && !result.ok && !errorMsg) errorMsg = result.error;
+  }
+  await logAutomationRun(workflow, record, triggerType, errorMsg ? 'Failed' : 'Completed', errorMsg);
+}
+
+function wfComputeResumeAt(action) {
+  const val = Number(action.delayValue) || 0;
+  const ms = action.delayUnit === 'hours' ? val * 60 * 60 * 1000 : val * 24 * 60 * 60 * 1000;
+  return new Date(Date.now() + ms);
+}
+
+// Shared single-condition evaluator, used both by the trigger's AND-conditions and by
+// 'branch_condition' action steps, so the two behave identically.
+function wfEvaluateCondition(cond, record) {
+  if (cond.object && record._wfObjectType && cond.object !== record._wfObjectType) return false;
+  let fieldVal;
+  if ((cond.field || '').startsWith('cf__')) {
+    const key = cond.field.slice(4);
+    fieldVal = (record.customFields && record.customFields[key] !== undefined && record.customFields[key] !== null) ? record.customFields[key] : '';
+  } else {
+    fieldVal = (record[cond.field] !== undefined && record[cond.field] !== null) ? record[cond.field] : '';
+  }
+  fieldVal = String(fieldVal).toLowerCase();
+  const targetVal = String(cond.value || '').toLowerCase();
+  if (cond.operator === 'not_equals') return fieldVal !== targetVal;
+  if (cond.operator === 'contains') return fieldVal.includes(targetVal);
+  return fieldVal === targetVal;
+}
+
+// Persists a paused workflow so it can resume later — this is the "Delays" mechanism.
+// Note: re-enrollment is intentionally unrestricted (a record can have multiple waiting
+// runs of the same workflow); this keeps behavior predictable and matches how most of the
+// rest of this engine already works.
+async function saveWaitingWorkflowRun(workflow, record, triggerType, nextStepIndex, resumeAt) {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const dbRow = {
+      workflow_id: workflow.id,
+      trigger_type: triggerType || '',
+      record_snapshot: record,
+      next_step_index: nextStepIndex,
+      resume_at: resumeAt.toISOString(),
+      status: 'waiting',
+      user_id: session.user.id
+    };
+    const { error } = await supabaseClient.from('workflow_runs').insert(dbRow);
+    if (error) console.error('Could not save waiting workflow run:', error);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+// Poller — checks for any workflow that's finished waiting and resumes it from where it left off.
+async function processScheduledWorkflowSteps() {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const { data, error } = await supabaseClient
+      .from('workflow_runs')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .eq('status', 'waiting')
+      .lte('resume_at', new Date().toISOString());
+    if (error || !data || !data.length) return;
+    for (const run of data) {
+      // Claim it first so a second poll tick (or another open tab) can't double-run it.
+      const { error: claimErr } = await supabaseClient.from('workflow_runs').update({ status: 'processing' }).eq('id', run.id).eq('status', 'waiting');
+      if (claimErr) continue;
+      const workflow = workflows.find(w => w.id === run.workflow_id);
+      if (!workflow) {
+        await supabaseClient.from('workflow_runs').update({ status: 'failed' }).eq('id', run.id);
+        continue;
+      }
+      await runWorkflowFromStep(workflow, run.record_snapshot || {}, run.trigger_type, run.next_step_index || 0);
+      await supabaseClient.from('workflow_runs').update({ status: 'resumed' }).eq('id', run.id);
+    }
+  } catch (err) {
+    console.error('processScheduledWorkflowSteps failed:', err);
+  }
+}
+setInterval(processScheduledWorkflowSteps, 5 * 60 * 1000);
+
 // Every workflow that fires leaves a row in automation_logs — this is what powers the
 // "Automation History" panel so users can see (and debug) exactly what ran and when.
-async function logAutomationRun(workflow, record, triggerType, errorMsg) {
+async function logAutomationRun(workflow, record, triggerType, status, errorMsg) {
   try {
     const session = window.__currentSession;
     if (!session) return;
@@ -9296,7 +9443,7 @@ async function logAutomationRun(workflow, record, triggerType, errorMsg) {
       workflow_name: workflow.name || '',
       record_label: String(recordLabel).slice(0, 200),
       trigger_type: triggerType || '',
-      status: errorMsg ? 'Failed' : 'Completed',
+      status: status || (errorMsg ? 'Failed' : 'Completed'),
       error: errorMsg || null,
       user_id: session.user.id
     };
@@ -9330,15 +9477,21 @@ function renderAutomationHistory() {
   const el = document.getElementById('automationHistoryList');
   if (!el) return;
   if (!automationLogs.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-light)">No automation runs logged yet. This fills up as your workflows fire.</div>'; return; }
+  const statusStyle = {
+    Completed: ['#dcfce7', '#166534', '✓ Completed'],
+    Failed: ['#fee2e2', '#991b1b', '✕ Failed'],
+    Waiting: ['#fef3c7', '#92400e', '⏳ Waiting'],
+    Stopped: ['#f1f5f9', '#475569', '⏹ Stopped (condition)']
+  };
   el.innerHTML = automationLogs.map(l => {
-    const ok = l.status !== 'Failed';
+    const s = statusStyle[l.status] || ['#f1f5f9', '#475569', l.status || ''];
     return `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
       <div>
         <div style="font-size:12.5px;font-weight:600">${escapeHtml(l.workflow_name || 'Workflow')} → ${escapeHtml(l.record_label || '')}</div>
         <div style="font-size:11px;color:var(--text-light);margin-top:2px">Trigger: ${escapeHtml(l.trigger_type || '')} · ${l.created_at ? new Date(l.created_at).toLocaleString() : ''}</div>
         ${l.error ? `<div style="font-size:11px;color:#dc2626;margin-top:2px">⚠️ ${escapeHtml(l.error)}</div>` : ''}
       </div>
-      <span class="badge" style="background:${ok ? '#dcfce7' : '#fee2e2'};color:${ok ? '#166534' : '#991b1b'};font-size:10px;flex-shrink:0">${ok ? '✓ Completed' : '✕ Failed'}</span>
+      <span class="badge" style="background:${s[0]};color:${s[1]};font-size:10px;flex-shrink:0">${s[2]}</span>
     </div>`;
   }).join('');
 }
@@ -9375,21 +9528,7 @@ function workflowConditionMatches(w, record) {
     const conditions = (cfg.conditions && cfg.conditions.length) ? cfg.conditions : (cfg.field ? [{ object: cfg.object, field: cfg.field, operator: cfg.operator, value: cfg.value }] : []);
     if (!conditions.length) return false;
     // ALL conditions must match (AND) for the workflow to fire.
-    return conditions.every(cond => {
-      if (cond.object && record._wfObjectType && cond.object !== record._wfObjectType) return false;
-      let fieldVal;
-      if ((cond.field || '').startsWith('cf__')) {
-        const key = cond.field.slice(4);
-        fieldVal = (record.customFields && record.customFields[key] !== undefined && record.customFields[key] !== null) ? record.customFields[key] : '';
-      } else {
-        fieldVal = (record[cond.field] !== undefined && record[cond.field] !== null) ? record[cond.field] : '';
-      }
-      fieldVal = String(fieldVal).toLowerCase();
-      const targetVal = String(cond.value || '').toLowerCase();
-      if (cond.operator === 'not_equals') return fieldVal !== targetVal;
-      if (cond.operator === 'contains') return fieldVal.includes(targetVal);
-      return fieldVal === targetVal;
-    });
+    return conditions.every(cond => wfEvaluateCondition(cond, record));
   }
   return true;
 }
@@ -13444,6 +13583,7 @@ initContactColumnPrefs();
       checkOverdueTaskWorkflows();
       checkTaskReminders();
       checkLandingPageLeadWorkflows();
+      processScheduledWorkflowSteps();
       runAgentCheckCycle();
       await loadNotificationsFromSupabase();
     }

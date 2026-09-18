@@ -721,6 +721,11 @@
 </style>
 </head>
 <body>
+<div id="errorBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#fef2f2;border-bottom:2px solid #dc2626;color:#991b1b;padding:10px 16px;font-size:13px;align-items:center;justify-content:center;gap:12px">
+  <span id="errorBannerMsg">Something went wrong.</span>
+  <button id="errorBannerRetryBtn" class="btn btn-danger btn-sm" onclick="retryErrorBanner()">🔄 Retry</button>
+  <button class="btn btn-outline btn-sm" onclick="hideErrorBanner()">✕ Dismiss</button>
+</div>
 <!-- ===== AUTH GUARD: blocks page until login is verified ===== -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
@@ -743,6 +748,12 @@
     }
     if (typeof loadContactsFromSupabase === 'function') {
       loadContactsFromSupabase();
+    }
+    if (typeof loadSavedContactFiltersFromSupabase === 'function') {
+      loadSavedContactFiltersFromSupabase();
+    }
+    if (typeof loadApiKeysFromSupabase === 'function') {
+      loadApiKeysFromSupabase();
     }
   })();
 </script>
@@ -833,11 +844,12 @@
   <div class="topbar">
     <button class="hamburger" onclick="toggleSidebar()">☰</button>
     <div class="topbar-title" id="pageTitle">Dashboard</div>
-    <div class="search-bar">
+    <div class="search-bar" style="position:relative">
       <span class="search-icon">🔍</span>
       <form autocomplete="off" onsubmit="return false;" style="display:contents">
-      <input type="text" placeholder="Search..." id="globalSearch" oninput="globalSearch()" autocomplete="off" name="crm-global-search-nofill" readonly onfocus="this.removeAttribute('readonly')">
+      <input type="text" placeholder="Search contacts, companies, deals, tickets..." id="globalSearch" oninput="globalSearch()" onblur="setTimeout(()=>{const d=document.getElementById('globalSearchResults'); if(d) d.style.display='none';},150)" autocomplete="off" name="crm-global-search-nofill" readonly onfocus="this.removeAttribute('readonly'); if(this.value) globalSearch();">
       </form>
+      <div id="globalSearchResults" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);max-height:420px;overflow-y:auto;z-index:200;margin-top:4px"></div>
     </div>
     <div class="topbar-actions">
       <div class="notif-bell-wrap">
@@ -1023,6 +1035,12 @@
             <select class="form-control" style="width:140px;padding:6px 10px;font-size:12px" onchange="filterContacts()" id="filterStage">
               <option value="">All Stages</option>
             </select>
+            <input type="number" min="0" class="form-control" style="width:110px;padding:6px 10px;font-size:12px" placeholder="Not contacted ≥ (days)" onchange="filterContacts()" id="filterStaleDays">
+            <select class="form-control" style="width:150px;padding:6px 10px;font-size:12px" onchange="applySavedContactFilter(this.value)" id="savedFilterSelect">
+              <option value="">💾 Saved Filters...</option>
+            </select>
+            <button class="btn btn-outline btn-sm" onclick="saveCurrentContactFilter()">💾 Save Filter</button>
+            <button class="btn btn-outline btn-sm" style="color:#dc2626;border-color:#dc2626" onclick="deleteSavedContactFilter()" title="Delete selected saved filter">🗑️</button>
             <button class="btn btn-outline btn-sm" onclick="document.getElementById('contactColumnsPanel').classList.toggle('open')" style="position:relative">⚙️ Columns</button>
             <button class="btn btn-outline btn-sm" onclick="document.getElementById('contactImportFile').click()">⬆️ Import CSV</button>
             <input type="file" id="contactImportFile" accept=".csv" style="display:none" onchange="importContactsCSV(event)">
@@ -1599,6 +1617,28 @@ Leadnovaai</textarea>
 
     <!-- INTEGRATIONS -->
     <div class="section" id="section-integrations">
+      <div class="card" style="margin-bottom:20px;border:2px solid #16a34a">
+        <div class="card-header">
+          <div class="card-title">🔌 REST API & API Keys</div>
+        </div>
+        <div style="padding:20px">
+          <div style="font-size:12.5px;color:var(--text-light);margin-bottom:14px">
+            Lets outside tools (n8n, Make, Zapier's "Custom Request", your own scripts, AI agents) read and write your Contacts, Companies, Deals, and Tasks over plain HTTPS — using a key instead of your login. Requires a one-time Supabase Edge Function deploy (guide below).
+          </div>
+          <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+            <input class="form-control" id="apiKeyNameInput" placeholder="Key name — e.g. n8n integration" style="max-width:280px">
+            <button class="btn btn-primary btn-sm" onclick="generateApiKey()">🔑 Generate New Key</button>
+            <button class="btn btn-outline btn-sm" onclick="openModal('apiGuideModal')">📘 Setup Guide (Edge Function)</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Name</th><th>Key</th><th>Created</th><th>Last Used</th><th>Status</th><th>Action</th></tr></thead>
+              <tbody id="apiKeysTable"><tr><td colspan="6" style="text-align:center;color:var(--text-light);padding:16px">No API keys yet.</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
       <div class="card" style="margin-bottom:20px">
         <div class="card-header">
           <div class="card-title">📅 Google Calendar</div>
@@ -2691,6 +2731,145 @@ Leadnovaai</textarea>
     <div style="display:flex;gap:10px;margin-top:8px">
       <button class="btn btn-primary" style="flex:1" onclick="saveInvoice()">Save Invoice</button>
       <button class="btn btn-outline" onclick="clearInvoiceForm();closeModal('invoiceModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- REST API Setup Guide Modal -->
+<div class="modal-overlay" id="apiGuideModal">
+  <div class="modal" style="max-width:720px;max-height:85vh;overflow-y:auto;">
+    <div class="modal-header">
+      <div class="modal-title">📘 REST API Setup Guide (Supabase Edge Function)</div>
+      <button class="modal-close" onclick="closeModal('apiGuideModal')">✕</button>
+    </div>
+
+    <div style="font-size:13.5px;line-height:1.7;color:var(--text)">
+      <p style="margin-bottom:10px">This deploys one small serverless function on Supabase that lets outside tools read/write your CRM data over plain HTTPS, authenticated with an API Key (generate one on the previous screen) instead of your login. One-time setup, about 10 minutes.</p>
+
+      <h4 style="margin:16px 0 6px">Step 1: Install the Supabase CLI</h4>
+      <p>Run in a terminal (needs Node.js): <code>npm install -g supabase</code>, then <code>supabase login</code>.</p>
+
+      <h4 style="margin:16px 0 6px">Step 2: Create the function</h4>
+      <p>In your project folder: <code>supabase functions new crm-api</code>. This creates <code>supabase/functions/crm-api/index.ts</code> — replace its contents with the code below.</p>
+
+      <h4 style="margin:16px 0 6px">Step 3: Paste This Code</h4>
+      <div style="position:relative;margin-bottom:10px">
+        <button class="btn btn-outline btn-sm" style="position:absolute;top:8px;right:8px;z-index:2" onclick="copyApiGuideCode()">📋 Copy Code</button>
+        <pre id="apiGuideCode" style="background:#0F172A;color:#E2E8F0;padding:16px;border-radius:8px;overflow-x:auto;font-size:11.5px;line-height:1.6;white-space:pre;max-height:340px;overflow-y:auto;">// ===== NovaAICRM — REST API Edge Function =====
+// Deploy once with the Supabase CLI:
+//   supabase functions deploy crm-api --no-verify-jwt
+// Lets outside tools call your CRM data using an API Key
+// (generated in Integrations &gt; REST API &amp; API Keys) instead of a login.
+
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const supabaseUrl = Deno.env.get('SUPABASE_URL');
+const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+const supabase = createClient(supabaseUrl, serviceKey);
+
+// Whitelisted resources only — anything not listed here is refused.
+const TABLES = { contacts: 'contacts', companies: 'companies', deals: 'deals', tasks: 'tasks' };
+
+async function hashKey(key) {
+  const enc = new TextEncoder().encode(key);
+  const buf = await crypto.subtle.digest('SHA-256', enc);
+  return Array.from(new Uint8Array(buf)).map(b =&gt; b.toString(16).padStart(2, '0')).join('');
+}
+
+function json(obj, status, cors) {
+  return new Response(JSON.stringify(obj), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
+}
+
+Deno.serve(async (req) =&gt; {
+  const cors = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, content-type',
+    'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS'
+  };
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
+
+  const authHeader = req.headers.get('authorization') || '';
+  const apiKey = authHeader.replace(/^Bearer\s+/i, '').trim();
+  if (!apiKey) return json({ error: 'Missing Authorization: Bearer &lt;api_key&gt;' }, 401, cors);
+
+  const keyHash = await hashKey(apiKey);
+  const { data: keyRow } = await supabase.from('api_keys').select('*').eq('key_hash', keyHash).is('revoked_at', null).maybeSingle();
+  if (!keyRow) return json({ error: 'Invalid or revoked API key' }, 401, cors);
+  const userId = keyRow.user_id;
+  // Fire-and-forget "last used" stamp — doesn't block the response.
+  supabase.from('api_keys').update({ last_used_at: new Date().toISOString() }).eq('id', keyRow.id).then(() =&gt; {});
+
+  // Very small fixed-window rate limit: 120 requests/minute per key.
+  const nowMinute = Math.floor(Date.now() / 60000);
+  const { count } = await supabase.from('api_request_log').select('id', { count: 'exact', head: true }).eq('key_id', keyRow.id).eq('minute_bucket', nowMinute);
+  if ((count || 0) &gt;= 120) return json({ error: 'Rate limit exceeded — 120 requests/minute per key' }, 429, cors);
+  supabase.from('api_request_log').insert({ key_id: keyRow.id, minute_bucket: nowMinute }).then(() =&gt; {});
+
+  const url = new URL(req.url);
+  const parts = url.pathname.split('/').filter(Boolean);
+  const apiIdx = parts.indexOf('crm-api');
+  const resource = parts[apiIdx + 1];
+  const recId = parts[apiIdx + 2];
+  const table = TABLES[resource];
+  if (!table) return json({ error: 'Unknown resource. Use one of: ' + Object.keys(TABLES).join(', ') }, 404, cors);
+
+  try {
+    if (req.method === 'GET' &amp;&amp; !recId) {
+      const { data, error } = await supabase.from(table).select('*').eq('user_id', userId).limit(200);
+      if (error) throw error;
+      return json({ data }, 200, cors);
+    }
+    if (req.method === 'GET' &amp;&amp; recId) {
+      const { data, error } = await supabase.from(table).select('*').eq('user_id', userId).eq('id', recId).maybeSingle();
+      if (error) throw error;
+      return json({ data }, 200, cors);
+    }
+    if (req.method === 'POST') {
+      const body = await req.json();
+      body.user_id = userId;
+      const { data, error } = await supabase.from(table).insert(body).select();
+      if (error) throw error;
+      return json({ data }, 201, cors);
+    }
+    if (req.method === 'PATCH' &amp;&amp; recId) {
+      const body = await req.json();
+      delete body.user_id;
+      const { data, error } = await supabase.from(table).update(body).eq('user_id', userId).eq('id', recId).select();
+      if (error) throw error;
+      return json({ data }, 200, cors);
+    }
+    if (req.method === 'DELETE' &amp;&amp; recId) {
+      const { error } = await supabase.from(table).delete().eq('user_id', userId).eq('id', recId);
+      if (error) throw error;
+      return json({ success: true }, 200, cors);
+    }
+    return json({ error: 'Unsupported method or route' }, 405, cors);
+  } catch (err) {
+    return json({ error: String((err &amp;&amp; err.message) || err) }, 500, cors);
+  }
+});
+</pre>
+      </div>
+
+      <h4 style="margin:16px 0 6px">Step 4: Deploy</h4>
+      <p>Run: <code>supabase link --project-ref YOUR_PROJECT_REF</code> (find this in your Supabase project URL), then:</p>
+      <pre style="background:#0F172A;color:#E2E8F0;padding:12px;border-radius:8px;font-size:11.5px;overflow-x:auto">supabase functions deploy crm-api --no-verify-jwt</pre>
+      <p style="font-size:11.5px;color:var(--text-light)">The <code>--no-verify-jwt</code> flag is required — this function checks your CRM's own API Key instead of a Supabase login token.</p>
+
+      <h4 style="margin:16px 0 6px">Step 5: Create two tables</h4>
+      <p><code>api_keys</code> — columns: <code>id</code> (int8, identity), <code>user_id</code> (uuid), <code>key_hash</code> (text), <code>name</code> (text), <code>created_at</code> (timestamptz, default now()), <code>last_used_at</code> (timestamptz), <code>revoked_at</code> (timestamptz). Apply your usual 4 RLS policies (<code>auth.uid() = user_id</code>).</p>
+      <p><code>api_request_log</code> — columns: <code>id</code> (int8, identity), <code>key_id</code> (int8), <code>minute_bucket</code> (int8). This is just the rate-limit counter — no RLS needed since only your Edge Function (service role) touches it. Optional: add a daily cron/cleanup to delete old rows.</p>
+
+      <h4 style="margin:16px 0 6px">Step 6: Use it</h4>
+      <p>Your function URL looks like <code>https://YOUR_PROJECT_REF.supabase.co/functions/v1/crm-api/contacts</code>. Example with curl:</p>
+      <pre style="background:#0F172A;color:#E2E8F0;padding:12px;border-radius:8px;font-size:11.5px;overflow-x:auto">curl https://YOUR_PROJECT_REF.supabase.co/functions/v1/crm-api/contacts \
+  -H "Authorization: Bearer YOUR_API_KEY"
+
+curl -X POST https://YOUR_PROJECT_REF.supabase.co/functions/v1/crm-api/contacts \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Jane Doe","email":"jane@example.com"}'</pre>
+      <p style="font-size:11.5px;color:var(--text-light)">Supported resources: <code>contacts</code>, <code>companies</code>, <code>deals</code>, <code>tasks</code>. Methods: GET (list, max 200), GET /:id, POST (create), PATCH /:id (update), DELETE /:id. Limited to 120 requests/minute per key.</p>
     </div>
   </div>
 </div>
@@ -4385,13 +4564,14 @@ async function loadContactsFromSupabase() {
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
-    if (error) { console.error('Could not load leads:', error); return; }
+    if (error) { console.error('Could not load leads:', error); showErrorBanner('Could not load your contacts.', loadContactsFromSupabase); return; }
     contacts = (data || []).map(mapLeadFromDb);
     renderContacts();
     renderDashboard();
     updateBadges();
   } catch (err) {
     console.error(err);
+    showErrorBanner('Could not load your contacts — check your connection.', loadContactsFromSupabase);
   }
 }
 
@@ -4538,6 +4718,84 @@ function editContact(id) {
   openModal('contactModal');
 }
 
+let savedContactFilters = [];
+
+async function loadSavedContactFiltersFromSupabase() {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const { data, error } = await supabaseClient.from('saved_filters').select('*').eq('user_id', session.user.id).eq('object_type', 'contact').order('id', { ascending: false });
+    if (error) { console.error('Could not load saved filters:', error); return; }
+    savedContactFilters = data || [];
+    renderSavedContactFilterOptions();
+  } catch (err) { console.error(err); }
+}
+
+function renderSavedContactFilterOptions() {
+  const sel = document.getElementById('savedFilterSelect');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">💾 Saved Filters...</option>' +
+    savedContactFilters.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');
+}
+
+async function saveCurrentContactFilter() {
+  const name = prompt('Name this filter (e.g. "Hot USA SaaS Leads"):');
+  if (!name || !name.trim()) return;
+  const filters = {
+    status: document.getElementById('filterStatus').value,
+    source: document.getElementById('filterSource').value,
+    icp: document.getElementById('filterICP').value,
+    leadScore: document.getElementById('filterLeadScore').value,
+    pipeline: document.getElementById('filterPipeline').value,
+    stage: document.getElementById('filterStage').value,
+    staleDays: document.getElementById('filterStaleDays').value
+  };
+  try {
+    const session = window.__currentSession;
+    if (!session) { alert('Session expired. Please log in again.'); return; }
+    const dbRow = { user_id: session.user.id, object_type: 'contact', name: name.trim(), filters };
+    const { data, error } = await supabaseClient.from('saved_filters').insert(dbRow).select();
+    if (error) { alert('Could not save filter: ' + error.message); return; }
+    if (data && data[0]) savedContactFilters.unshift(data[0]);
+    renderSavedContactFilterOptions();
+    showToast('💾 Filter saved: ' + name.trim());
+  } catch (err) {
+    alert('Something went wrong while saving the filter.');
+    console.error(err);
+  }
+}
+
+function applySavedContactFilter(id) {
+  if (!id) return;
+  const f = savedContactFilters.find(f => String(f.id) === String(id));
+  if (!f) return;
+  const filters = f.filters || {};
+  document.getElementById('filterStatus').value = filters.status || '';
+  document.getElementById('filterSource').value = filters.source || '';
+  document.getElementById('filterICP').value = filters.icp || '';
+  document.getElementById('filterLeadScore').value = filters.leadScore || '';
+  document.getElementById('filterPipeline').value = filters.pipeline || '';
+  if (typeof onContactPipelineFilterChange === 'function') onContactPipelineFilterChange();
+  document.getElementById('filterStage').value = filters.stage || '';
+  document.getElementById('filterStaleDays').value = filters.staleDays || '';
+  renderContacts();
+}
+
+async function deleteSavedContactFilter() {
+  const sel = document.getElementById('savedFilterSelect');
+  const id = sel ? sel.value : '';
+  if (!id) { alert('Select a saved filter from the dropdown first, then click this again.'); return; }
+  const f = savedContactFilters.find(f => String(f.id) === String(id));
+  if (!f) return;
+  if (!confirm(`Delete saved filter "${f.name}"?`)) return;
+  try {
+    const { error } = await supabaseClient.from('saved_filters').delete().eq('id', id);
+    if (error) { alert('Could not delete: ' + error.message); return; }
+    savedContactFilters = savedContactFilters.filter(x => String(x.id) !== String(id));
+    renderSavedContactFilterOptions();
+  } catch (err) { console.error(err); }
+}
+
 function renderContacts() {
   const tbody = document.getElementById('contactsTable');
   injectCustomHeaderColumns('#contactsTableEl thead tr', 'contact');
@@ -4547,13 +4805,16 @@ function renderContacts() {
   const scoreF = document.getElementById('filterLeadScore') ? document.getElementById('filterLeadScore').value : '';
   const pipelineF = document.getElementById('filterPipeline') ? document.getElementById('filterPipeline').value : '';
   const stageF = document.getElementById('filterStage') ? document.getElementById('filterStage').value : '';
+  const staleDaysF = document.getElementById('filterStaleDays') ? Number(document.getElementById('filterStaleDays').value) || 0 : 0;
+  const todayMs = Date.now();
   let list = contacts.filter(c =>
     (!statusF || c.status === statusF) &&
     (!sourceF || c.source === sourceF) &&
     (!icpF || c.icp === icpF) &&
     (!scoreF || c.leadScore === scoreF) &&
     (!pipelineF || String(c.category) === String(pipelineF)) &&
-    (!stageF || c.stage === stageF)
+    (!stageF || c.stage === stageF) &&
+    (!staleDaysF || !c.lastContacted || ((todayMs - new Date(c.lastContacted).getTime()) / 86400000) >= staleDaysF)
   );
   if (!list.length) { tbody.innerHTML = '<tr><td colspan="21" style="text-align:center;color:var(--text-light);padding:20px">No contacts yet.</td></tr>'; return; }
   tbody.innerHTML = list.map(c => {
@@ -5706,12 +5967,13 @@ async function loadCompaniesFromSupabase() {
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
-    if (error) { console.error('Could not load companies:', error); return; }
+    if (error) { console.error('Could not load companies:', error); showErrorBanner('Could not load your companies.', loadCompaniesFromSupabase); return; }
     companies = (data || []).map(mapCompanyFromDb);
     renderCompanies();
     updateBadges();
   } catch (err) {
     console.error(err);
+    showErrorBanner('Could not load your companies — check your connection.', loadCompaniesFromSupabase);
   }
 }
 
@@ -6448,13 +6710,14 @@ async function loadDealsFromSupabase() {
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
-    if (error) { console.error('Could not load deals:', error); return; }
+    if (error) { console.error('Could not load deals:', error); showErrorBanner('Could not load your deals.', loadDealsFromSupabase); return; }
     deals = (data || []).map(mapDealFromDb);
     renderDeals();
     renderDashboard();
     updateBadges();
   } catch (err) {
     console.error(err);
+    showErrorBanner('Could not load your deals — check your connection.', loadDealsFromSupabase);
   }
 }
 
@@ -7041,13 +7304,14 @@ async function loadTasksFromSupabase() {
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
-    if (error) { console.error('Could not load tasks:', error); return; }
+    if (error) { console.error('Could not load tasks:', error); showErrorBanner('Could not load your tasks.', loadTasksFromSupabase); return; }
     tasks = (data || []).map(mapTaskFromDb);
     renderTasks();
     renderDashboard();
     updateBadges();
   } catch (err) {
     console.error(err);
+    showErrorBanner('Could not load your tasks — check your connection.', loadTasksFromSupabase);
   }
 }
 
@@ -7968,10 +8232,11 @@ function renderWorkflows() {
       const cfg = w.triggerConfig || {};
       const conditions = (cfg.conditions && cfg.conditions.length) ? cfg.conditions : (cfg.field ? [{ object: cfg.object, field: cfg.field, operator: cfg.operator, value: cfg.value }] : []);
       if (conditions.length) {
-        trigDesc += ' — ' + conditions.map(cond => {
+        trigDesc += ' — ' + conditions.map((cond, i) => {
           const fLabel = (cond.field || '').startsWith('cf__') ? cond.field.slice(4) : cond.field;
-          return `${escapeHtml(cond.object || '')}.${escapeHtml(fLabel || '')} ${escapeHtml(cond.operator || 'equals')} "${escapeHtml(cond.value || '')}"`;
-        }).join(' AND ');
+          const prefix = i > 0 ? ` ${escapeHtml(cond.logic || 'AND')} ` : '';
+          return `${prefix}${escapeHtml(cond.object || '')}.${escapeHtml(fLabel || '')} ${escapeHtml(cond.operator || 'equals')} "${escapeHtml(cond.value || '')}"`;
+        }).join('');
       }
     }
     const actionsDesc = (w.actions || []).map(a => WF_ACTION_LABELS[a.type] || a.type).join(', ') || 'no actions';
@@ -8028,7 +8293,10 @@ function renderWfConditions() {
   if (!el) return;
   el.innerHTML = wfConditionDraft.map((cond, idx) => `
     <div style="border:1.5px solid var(--border);border-radius:8px;padding:8px;margin-bottom:6px">
-      ${idx > 0 ? `<div style="font-size:10px;font-weight:700;color:var(--primary);margin-bottom:4px">AND</div>` : ''}
+      ${idx > 0 ? `<select class="form-control" style="margin-bottom:6px;max-width:90px;font-size:10.5px;font-weight:700;color:var(--primary)" onchange="updateWfCondition(${idx},'logic',this.value)">
+          <option value="AND" ${(!cond.logic || cond.logic === 'AND') ? 'selected' : ''}>AND</option>
+          <option value="OR" ${cond.logic === 'OR' ? 'selected' : ''}>OR</option>
+        </select>` : ''}
       <select class="form-control" style="margin-bottom:6px" onchange="updateWfCondition(${idx},'object',this.value);refreshWfConditionFieldOptions(${idx})">
         <option value="contact" ${cond.object === 'contact' ? 'selected' : ''}>Contact</option>
         <option value="deal" ${cond.object === 'deal' ? 'selected' : ''}>Deal</option>
@@ -8037,12 +8305,16 @@ function renderWfConditions() {
         ${wfFieldOptionsHtml(cond.object || 'contact', cond.field)}
       </select>
       <div style="display:flex;gap:6px">
-        <select class="form-control" style="max-width:130px" onchange="updateWfCondition(${idx},'operator',this.value)">
-          <option value="equals" ${cond.operator === 'equals' ? 'selected' : ''}>Equals</option>
+        <select class="form-control" style="max-width:140px" onchange="updateWfCondition(${idx},'operator',this.value)">
+          <option value="equals" ${(!cond.operator || cond.operator === 'equals') ? 'selected' : ''}>Equals</option>
           <option value="not_equals" ${cond.operator === 'not_equals' ? 'selected' : ''}>Not Equals</option>
           <option value="contains" ${cond.operator === 'contains' ? 'selected' : ''}>Contains</option>
+          <option value="greater_than" ${cond.operator === 'greater_than' ? 'selected' : ''}>Greater Than (&gt;)</option>
+          <option value="less_than" ${cond.operator === 'less_than' ? 'selected' : ''}>Less Than (&lt;)</option>
+          <option value="greater_or_equal" ${cond.operator === 'greater_or_equal' ? 'selected' : ''}>≥</option>
+          <option value="less_or_equal" ${cond.operator === 'less_or_equal' ? 'selected' : ''}>≤</option>
         </select>
-        <input class="form-control" placeholder="Value — e.g. UAE" value="${escapeHtml(cond.value || '')}" oninput="updateWfCondition(${idx},'value',this.value)">
+        <input class="form-control" placeholder="Value — e.g. UAE or 80" value="${escapeHtml(cond.value || '')}" oninput="updateWfCondition(${idx},'value',this.value)">
         ${wfConditionDraft.length > 1 ? `<button type="button" class="btn btn-outline btn-sm" onclick="removeWfCondition(${idx})">✕</button>` : ''}
       </div>
     </div>`).join('');
@@ -8064,7 +8336,7 @@ function refreshWfConditionFieldOptions(idx) {
 }
 
 function addWfCondition() {
-  wfConditionDraft.push({ object: 'contact', field: '', operator: 'equals', value: '' });
+  wfConditionDraft.push({ object: 'contact', field: '', operator: 'equals', value: '', logic: 'AND' });
   renderWfConditions();
 }
 function removeWfCondition(idx) {
@@ -8120,7 +8392,7 @@ function wfActionDefaults(type) {
     send_slack: { type, message: '' },
     sync_mailchimp: { type },
     delay: { type, delayValue: 2, delayUnit: 'days' },
-    branch_condition: { type, object: 'contact', field: '', operator: 'equals', value: '' }
+    branch_condition: { type, conditions: [{ object: 'contact', field: '', operator: 'equals', value: '', logic: 'AND' }] }
   };
   return defaults[type];
 }
@@ -8194,24 +8466,37 @@ function wfActionFieldsHtml(a, idx) {
       </div>
       <div style="font-size:11px;color:var(--text-light);margin-top:6px">⚠️ Steps after this run once the wait is over — checked every few minutes while someone has the CRM open in a browser tab.</div>`;
   } else if (a.type === 'branch_condition') {
-    const objectType = a.object || 'contact';
+    if (!a.conditions || !a.conditions.length) a.conditions = [{ object: a.object || 'contact', field: a.field || '', operator: a.operator || 'equals', value: a.value || '', logic: 'AND' }];
     return `
-      <div style="font-size:11.5px;color:var(--text-light);margin-bottom:6px">If this is FALSE, the workflow stops here — later steps are skipped. E.g. "Reply Text is blank" → send a follow-up only when there's been no reply.</div>
-      <select class="form-control" style="margin-bottom:6px" onchange="updateWfAction(${idx},'object',this.value);refreshWfActionFieldOptions(${idx})">
-        <option value="contact" ${objectType === 'contact' ? 'selected' : ''}>Contact</option>
-        <option value="deal" ${objectType === 'deal' ? 'selected' : ''}>Deal</option>
-      </select>
-      <select class="form-control" style="margin-bottom:6px" id="wf-action-field-${idx}" onchange="updateWfAction(${idx},'field',this.value)">
-        ${wfFieldOptionsHtml(objectType, a.field)}
-      </select>
-      <div style="display:flex;gap:6px">
-        <select class="form-control" style="max-width:130px" onchange="updateWfAction(${idx},'operator',this.value)">
-          <option value="equals" ${(!a.operator || a.operator === 'equals') ? 'selected' : ''}>Equals</option>
-          <option value="not_equals" ${a.operator === 'not_equals' ? 'selected' : ''}>Not Equals</option>
-          <option value="contains" ${a.operator === 'contains' ? 'selected' : ''}>Contains</option>
-        </select>
-        <input class="form-control" placeholder="Value (leave blank to check 'is empty')" value="${escapeHtml(a.value || '')}" oninput="updateWfAction(${idx},'value',this.value)">
-      </div>`;
+      <div style="font-size:11.5px;color:var(--text-light);margin-bottom:6px">If this is FALSE, the workflow stops here — later steps are skipped. E.g. "Lead Score &gt; 80 AND Country = USA" → only continue for hot US leads.</div>
+      ${a.conditions.map((cond, ci) => `
+        <div style="border:1.5px solid var(--border);border-radius:8px;padding:8px;margin-bottom:6px">
+          ${ci > 0 ? `<select class="form-control" style="margin-bottom:6px;max-width:90px;font-size:10.5px;font-weight:700;color:var(--primary)" onchange="updateWfActionCondition(${idx},${ci},'logic',this.value)">
+              <option value="AND" ${(!cond.logic || cond.logic === 'AND') ? 'selected' : ''}>AND</option>
+              <option value="OR" ${cond.logic === 'OR' ? 'selected' : ''}>OR</option>
+            </select>` : ''}
+          <select class="form-control" style="margin-bottom:6px" onchange="updateWfActionCondition(${idx},${ci},'object',this.value);refreshWfActionCondFieldOptions(${idx},${ci})">
+            <option value="contact" ${(cond.object || 'contact') === 'contact' ? 'selected' : ''}>Contact</option>
+            <option value="deal" ${cond.object === 'deal' ? 'selected' : ''}>Deal</option>
+          </select>
+          <select class="form-control" style="margin-bottom:6px" id="wf-action-${idx}-cond-field-${ci}" onchange="updateWfActionCondition(${idx},${ci},'field',this.value)">
+            ${wfFieldOptionsHtml(cond.object || 'contact', cond.field)}
+          </select>
+          <div style="display:flex;gap:6px">
+            <select class="form-control" style="max-width:140px" onchange="updateWfActionCondition(${idx},${ci},'operator',this.value)">
+              <option value="equals" ${(!cond.operator || cond.operator === 'equals') ? 'selected' : ''}>Equals</option>
+              <option value="not_equals" ${cond.operator === 'not_equals' ? 'selected' : ''}>Not Equals</option>
+              <option value="contains" ${cond.operator === 'contains' ? 'selected' : ''}>Contains</option>
+              <option value="greater_than" ${cond.operator === 'greater_than' ? 'selected' : ''}>Greater Than (&gt;)</option>
+              <option value="less_than" ${cond.operator === 'less_than' ? 'selected' : ''}>Less Than (&lt;)</option>
+              <option value="greater_or_equal" ${cond.operator === 'greater_or_equal' ? 'selected' : ''}>≥</option>
+              <option value="less_or_equal" ${cond.operator === 'less_or_equal' ? 'selected' : ''}>≤</option>
+            </select>
+            <input class="form-control" placeholder="Value" value="${escapeHtml(cond.value || '')}" oninput="updateWfActionCondition(${idx},${ci},'value',this.value)">
+            ${a.conditions.length > 1 ? `<button type="button" class="btn btn-outline btn-sm" onclick="removeWfActionCondition(${idx},${ci})">✕</button>` : ''}
+          </div>
+        </div>`).join('')}
+      <button type="button" class="btn btn-outline btn-sm" onclick="addWfActionCondition(${idx})">+ Add Condition</button>`;
   }
   return '';
 }
@@ -8222,6 +8507,32 @@ function refreshWfActionFieldOptions(idx) {
   if (!sel || !a) return;
   sel.innerHTML = wfFieldOptionsHtml(a.object || 'contact', '');
   a.field = sel.value;
+}
+
+function updateWfActionCondition(idx, ci, key, value) {
+  const a = wfActionDraft[idx];
+  if (!a || !a.conditions || !a.conditions[ci]) return;
+  a.conditions[ci][key] = value;
+}
+function addWfActionCondition(idx) {
+  const a = wfActionDraft[idx];
+  if (!a) return;
+  if (!a.conditions) a.conditions = [];
+  a.conditions.push({ object: 'contact', field: '', operator: 'equals', value: '', logic: 'AND' });
+  renderWfActionDraft();
+}
+function removeWfActionCondition(idx, ci) {
+  const a = wfActionDraft[idx];
+  if (!a || !a.conditions) return;
+  a.conditions.splice(ci, 1);
+  renderWfActionDraft();
+}
+function refreshWfActionCondFieldOptions(idx, ci) {
+  const a = wfActionDraft[idx];
+  const sel = document.getElementById(`wf-action-${idx}-cond-field-${ci}`);
+  if (!sel || !a || !a.conditions || !a.conditions[ci]) return;
+  sel.innerHTML = wfFieldOptionsHtml(a.conditions[ci].object || 'contact', '');
+  a.conditions[ci].field = sel.value;
 }
 
 function wfConnectorHtml(pos) {
@@ -8322,7 +8633,7 @@ async function saveWorkflow() {
   if (triggerType === 'custom_condition') {
     const validConditions = wfConditionDraft.filter(c => c.field && String(c.value || '').trim());
     if (!validConditions.length) { errEl.textContent = 'Add at least one condition with a field and value.'; errEl.style.display = 'block'; return; }
-    triggerConfig.conditions = validConditions.map(c => ({ object: c.object || 'contact', field: c.field, operator: c.operator || 'equals', value: c.value }));
+    triggerConfig.conditions = validConditions.map(c => ({ object: c.object || 'contact', field: c.field, operator: c.operator || 'equals', value: c.value, logic: c.logic || 'AND' }));
     // Legacy single-condition fields kept in sync too, in case anything else still reads them directly.
     triggerConfig.object = validConditions[0].object;
     triggerConfig.field = validConditions[0].field;
@@ -9513,7 +9824,8 @@ async function runWorkflowFromStep(workflow, record, triggerType, startIndex) {
       return;
     }
     if (action.type === 'branch_condition') {
-      if (!wfEvaluateCondition(action, record)) {
+      const conds = (action.conditions && action.conditions.length) ? action.conditions : [action];
+      if (!wfEvaluateConditionGroup(conds, record)) {
         await logAutomationRun(workflow, record, triggerType, 'Stopped', null);
         return;
       }
@@ -9531,9 +9843,8 @@ function wfComputeResumeAt(action) {
   return new Date(Date.now() + ms);
 }
 
-// Shared single-condition evaluator, used both by the trigger's AND-conditions and by
-// 'branch_condition' action steps, so the two behave identically.
-function wfEvaluateCondition(cond, record) {
+// Shared condition evaluator — a single {object, field, operator, value} row.
+function wfEvalSingleCondition(cond, record) {
   if (cond.object && record._wfObjectType && cond.object !== record._wfObjectType) return false;
   let fieldVal;
   if ((cond.field || '').startsWith('cf__')) {
@@ -9542,11 +9853,36 @@ function wfEvaluateCondition(cond, record) {
   } else {
     fieldVal = (record[cond.field] !== undefined && record[cond.field] !== null) ? record[cond.field] : '';
   }
+  const op = cond.operator || 'equals';
+  if (op === 'greater_than' || op === 'less_than' || op === 'greater_or_equal' || op === 'less_or_equal') {
+    const a = parseFloat(fieldVal), b = parseFloat(cond.value);
+    if (isNaN(a) || isNaN(b)) return false;
+    if (op === 'greater_than') return a > b;
+    if (op === 'less_than') return a < b;
+    if (op === 'greater_or_equal') return a >= b;
+    return a <= b;
+  }
   fieldVal = String(fieldVal).toLowerCase();
   const targetVal = String(cond.value || '').toLowerCase();
-  if (cond.operator === 'not_equals') return fieldVal !== targetVal;
-  if (cond.operator === 'contains') return fieldVal.includes(targetVal);
+  if (op === 'not_equals') return fieldVal !== targetVal;
+  if (op === 'contains') return fieldVal.includes(targetVal);
   return fieldVal === targetVal;
+}
+// Backward-compat alias — older saved workflows/branch_condition steps call this name directly.
+function wfEvaluateCondition(cond, record) { return wfEvalSingleCondition(cond, record); }
+
+// Evaluates a list of condition rows left-to-right, respecting each row's own
+// AND/OR (row.logic) with whatever the running result is so far — e.g. rows
+// [A, {B, logic:OR}, {C, logic:AND}] evaluate as ((A OR B) AND C).
+function wfEvaluateConditionGroup(conditions, record) {
+  if (!conditions || !conditions.length) return true;
+  let result = wfEvalSingleCondition(conditions[0], record);
+  for (let i = 1; i < conditions.length; i++) {
+    const c = conditions[i];
+    const m = wfEvalSingleCondition(c, record);
+    result = (c.logic === 'OR') ? (result || m) : (result && m);
+  }
+  return result;
 }
 
 // Persists a paused workflow so it can resume later — this is the "Delays" mechanism.
@@ -9699,8 +10035,7 @@ function workflowConditionMatches(w, record) {
   if (w.triggerType === 'custom_condition') {
     const conditions = (cfg.conditions && cfg.conditions.length) ? cfg.conditions : (cfg.field ? [{ object: cfg.object, field: cfg.field, operator: cfg.operator, value: cfg.value }] : []);
     if (!conditions.length) return false;
-    // ALL conditions must match (AND) for the workflow to fire.
-    return conditions.every(cond => wfEvaluateCondition(cond, record));
+    return wfEvaluateConditionGroup(conditions, record);
   }
   return true;
 }
@@ -11620,16 +11955,42 @@ function updateBadges() {
   document.getElementById('teamBadge').textContent = team.length;
 }
 
-// SEARCH
+// SEARCH — cross-object: Contacts, Companies, Deals, Tickets, shown in a dropdown under the search box.
 function globalSearch() {
-  const q = document.getElementById('globalSearch').value.toLowerCase();
-  if (!q) return;
-  const found = contacts.filter(c => c.name.toLowerCase().includes(q) || (c.company||'').toLowerCase().includes(q));
-  if (found.length) {
-    showSection('contacts', document.querySelectorAll('.nav-item')[1]);
-    const tbody = document.getElementById('contactsTable');
-    tbody.innerHTML = found.map(c => `<tr><td>${c.name}</td><td>${c.email||'-'}</td><td>${c.company||'-'}</td><td>${c.phone||'-'}</td><td>${badge(c.status)}</td><td style="font-size:12px">${c.source||'-'}</td><td style="font-size:12px">${c.icp||'-'}</td><td style="font-size:12px">${c.leadScore||'-'}</td><td style="display:flex;gap:6px"><button class="btn btn-outline btn-sm" onclick="editContact(${c.id})">✏️ Edit</button><button class="btn btn-danger btn-sm" onclick="deleteContact(${c.id})">Delete</button></td></tr>`).join('');
+  const q = document.getElementById('globalSearch').value.trim().toLowerCase();
+  const box = document.getElementById('globalSearchResults');
+  if (!box) return;
+  if (!q) { box.style.display = 'none'; return; }
+
+  const foundContacts = contacts.filter(c => (c.name||'').toLowerCase().includes(q) || (c.email||'').toLowerCase().includes(q) || (c.company||'').toLowerCase().includes(q)).slice(0, 5);
+  const foundCompanies = companies.filter(co => (co.name||'').toLowerCase().includes(q)).slice(0, 5);
+  const foundDeals = deals.filter(d => (d.name||'').toLowerCase().includes(q) || (d.company||'').toLowerCase().includes(q)).slice(0, 5);
+  const foundTickets = tickets.filter(t => (t.subject||'').toLowerCase().includes(q)).slice(0, 5);
+
+  const totalFound = foundContacts.length + foundCompanies.length + foundDeals.length + foundTickets.length;
+  if (!totalFound) {
+    box.innerHTML = '<div style="padding:14px;text-align:center;color:var(--text-light);font-size:13px">No matches for "' + escapeHtml(q) + '"</div>';
+    box.style.display = 'block';
+    return;
   }
+
+  function section(label, items, renderRow) {
+    if (!items.length) return '';
+    return `<div style="padding:6px 12px;font-size:10.5px;font-weight:700;color:var(--text-light);text-transform:uppercase;background:#f8f9fb">${label}</div>` + items.map(renderRow).join('');
+  }
+  const rowStyle = 'padding:9px 14px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:13px';
+
+  box.innerHTML =
+    section('Contacts', foundContacts, c => `<div style="${rowStyle}" onmousedown="closeGlobalSearch();openContactProfile(${c.id})"><b>${escapeHtml(c.name||'')}</b> <span style="color:var(--text-light);font-size:11.5px">${escapeHtml(c.company||'')}</span></div>`) +
+    section('Companies', foundCompanies, co => `<div style="${rowStyle}" onmousedown="closeGlobalSearch();openCompanyProfile(${co.id})"><b>${escapeHtml(co.name||'')}</b></div>`) +
+    section('Deals', foundDeals, d => `<div style="${rowStyle}" onmousedown="closeGlobalSearch();showSection('deals', document.querySelectorAll('.nav-item')[4]);editDeal('${d.id}')"><b>${escapeHtml(d.name||'')}</b> <span style="color:var(--text-light);font-size:11.5px">${escapeHtml(d.company||'')} · $${d.value||0}</span></div>`) +
+    section('Tickets', foundTickets, t => `<div style="${rowStyle}" onmousedown="closeGlobalSearch();${t.contactId ? `showSection('contacts', document.querySelectorAll('.nav-item')[1]);openContactProfile(${t.contactId})` : (t.companyId ? `showSection('companies', document.querySelectorAll('.nav-item')[2]);openCompanyProfile(${t.companyId})` : '')}"><b>${escapeHtml(t.subject||'')}</b> <span style="color:var(--text-light);font-size:11.5px">${escapeHtml(t.status||'')}</span></div>`);
+  box.style.display = 'block';
+}
+function closeGlobalSearch() {
+  const box = document.getElementById('globalSearchResults');
+  if (box) box.style.display = 'none';
+  document.getElementById('globalSearch').value = '';
 }
 
 // SIDEBAR MOBILE
@@ -14226,6 +14587,107 @@ function goToTeamFromMenu() {
 }
 
 // ===== Copy Apps Script code from setup guide =====
+let apiKeys = [];
+
+// UX polish: a single reusable "Something went wrong — Retry" banner, used by the
+// core data loaders below instead of silently failing (console.error only).
+let errorBannerRetryFn = null;
+function showErrorBanner(message, retryFn) {
+  const banner = document.getElementById('errorBanner');
+  const msgEl = document.getElementById('errorBannerMsg');
+  if (!banner || !msgEl) return;
+  msgEl.textContent = message || 'Something went wrong.';
+  errorBannerRetryFn = retryFn || null;
+  document.getElementById('errorBannerRetryBtn').style.display = retryFn ? 'inline-flex' : 'none';
+  banner.style.display = 'flex';
+}
+function hideErrorBanner() {
+  const banner = document.getElementById('errorBanner');
+  if (banner) banner.style.display = 'none';
+  errorBannerRetryFn = null;
+}
+function retryErrorBanner() {
+  const fn = errorBannerRetryFn;
+  hideErrorBanner();
+  if (fn) fn();
+}
+
+async function loadApiKeysFromSupabase() {
+  try {
+    const session = window.__currentSession;
+    if (!session) return;
+    const { data, error } = await supabaseClient.from('api_keys').select('*').eq('user_id', session.user.id).order('id', { ascending: false });
+    if (error) { console.error('Could not load API keys:', error); return; }
+    apiKeys = data || [];
+    renderApiKeysList();
+  } catch (err) { console.error(err); }
+}
+
+function renderApiKeysList() {
+  const tbody = document.getElementById('apiKeysTable');
+  if (!tbody) return;
+  if (!apiKeys.length) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-light);padding:16px">No API keys yet.</td></tr>'; return; }
+  tbody.innerHTML = apiKeys.map(k => `
+    <tr>
+      <td>${escapeHtml(k.name || '')}</td>
+      <td style="font-family:monospace;font-size:11.5px">•••• (shown only once, at creation)</td>
+      <td style="font-size:11.5px">${k.created_at ? new Date(k.created_at).toLocaleDateString() : '-'}</td>
+      <td style="font-size:11.5px">${k.last_used_at ? new Date(k.last_used_at).toLocaleString() : 'Never'}</td>
+      <td>${k.revoked_at ? '<span class="badge badge-lost">Revoked</span>' : '<span class="badge badge-won">Active</span>'}</td>
+      <td>${k.revoked_at ? '' : `<button class="btn btn-danger btn-sm" onclick="revokeApiKey(${k.id})">Revoke</button>`}</td>
+    </tr>`).join('');
+}
+
+// Generates a random key client-side, stores only its SHA-256 hash (NovaAICRM never
+// keeps the plaintext), and shows the real key to the user exactly once.
+async function generateApiKey() {
+  const nameInput = document.getElementById('apiKeyNameInput');
+  const name = (nameInput.value || '').trim() || 'Unnamed key';
+  const session = window.__currentSession;
+  if (!session) { alert('Session expired. Please log in again.'); return; }
+
+  const bytes = new Uint8Array(30);
+  crypto.getRandomValues(bytes);
+  const plainKey = 'nova_' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  const enc = new TextEncoder().encode(plainKey);
+  const hashBuf = await crypto.subtle.digest('SHA-256', enc);
+  const keyHash = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
+
+  try {
+    const dbRow = { user_id: session.user.id, name, key_hash: keyHash };
+    const { data, error } = await supabaseClient.from('api_keys').insert(dbRow).select();
+    if (error) { alert('Could not create API key: ' + error.message); return; }
+    if (data && data[0]) apiKeys.unshift(data[0]);
+    renderApiKeysList();
+    nameInput.value = '';
+    prompt('✅ Key created! Copy it now — it will never be shown again (only its hash is stored):', plainKey);
+  } catch (err) {
+    alert('Something went wrong while creating the key.');
+    console.error(err);
+  }
+}
+
+async function revokeApiKey(id) {
+  if (!confirm('Revoke this API key? Any tool using it will stop working immediately.')) return;
+  try {
+    const { error } = await supabaseClient.from('api_keys').update({ revoked_at: new Date().toISOString() }).eq('id', id);
+    if (error) { alert('Could not revoke: ' + error.message); return; }
+    const k = apiKeys.find(k => k.id === id);
+    if (k) k.revoked_at = new Date().toISOString();
+    renderApiKeysList();
+  } catch (err) { console.error(err); }
+}
+
+function copyApiGuideCode() {
+  const codeEl = document.getElementById('apiGuideCode');
+  const text = codeEl.textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    alert('Code copied! Paste it into supabase/functions/crm-api/index.ts');
+  }).catch(() => {
+    alert('Could not copy. Please select the code manually and copy it.');
+  });
+}
+
 function copyScriptCode() {
   const codeEl = document.getElementById('scriptGuideCode');
   const text = codeEl.textContent;

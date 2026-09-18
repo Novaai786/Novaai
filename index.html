@@ -297,6 +297,7 @@
   .badge-high { background: #fee2e2; color: #dc2626; }
   .badge-medium { background: #fef3c7; color: #d97706; }
   .badge-low { background: #d1fae5; color: #059669; }
+  .badge-clicked { background: #e0e7ff; color: #4338ca; }
   .role-admin { background: #ede9fe; color: #6d28d9; }
   .role-manager { background: #dbeafe; color: #2563EB; }
   .role-sales { background: #d1fae5; color: #059669; }
@@ -1368,6 +1369,10 @@ Leadnovaai</textarea>
               <div style="font-size:22px;font-weight:700;color:#a21caf" id="statOpened">0</div>
               <div style="font-size:11px;color:var(--text-light)">Opened</div>
             </div>
+            <div style="flex:1;min-width:140px;background:#eef2ff;border-radius:8px;padding:12px;text-align:center">
+              <div style="font-size:22px;font-weight:700;color:#4338ca" id="statClicked">0</div>
+              <div style="font-size:11px;color:var(--text-light)">Clicked</div>
+            </div>
             <div style="flex:1;min-width:140px;background:#eff6ff;border-radius:8px;padding:12px;text-align:center">
               <div style="font-size:22px;font-weight:700;color:#1d4ed8" id="statReplied">0</div>
               <div style="font-size:11px;color:var(--text-light)">Replied</div>
@@ -2163,6 +2168,15 @@ Leadnovaai</textarea>
     <!-- IMPORT / EXPORT -->
     <div class="section" id="section-importexport">
 
+      <div class="card" style="margin-bottom:18px;border:2px solid #4338ca">
+        <div class="card-header"><div class="card-title">🔗 Data Maintenance — Re-link Deals to Companies</div></div>
+        <div class="ie-card-desc" style="margin-bottom:12px">
+          Deals used to link to a Company only by matching the typed company <em>name</em> — a rename or typo could silently break that link. This scans every deal, matches its company name to a real Company record, and saves a permanent ID-based link (new deals do this automatically). Safe to run anytime; skips deals that are already linked or that don't match any Company on file.
+        </div>
+        <button class="btn btn-primary" onclick="rebuildDealCompanyLinks()">🔗 Re-link Deals Now</button>
+        <div class="import-msg" id="relinkDealsMsg"></div>
+      </div>
+
       <div class="card" style="margin-bottom:18px;border:2px solid #16a34a">
         <div class="card-header"><div class="card-title">🤖 Clean AI-Ready Data Export</div></div>
         <div class="ie-card-desc" style="margin-bottom:12px">
@@ -2696,7 +2710,9 @@ Leadnovaai</textarea>
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Company</label>
-        <input class="form-control" id="d-company" placeholder="Company name">
+        <input class="form-control" id="d-company" list="d-company-list" placeholder="Company name" autocomplete="off">
+        <datalist id="d-company-list"></datalist>
+        <div style="font-size:10.5px;color:var(--text-light);margin-top:3px">Pick from the list to properly link this deal to that Company record.</div>
       </div>
       <div class="form-group">
         <label class="form-label">Value ($)</label>
@@ -3279,7 +3295,7 @@ Leadnovaai</textarea>
         <pre id="scriptGuideCode" style="background:#0F172A;color:#E2E8F0;padding:16px;border-radius:8px;overflow-x:auto;font-size:11.5px;line-height:1.6;white-space:pre;max-height:340px;overflow-y:auto;">// ===== NovaAICRM — Gmail Email Engine (Google Apps Script) =====
 // No manual Google Sheet needed — this script creates and manages
 // its own Google Sheet automatically the first time it runs.
-// Handles: Send Now, Schedule for Later, Sequences, Open Tracking,
+// Handles: Send Now, Schedule for Later, Sequences, Open Tracking, Click Tracking,
 // and Reply Detection (auto-stops sequences + auto-creates a deal).
 
 const SHEET_NAME_QUEUE = 'EmailQueue';
@@ -3303,7 +3319,7 @@ function getOrCreateSpreadsheet() {
   queue.setName(SHEET_NAME_QUEUE);
   queue.appendRow(['queueId', 'to', 'subject', 'body', 'fromName', 'scheduledAt', 'status', 'sentAt']);
   const log = ss.insertSheet(SHEET_NAME_LOG);
-  log.appendRow(['trackId', 'to', 'subject', 'fromName', 'status', 'sentAt', 'openedAt', 'threadId', 'repliedAt']);
+  log.appendRow(['trackId', 'to', 'subject', 'fromName', 'status', 'sentAt', 'openedAt', 'threadId', 'repliedAt', 'clickedAt']);
   return ss;
 }
 
@@ -3313,7 +3329,7 @@ function getSheet(name) {
   if (!sh) {
     sh = ss.insertSheet(name);
     if (name === SHEET_NAME_QUEUE) sh.appendRow(['queueId', 'to', 'subject', 'body', 'fromName', 'scheduledAt', 'status', 'sentAt']);
-    if (name === SHEET_NAME_LOG) sh.appendRow(['trackId', 'to', 'subject', 'fromName', 'status', 'sentAt', 'openedAt', 'threadId', 'repliedAt']);
+    if (name === SHEET_NAME_LOG) sh.appendRow(['trackId', 'to', 'subject', 'fromName', 'status', 'sentAt', 'openedAt', 'threadId', 'repliedAt', 'clickedAt']);
   }
   return sh;
 }
@@ -3335,6 +3351,16 @@ function jsonOut(obj) { return ContentService.createTextOutput(JSON.stringify(ob
 function trackingPixelTag(trackId) {
   const url = ScriptApp.getService().getUrl();
   return '&lt;img src="' + url + '?track=' + trackId + '" width="1" height="1" style="display:none"&gt;';
+}
+
+// ---------- Click-tracking: rewrites every http(s) link in the email body so it ----------
+// ---------- routes through this Web App first (logs the click), then forwards the visitor on ----------
+function wrapLinksForClickTracking(html, trackId) {
+  const url = ScriptApp.getService().getUrl();
+  return String(html).replace(/href="(https?:\/\/[^"]+)"/g, function (match, target) {
+    const wrapped = url + '?click=' + trackId + '&amp;url=' + encodeURIComponent(target);
+    return 'href="' + wrapped + '"';
+  });
 }
 
 // ---------- Main API used by the CRM ----------
@@ -3363,9 +3389,32 @@ function doPost(e) {
   }
 }
 
-// ---------- Open-tracking pixel ----------
+// ---------- Open-tracking pixel + Click-tracking redirect ----------
 function doGet(e) {
   const trackId = e.parameter.track;
+  const clickId = e.parameter.click;
+  const targetUrl = e.parameter.url;
+
+  // A click on a tracked link: log it, then bounce the visitor on to the real URL.
+  if (clickId &amp;&amp; targetUrl) {
+    try {
+      const sh = getSheet(SHEET_NAME_LOG);
+      const data = sh.getDataRange().getValues();
+      for (let i = 1; i &lt; data.length; i++) {
+        if (data[i][0] === clickId) {
+          if (!data[i][9]) sh.getRange(i + 1, 10).setValue(new Date());
+          if (data[i][4] === 'Sent' || data[i][4] === 'Opened') sh.getRange(i + 1, 5).setValue('Clicked');
+          break;
+        }
+      }
+    } catch (err) { /* silent */ }
+    return HtmlService.createHtmlOutput(
+      '&lt;html&gt;&lt;head&gt;&lt;meta http-equiv="refresh" content="0;url=' + targetUrl + '"&gt;&lt;/head&gt;' +
+      '&lt;body&gt;Redirecting… &lt;a href="' + targetUrl + '"&gt;Click here if you are not redirected&lt;/a&gt;&lt;/body&gt;&lt;/html&gt;'
+    );
+  }
+
+  // An open-tracking pixel load.
   if (trackId) {
     try {
       const sh = getSheet(SHEET_NAME_LOG);
@@ -3388,7 +3437,8 @@ function handleSendEmail(req) {
   const trackId = genId();
   const fromName = req.fromName || 'NovaAICRM';
   try {
-    const htmlBody = String(req.body).replace(/\n/g, '&lt;br&gt;') + trackingPixelTag(trackId);
+    const rawHtml = String(req.body).replace(/\n/g, '&lt;br&gt;');
+    const htmlBody = wrapLinksForClickTracking(rawHtml, trackId) + trackingPixelTag(trackId);
     const draft = GmailApp.createDraft(req.to, req.subject, req.body, { htmlBody: htmlBody, name: fromName });
     const message = draft.send();
     const threadId = message.getThread().getId();
@@ -3452,7 +3502,7 @@ function handleGetStatus() {
   const rows = [];
   for (let i = 1; i &lt; data.length; i++) {
     const r = data[i];
-    rows.push({ trackId: r[0], to: r[1], subject: r[2], fromName: r[3], status: r[4], sentAt: r[5], openedAt: r[6] });
+    rows.push({ trackId: r[0], to: r[1], subject: r[2], fromName: r[3], status: r[4], sentAt: r[5], openedAt: r[6], clickedAt: r[9] });
   }
   return jsonOut({ success: true, data: rows });
 }
@@ -3476,7 +3526,8 @@ function processQueue() {
     if (status === 'pending' &amp;&amp; to &amp;&amp; new Date(scheduledAt) &lt;= now) {
       try {
         const trackId = genId();
-        const htmlBody = String(body).replace(/\n/g, '&lt;br&gt;') + trackingPixelTag(trackId);
+        const rawHtml = String(body).replace(/\n/g, '&lt;br&gt;');
+        const htmlBody = wrapLinksForClickTracking(rawHtml, trackId) + trackingPixelTag(trackId);
         const draft = GmailApp.createDraft(to, subject, body, { htmlBody: htmlBody, name: fromName || 'NovaAICRM' });
         const message = draft.send();
         const threadId = message.getThread().getId();
@@ -3596,6 +3647,7 @@ function handleMailchimpSync(req) {
           <li>This script only ever uses your own Gmail account — no one's email or password is ever requested.</li>
           <li>If you ever redeploy and get a new URL, remember to update it again in Sender Setup above.</li>
           <li>Reply Detection only works for emails sent through this script (Campaigns, Workflows, Sequences) after this update — it can't see replies to emails sent before you added this code.</li>
+          <li>Click Tracking rewrites every link in the email body to route through this script first, then forwards the visitor to the real page — it only works for emails sent after you paste/redeploy this updated code.</li>
           <li>Google Calendar and Mailchimp actions need this updated script — if you added this code after already deploying once, redeploy (Deploy → Manage deployments → Edit → New version → Deploy) and re-authorize when asked, since Calendar access is a new permission.</li>
         </ul>
       </div>
@@ -4237,7 +4289,7 @@ function toggleApiKeyVisibility() {
 
 // STATUS BADGE
 function badge(status) {
-  const map = {'New':'badge-new','Contacted':'badge-contacted','Interested':'badge-interested','Closed':'badge-closed','Lost':'badge-lost','Won':'badge-won','Pending':'badge-pending','Sent':'badge-open','Opened':'badge-interested','Replied':'badge-closed','No Reply':'badge-lost','High':'badge-high','Medium':'badge-medium','Low':'badge-low','Bounced':'badge-lost','Unsubscribed':'badge-lost','Failed':'badge-lost'};
+  const map = {'New':'badge-new','Contacted':'badge-contacted','Interested':'badge-interested','Closed':'badge-closed','Lost':'badge-lost','Won':'badge-won','Pending':'badge-pending','Sent':'badge-open','Opened':'badge-interested','Clicked':'badge-clicked','Replied':'badge-closed','No Reply':'badge-lost','High':'badge-high','Medium':'badge-medium','Low':'badge-low','Bounced':'badge-lost','Unsubscribed':'badge-lost','Failed':'badge-lost'};
   return `<span class="badge ${map[status]||'badge-new'}">${status}</span>`;
 }
 
@@ -4665,7 +4717,7 @@ function renderCenterCol() {
 function renderRightCol(c) {
   const co = companies.find(co => (co.name || '').toLowerCase() === (c.company || '').toLowerCase() && c.company);
   // Same match rule as renderProfileDeals()/renderProfileTasks() bodies, so the header count always agrees with what's listed below it.
-  const cDeals = deals.filter(d => d.contactId === c.id || (c.company && (d.company || '').toLowerCase() === c.company.toLowerCase()));
+  const cDeals = deals.filter(d => dealMatchesContact(d, c));
   const cTasks = tasks.filter(t => t.contactId === c.id || (c.name && (t.contact || '').toLowerCase() === c.name.toLowerCase()));
   const cTickets = tickets.filter(t => t.contactId === c.id);
   if (!c.attachments) c.attachments = [];
@@ -4776,7 +4828,7 @@ function getProfileActivityFeed(c) {
 }
 
 function renderProfileDashboard(c) {
-  const cDeals = deals.filter(d => d.contactId === c.id || (c.company && (d.company || '').toLowerCase() === c.company.toLowerCase()));
+  const cDeals = deals.filter(d => dealMatchesContact(d, c));
   const openDeals = cDeals.filter(d => d.stage !== 'Won' && d.stage !== 'Lost');
   const wonDeals = cDeals.filter(d => d.stage === 'Won');
   const dealValue = openDeals.reduce((s, d) => s + (Number(d.value) || 0), 0);
@@ -4919,7 +4971,7 @@ async function linkExistingCompany(contactId, companyId) {
 }
 
 function renderProfileDeals(c) {
-  const list = deals.filter(d => d.contactId === c.id || (c.company && (d.company || '').toLowerCase() === c.company.toLowerCase()));
+  const list = deals.filter(d => dealMatchesContact(d, c));
   const linkable = deals.filter(d => !list.some(x => x.id === d.id));
   const linkPicker = linkable.length
     ? `<div style="margin-bottom:10px;display:flex;gap:6px">
@@ -5056,7 +5108,7 @@ function openTicketForm(contactId, companyId) {
   document.getElementById('tk-priority').value = 'Medium';
   document.getElementById('tk-description').value = '';
   // Related-deal picker: this contact/company's deals first, then everything else
-  const relatedDeals = deals.filter(d => (c && d.contactId === c.id) || (co && (d.company || '').toLowerCase() === (co.name || '').toLowerCase()));
+  const relatedDeals = deals.filter(d => (c && dealMatchesContact(d, c)) || (co && dealMatchesCompany(d, co)));
   const otherDeals = deals.filter(d => !relatedDeals.some(x => x.id === d.id));
   const dealSelect = document.getElementById('tk-deal-id');
   dealSelect.innerHTML = '<option value="">None</option>'
@@ -5883,7 +5935,7 @@ function renderCoProfileActivitiesTab(co) {
 }
 
 function renderCoProfileDashboard(co) {
-  const cDeals = deals.filter(d => (d.company || '').toLowerCase() === (co.name || '').toLowerCase());
+  const cDeals = deals.filter(d => dealMatchesCompany(d, co));
   const openDeals = cDeals.filter(d => d.stage !== 'Won' && d.stage !== 'Lost');
   const wonDeals = cDeals.filter(d => d.stage === 'Won');
   const pipelineValue = openDeals.reduce((s, d) => s + (parseFloat(d.value) || 0), 0);
@@ -5927,7 +5979,7 @@ function renderCoProfileDashboard(co) {
 
 function renderCoRightCol(co) {
   const coContacts = contacts.filter(c => (c.company || '').toLowerCase() === (co.name || '').toLowerCase());
-  const cDeals = deals.filter(d => (d.company || '').toLowerCase() === (co.name || '').toLowerCase());
+  const cDeals = deals.filter(d => dealMatchesCompany(d, co));
   const linkableDeals = deals.filter(d => !cDeals.some(x => x.id === d.id));
   const coContactIds = new Set(coContacts.map(c => c.id));
   const cTickets = tickets.filter(t => t.companyId === co.id || coContactIds.has(t.contactId));
@@ -5999,10 +6051,11 @@ async function linkExistingDealToCompany(companyId, dealId) {
   const d = deals.find(d => String(d.id) === String(dealId));
   if (!co || !d) return;
   d.company = co.name;
+  d.companyId = co.id;
   renderCompanyProfileBody();
   renderDeals();
   try {
-    const { error } = await supabaseClient.from('deals').update({ company: d.company }).eq('id', d.id);
+    const { error } = await supabaseClient.from('deals').update({ company: d.company, companyid: d.companyId }).eq('id', d.id);
     if (error) console.error('Could not link deal to company:', error);
   } catch (err) {
     console.error(err);
@@ -6329,11 +6382,28 @@ function populateContactStageOptions(selectedStage) {
   if (current && stageList.includes(current)) stageSel.value = current;
 }
 
+// Real-association-first matching: prefer the ID link (companyId/contactId) when it exists,
+// and only fall back to the old text-name guess for deals saved before this upgrade.
+function dealMatchesCompany(d, co) {
+  if (!co) return false;
+  if (d.companyId != null) return String(d.companyId) === String(co.id);
+  return !!(d.company && (d.company || '').toLowerCase() === (co.name || '').toLowerCase());
+}
+function dealMatchesContact(d, c) {
+  if (!c) return false;
+  if (d.contactId === c.id) return true;
+  if (!c.company) return false;
+  const co = companies.find(co => (co.name || '').toLowerCase() === c.company.toLowerCase());
+  if (co) return dealMatchesCompany(d, co);
+  return (d.company || '').toLowerCase() === c.company.toLowerCase();
+}
+
 function mapDealFromDb(row) {
   return {
     id: row.id,
     name: row.name || '',
     company: row.company || '',
+    companyId: row.companyid || null,
     value: row.value || '',
     category: row.category || '',
     owner: row.owner || '',
@@ -6352,6 +6422,7 @@ function mapDealToDb(data, userId) {
   return {
     name: data.name || null,
     company: data.company || null,
+    companyid: data.companyId || null,
     value: data.value || null,
     category: data.category || null,
     owner: data.owner || null,
@@ -6387,14 +6458,40 @@ async function loadDealsFromSupabase() {
   }
 }
 
+async function rebuildDealCompanyLinks() {
+  const msg = document.getElementById('relinkDealsMsg');
+  const session = window.__currentSession;
+  if (!session) { if (msg) msg.textContent = 'Session expired. Please log in again.'; return; }
+  const candidates = deals.filter(d => d.companyId == null && d.company);
+  let linked = 0, skipped = 0;
+  for (const d of candidates) {
+    const co = companies.find(co => (co.name || '').toLowerCase() === (d.company || '').toLowerCase());
+    if (!co) { skipped++; continue; }
+    d.companyId = co.id;
+    try {
+      const { error } = await supabaseClient.from('deals').update({ companyid: co.id }).eq('id', d.id);
+      if (error) { console.error('Could not link deal ' + d.id + ':', error); continue; }
+      linked++;
+    } catch (err) { console.error(err); }
+  }
+  if (msg) msg.textContent = `✅ Done — ${linked} deal(s) linked to their Company record, ${skipped} had no matching Company name.`;
+  renderDeals();
+  showToast(`🔗 ${linked} deal(s) re-linked to companies`);
+}
+
 async function saveDeal() {
   const name = document.getElementById('d-name').value.trim();
   if (!name) { alert('Deal name required!'); return; }
   const editId = document.getElementById('d-edit-id').value;
   const newStage = document.getElementById('d-stage').value || 'New Lead';
+  const companyText = document.getElementById('d-company').value.trim();
+  // Real association: if the typed company name matches an existing Company record,
+  // link this deal to it by ID (not just by text) so renames/typos don't silently break the link.
+  const matchedCompany = companyText ? companies.find(co => (co.name || '').toLowerCase() === companyText.toLowerCase()) : null;
   const data = {
     name,
-    company: document.getElementById('d-company').value.trim(),
+    company: companyText,
+    companyId: matchedCompany ? matchedCompany.id : null,
     value: document.getElementById('d-value').value,
     category: document.getElementById('d-category').value,
     owner: document.getElementById('d-owner').value.trim(),
@@ -6446,8 +6543,15 @@ async function saveDeal() {
   }
 }
 
+function populateDealCompanyDatalist() {
+  const dl = document.getElementById('d-company-list');
+  if (!dl) return;
+  dl.innerHTML = companies.map(co => `<option value="${escapeHtml(co.name || '')}">`).join('');
+}
+
 function clearDealForm() {
   ['d-name','d-company','d-value','d-owner','d-date','d-notes','d-probability'].forEach(id => document.getElementById(id).value = '');
+  populateDealCompanyDatalist();
   // Pre-select whichever pipeline/category the user is currently viewing, so a
   // newly created deal lands in the same filtered view instead of disappearing
   // into "Unassigned" (which is what made it look like it had no edit/delete option).
@@ -6464,6 +6568,7 @@ function clearDealForm() {
 function editDeal(id) {
   const d = deals.find(d => d.id == id);
   if (!d) return;
+  populateDealCompanyDatalist();
   document.getElementById('d-name').value = d.name || '';
   document.getElementById('d-company').value = d.company || '';
   document.getElementById('d-value').value = d.value || '';
@@ -11242,7 +11347,9 @@ async function refreshCampaignTracking() {
     if (data.success) {
       campaignLogs = data.data.map(row => {
         const contact = contacts.find(c => (c.email || '').toLowerCase() === (row.to || '').toLowerCase());
-        const status = repliedTrackIds.has(row.trackId) ? 'Replied' : (row.status === 'Opened' ? 'Opened' : 'Sent');
+        const status = repliedTrackIds.has(row.trackId) ? 'Replied'
+          : (row.clickedAt || row.status === 'Clicked') ? 'Clicked'
+          : (row.status === 'Opened' ? 'Opened' : 'Sent');
         return {
           id: row.trackId,
           trackId: row.trackId,
@@ -11272,6 +11379,13 @@ function markCampaignReplied(trackId) {
   localStorage.setItem('crm_replied_trackids', JSON.stringify([...repliedTrackIds]));
   const log = campaignLogs.find(l => l.trackId === trackId);
   if (log) { log.status = 'Replied'; upsertEmailEventToSupabase(log); }
+  save();
+  renderCampaignTrackingTable();
+}
+
+function markCampaignClicked(trackId) {
+  const log = campaignLogs.find(l => l.trackId === trackId);
+  if (log && log.status !== 'Replied') { log.status = 'Clicked'; upsertEmailEventToSupabase(log); }
   save();
   renderCampaignTrackingTable();
 }
@@ -11321,7 +11435,8 @@ function updateCampaignStats() {
     const d = new Date(l.date);
     return !isNaN(d) && d.toLocaleDateString() === todayStr;
   }).length;
-  const opened = campaignLogs.filter(l => l.status === 'Opened' || l.status === 'Replied').length;
+  const opened = campaignLogs.filter(l => l.status === 'Opened' || l.status === 'Clicked' || l.status === 'Replied').length;
+  const clicked = campaignLogs.filter(l => l.status === 'Clicked' || l.status === 'Replied').length;
   const replied = campaignLogs.filter(l => l.status === 'Replied').length;
   const bounced = campaignLogs.filter(l => l.status === 'Bounced').length;
   const unsubscribed = campaignLogs.filter(l => l.status === 'Unsubscribed').length;
@@ -11329,6 +11444,7 @@ function updateCampaignStats() {
   document.getElementById('statTotalSent').textContent = total;
   document.getElementById('statSentToday').textContent = sentToday;
   document.getElementById('statOpened').textContent = opened;
+  document.getElementById('statClicked').textContent = clicked;
   document.getElementById('statReplied').textContent = replied;
   document.getElementById('statBounced').textContent = bounced;
   document.getElementById('statUnsubscribed').textContent = unsubscribed;
@@ -11387,6 +11503,7 @@ function renderCampaignTrackingTable() {
           <td style="padding:8px">${l.date}</td>
           <td style="padding:8px">
             ${l.status !== 'Replied' ? `<button class="btn btn-outline btn-sm" onclick="markCampaignReplied('${l.trackId}')">Mark Replied</button>` : ''}
+            ${(l.status !== 'Clicked' && l.status !== 'Replied') ? `<button class="btn btn-outline btn-sm" onclick="markCampaignClicked('${l.trackId}')">Mark Clicked</button>` : ''}
             ${l.status !== 'Bounced' ? `<button class="btn btn-outline btn-sm" onclick="markCampaignBounced('${l.trackId}')">Mark Bounced</button>` : ''}
             ${l.status !== 'Unsubscribed' ? `<button class="btn btn-outline btn-sm" onclick="markCampaignUnsubscribed('${l.trackId}')">Mark Unsubscribed</button>` : ''}
             <button class="btn btn-primary btn-sm" onclick="openFollowupModal('${l.trackId}')">🔁 Add Follow-up</button>

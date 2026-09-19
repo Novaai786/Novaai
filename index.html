@@ -4931,12 +4931,12 @@ function renderLeftCol(c) {
     <div style="display:flex;align-items:center;gap:10px">
       <div style="width:48px;height:48px;border-radius:50%;background:${getColor(c.name)};color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;flex-shrink:0">${initials(c.name)}</div>
       <div>
-        <div style="font-weight:700;font-size:15px">${c.name || ''}</div>
-        <div style="font-size:11px;color:var(--text-light)">${c.title || ''}${c.title && c.company ? ' at ' : ''}${c.company || ''}</div>
+        <div style="font-weight:700;font-size:15px">${escapeHtml(c.name || '')}</div>
+        <div style="font-size:11px;color:var(--text-light)">${escapeHtml(c.title || '')}${c.title && c.company ? ' at ' : ''}${escapeHtml(c.company || '')}</div>
       </div>
     </div>
-    <div style="font-size:12px;margin-top:8px;word-break:break-all"><a href="mailto:${c.email||''}">${c.email || '-'}</a></div>
-    ${c.phone ? `<div style="font-size:12px;color:var(--text-light);margin-top:2px">${c.phone}</div>` : ''}
+    <div style="font-size:12px;margin-top:8px;word-break:break-all"><a href="mailto:${escapeHtml(c.email||'')}">${escapeHtml(c.email || '-')}</a></div>
+    ${c.phone ? `<div style="font-size:12px;color:var(--text-light);margin-top:2px">${escapeHtml(c.phone)}</div>` : ''}
 
     <div class="cp-action-row">
       <button class="cp-action-btn" onclick="closeModal('contactProfileModal');openTimeline('contact', ${c.id})"><span>📝</span><span class="cp-action-label">Note</span></button>
@@ -4951,11 +4951,11 @@ function renderLeftCol(c) {
       <div class="cp-keyinfo-title">Key Information</div>
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Contact owner</div><div class="cp-keyinfo-val">${c.owner || window.__currentUserName || 'Unassigned'}</div></div>
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Service Category</div><div class="cp-keyinfo-val">${(categories.find(cat => cat.id == c.category) || {}).name || 'Unassigned'}</div></div>
-      <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Pipeline Stage</div><div class="cp-keyinfo-val">${c.stage || '-'}</div></div>
-      <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Phone Number</div><div class="cp-keyinfo-val">${c.phone || '--'}</div></div>
+      <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Pipeline Stage</div><div class="cp-keyinfo-val">${escapeHtml(c.stage || '-')}</div></div>
+      <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Phone Number</div><div class="cp-keyinfo-val">${escapeHtml(c.phone || '--')}</div></div>
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Country</div><div class="cp-keyinfo-val">${c.country || '--'}</div></div>
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Lifecycle Stage</div><div class="cp-keyinfo-val"><select onchange="setLifecycleStageManually(${c.id}, this.value)" style="font-size:11px;font-weight:600;padding:3px 8px;border-radius:10px;border:none;color:#fff;cursor:pointer;background:${LIFECYCLE_STAGE_COLOR[c.lifecycleStage] || '#94A3B8'}">${LIFECYCLE_STAGES.map(s => `<option value="${s}" ${s === (c.lifecycleStage || 'Lead') ? 'selected' : ''} style="background:#fff;color:#0F172A">${s}</option>`).join('')}</select></div></div>
-      <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Lead Score</div><div class="cp-keyinfo-val">${c.leadScore || '--'}</div></div>
+      <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Lead Score</div><div class="cp-keyinfo-val">${escapeHtml(c.leadScore || '--')}</div></div>
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Last Contacted</div><div class="cp-keyinfo-val">${c.lastContacted || '--'}</div></div>
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Next Follow-up</div><div class="cp-keyinfo-val">${c.nextFollowup || '--'}</div></div>
       <button class="btn btn-outline btn-sm" style="width:100%" onclick="closeModal('contactProfileModal');editContact(${c.id})">✏️ Edit Contact</button>
@@ -5031,13 +5031,13 @@ function renderWidgetCompany(c, co) {
        </div>` : '';
   if (co) {
     return `
-      <div style="font-weight:700;font-size:13px">${co.name}</div>
-      <div style="font-size:12px;color:var(--text-light);margin-top:3px">${co.industry || ''}${co.size ? ' · ' + co.size + ' employees' : ''}</div>
-      <div style="font-size:12px;color:var(--text-light)">${co.website || ''}${co.location ? ' · ' + co.location : ''}</div>
+      <div style="font-weight:700;font-size:13px">${escapeHtml(co.name)}</div>
+      <div style="font-size:12px;color:var(--text-light);margin-top:3px">${escapeHtml(co.industry || '')}${co.size ? ' · ' + co.size + ' employees' : ''}</div>
+      <div style="font-size:12px;color:var(--text-light)">${escapeHtml(co.website || '')}${co.location ? ' · ' + escapeHtml(co.location) : ''}</div>
       <button class="btn btn-outline btn-sm" style="margin-top:8px;width:100%" onclick="closeModal('contactProfileModal');editCompany(${co.id})">✏️ Edit Company</button>
       ${picker}`;
   } else if (c.company) {
-    return `<div style="font-size:12px;color:var(--text-light)">"${c.company}" is not yet added as a Company record.</div>${picker}`;
+    return `<div style="font-size:12px;color:var(--text-light)">"${escapeHtml(c.company)}" is not yet added as a Company record.</div>${picker}`;
   }
   return `<div style="font-size:12px;color:var(--text-light)">No company associated with this record.</div>${picker}`;
 }
@@ -5125,8 +5125,8 @@ function renderProfileDashboard(c) {
         <div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;margin-bottom:8px">Status & Lifecycle</div>
         <div style="font-size:12px;line-height:1.7">
           <div><strong>Status:</strong> ${badge(c.status)}</div>
-          <div><strong>Source:</strong> ${c.source || '-'}</div>
-          <div><strong>ICP Tag:</strong> ${c.icp || '-'}</div>
+          <div><strong>Source:</strong> ${escapeHtml(c.source || '-')}</div>
+          <div><strong>ICP Tag:</strong> ${escapeHtml(c.icp || '-')}</div>
           <div><strong>Priority:</strong> ${c.priority || '-'}</div>
         </div>
       </div>
@@ -5134,7 +5134,7 @@ function renderProfileDashboard(c) {
         <div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;margin-bottom:8px">Upcoming Tasks</div>
         ${openTasks.length ? openTasks.slice(0, 4).map(t => `
           <div style="font-size:12px;display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)">
-            <span>${t.title}</span><span style="color:var(--text-light)">${t.date || '-'}</span>
+            <span>${escapeHtml(t.title)}</span><span style="color:var(--text-light)">${t.date || '-'}</span>
           </div>`).join('') : `<div style="font-size:12px;color:var(--text-light)">No open tasks.</div>`}
       </div>
     </div>
@@ -5167,16 +5167,16 @@ function renderProfileOverview(c) {
   if (co) {
     companyBlock = `
       <div style="border:1.5px solid var(--border);border-radius:10px;padding:12px">
-        <div style="font-weight:700;font-size:14px">${co.name}</div>
-        <div style="font-size:12px;color:var(--text-light);margin-top:4px">${co.industry || ''}${co.size ? ' · ' + co.size + ' employees' : ''}</div>
-        <div style="font-size:12px;color:var(--text-light)">${co.website || ''}${co.location ? ' · ' + co.location : ''}</div>
+        <div style="font-weight:700;font-size:14px">${escapeHtml(co.name)}</div>
+        <div style="font-size:12px;color:var(--text-light);margin-top:4px">${escapeHtml(co.industry || '')}${co.size ? ' · ' + co.size + ' employees' : ''}</div>
+        <div style="font-size:12px;color:var(--text-light)">${escapeHtml(co.website || '')}${co.location ? ' · ' + escapeHtml(co.location) : ''}</div>
         <button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="closeModal('contactProfileModal');editCompany(${co.id})">✏️ Edit Company</button>
       </div>
       ${existingCompanyPicker}`;
   } else if (c.company) {
     companyBlock = `
       <div style="border:1.5px dashed var(--border);border-radius:10px;padding:14px;text-align:center">
-        <div style="font-size:13px;margin-bottom:8px">"${c.company}" is not yet added as a Company.</div>
+        <div style="font-size:13px;margin-bottom:8px">"${escapeHtml(c.company)}" is not yet added as a Company.</div>
         <button class="btn btn-primary btn-sm" onclick="quickAddCompanyFromContact(${c.id})">+ Add as Company</button>
         ${existingCompanyPicker}
       </div>`;
@@ -5195,10 +5195,10 @@ function renderProfileOverview(c) {
     </div>
     <div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px">Details</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px">
-      <div><strong>Status:</strong> ${c.status || '-'}</div>
-      <div><strong>Source:</strong> ${c.source || '-'}</div>
-      <div><strong>ICP Tag:</strong> ${c.icp || '-'}</div>
-      <div><strong>Lead Score:</strong> ${c.leadScore || '-'}</div>
+      <div><strong>Status:</strong> ${escapeHtml(c.status || '-')}</div>
+      <div><strong>Source:</strong> ${escapeHtml(c.source || '-')}</div>
+      <div><strong>ICP Tag:</strong> ${escapeHtml(c.icp || '-')}</div>
+      <div><strong>Lead Score:</strong> ${escapeHtml(c.leadScore || '-')}</div>
       <div><strong>Country:</strong> ${c.country || '-'}</div>
       <div><strong>LinkedIn:</strong> ${c.linkedin ? `<a href="https://${c.linkedin.replace(/^https?:\/\//, '')}" target="_blank" rel="noopener">View</a>` : '-'}</div>
       <div><strong>Decision Maker:</strong> ${c.decisionMaker || '-'}</div>
@@ -5237,7 +5237,7 @@ function renderProfileDeals(c) {
   const linkPicker = linkable.length
     ? `<div style="margin-bottom:10px;display:flex;gap:6px">
          <select id="link-deal-select-${c.id}" class="form-control" style="flex:1">
-           ${linkable.map(d => `<option value="${d.id}">${d.name}</option>`).join('')}
+           ${linkable.map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('')}
          </select>
          <button class="btn btn-outline btn-sm" onclick="linkExistingDeal(${c.id}, document.getElementById('link-deal-select-${c.id}').value)">🔗 Link Existing</button>
        </div>` : '';
@@ -5249,8 +5249,8 @@ function renderProfileDeals(c) {
     ${list.length ? list.map(d => `
       <div style="border:1.5px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
         <div>
-          <div style="font-weight:600;font-size:13px">${d.name}</div>
-          <div style="font-size:11px;color:var(--text-light)">${d.stage} · $${d.value || 0}</div>
+          <div style="font-weight:600;font-size:13px">${escapeHtml(d.name)}</div>
+          <div style="font-size:11px;color:var(--text-light)">${escapeHtml(d.stage)} · $${d.value || 0}</div>
         </div>
         <button class="btn btn-outline btn-sm" onclick="closeModal('contactProfileModal');editDeal('${d.id}')">View / Edit</button>
       </div>`).join('') : `<div style="text-align:center;color:var(--text-light);font-size:13px;padding:20px">No deals yet for this contact.</div>`}`;
@@ -5288,7 +5288,7 @@ function renderProfileTasks(c) {
   const linkPicker = linkable.length
     ? `<div style="margin-bottom:10px;display:flex;gap:6px">
          <select id="link-task-select-${c.id}" class="form-control" style="flex:1">
-           ${linkable.map(t => `<option value="${t.id}">${t.title}</option>`).join('')}
+           ${linkable.map(t => `<option value="${t.id}">${escapeHtml(t.title)}</option>`).join('')}
          </select>
          <button class="btn btn-outline btn-sm" onclick="linkExistingTask(${c.id}, document.getElementById('link-task-select-${c.id}').value)">🔗 Link Existing</button>
        </div>` : '';
@@ -5300,7 +5300,7 @@ function renderProfileTasks(c) {
     ${list.length ? list.map(t => `
       <div style="border:1.5px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
         <div>
-          <div style="font-weight:600;font-size:13px;${t.done ? 'text-decoration:line-through;color:var(--text-light)' : ''}">${t.title}</div>
+          <div style="font-weight:600;font-size:13px;${t.done ? 'text-decoration:line-through;color:var(--text-light)' : ''}">${escapeHtml(t.title)}</div>
           <div style="font-size:11px;color:var(--text-light)">${t.date || 'No date'} · ${t.priority || ''}${t.done ? ' · Done' : ''}</div>
         </div>
         <button class="btn btn-outline btn-sm" onclick="toggleTask(${t.id});renderContactProfileBody()">${t.done ? '↺ Undo' : '✓ Done'}</button>
@@ -5345,12 +5345,12 @@ function renderProfileTickets(c) {
       <div style="border:1.5px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
           <div>
-            <div style="font-weight:600;font-size:13px">${t.subject}</div>
+            <div style="font-weight:600;font-size:13px">${escapeHtml(t.subject)}</div>
             <div style="font-size:11px;color:var(--text-light);margin-top:2px">${t.date || ''} · Priority: ${t.priority || '-'}</div>
-            ${t.description ? `<div style="font-size:12px;margin-top:6px">${t.description}</div>` : ''}
+            ${t.description ? `<div style="font-size:12px;margin-top:6px">${escapeHtml(t.description)}</div>` : ''}
           </div>
           <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
-            <span class="badge" style="background:${sc[0]};color:${sc[1]}">${t.status}</span>
+            <span class="badge" style="background:${sc[0]};color:${sc[1]}">${escapeHtml(t.status)}</span>
             <button class="btn btn-outline btn-sm" onclick="deleteTicket(${t.id})">Delete</button>
           </div>
         </div>
@@ -7048,7 +7048,7 @@ async function deleteCategory(id) {
 }
 
 function populateCategoryDropdowns() {
-  const opts = '<option value="">Unassigned</option>' + categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  const opts = '<option value="">Unassigned</option>' + categories.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
   const contactSel = document.getElementById('c-category');
   if (contactSel) { const v = contactSel.value; contactSel.innerHTML = opts; contactSel.value = v; populateContactStageOptions(); }
   const companySel = document.getElementById('co-category');
@@ -7056,13 +7056,13 @@ function populateCategoryDropdowns() {
   const dealSel = document.getElementById('d-category');
   if (dealSel) {
     const v = dealSel.value;
-    dealSel.innerHTML = '<option value="">Unassigned (Default Pipeline)</option>' + categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    dealSel.innerHTML = '<option value="">Unassigned (Default Pipeline)</option>' + categories.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
     dealSel.value = v;
   }
   const kanbanFilter = document.getElementById('dealFilterCategory');
   if (kanbanFilter) {
     const v = kanbanFilter.value;
-    kanbanFilter.innerHTML = '<option value="">Default Pipeline (All)</option>' + categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    kanbanFilter.innerHTML = '<option value="">Default Pipeline (All)</option>' + categories.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
     kanbanFilter.value = v;
   }
   const contactPipelineFilter = document.getElementById('filterPipeline');
@@ -7215,14 +7215,14 @@ function viewDealDetails(id) {
   const stuckBadge = stuck === 'critical' ? '<span class="badge badge-critical">Critical</span>' : stuck === 'warning' ? '<span class="badge badge-stuck">Stuck</span>' : '';
   document.getElementById('dealDetailsBody').innerHTML = `
     <div style="margin-bottom:12px">
-      <div style="font-size:16px;font-weight:700">${d.name} ${stuckBadge}</div>
-      <div style="font-size:12px;color:var(--text-light)">${d.company||''}</div>
+      <div style="font-size:16px;font-weight:700">${escapeHtml(d.name)} ${stuckBadge}</div>
+      <div style="font-size:12px;color:var(--text-light)">${escapeHtml(d.company||'')}</div>
     </div>
     <div class="deal-detail-row"><span>Current Stage</span>${stageBadge(d.stage)}</div>
     <div class="deal-detail-row"><span>Deal Value</span><strong>${d.value ? '$'+parseInt(d.value).toLocaleString() : '-'}</strong></div>
     <div class="deal-detail-row"><span>Close Probability</span><strong>${getCloseProbability(d)}%</strong></div>
     <div class="deal-detail-row"><span>Expected Revenue</span><strong>$${getExpectedRevenue(d).toLocaleString()}</strong></div>
-    ${d.stage === 'Lost' ? `<div class="deal-detail-row"><span>Lost Reason</span><strong>${d.lostReason||'-'}</strong></div>` : ''}
+    ${d.stage === 'Lost' ? `<div class="deal-detail-row"><span>Lost Reason</span><strong>${escapeHtml(d.lostReason||'-')}</strong></div>` : ''}
     <div class="deal-detail-row"><span>Owner</span><strong>${d.owner||'-'}</strong></div>
     <div class="deal-detail-row"><span>Total Time in Pipeline</span><strong>${getDealLifespanDays(d)} days</strong></div>
 
@@ -9282,7 +9282,7 @@ async function runRevenueAdvisor() {
   const stageSummary = Object.entries(stageBreakdown).map(([stage, count]) => `${stage}: ${count}`).join(', ');
   const overdueTaskCount = tasks.filter(t => !t.done && getTaskStatus(t) === 'overdue').length;
   const topDeals = openDeals.slice().sort((a, b) => (parseFloat(b.value) || 0) - (parseFloat(a.value) || 0)).slice(0, 8)
-    .map(d => `${d.name} ($${d.value || 0}, stage: ${d.stage}${d.company ? ', ' + d.company : ''})`).join('; ');
+    .map(d => `${escapeHtml(d.name)} ($${d.value || 0}, stage: ${escapeHtml(d.stage)}${d.company ? ', ' + d.company : ''})`).join('; ');
 
   const prompt = `You are a sales advisor reviewing a CRM pipeline. Won revenue so far: $${wonValue}. Open pipeline value: $${openValue} across ${openDeals.length} deals. Stage breakdown: ${stageSummary || 'none'}. Overdue tasks: ${overdueTaskCount}. Top open deals by value: ${topDeals || 'none'}. Based on this, give a prioritized list of the 5 most impactful things to work on THIS WEEK to grow revenue — be specific about which deals or actions, not generic advice. Format as a numbered list.`;
 
@@ -10599,18 +10599,18 @@ function buildDailySummaryText() {
   lines.push(`NovaAICRM — Daily Summary (${new Date().toLocaleDateString()})`);
   lines.push('');
   lines.push(`🔴 Overdue (${overdue.length})`);
-  overdue.forEach(t => lines.push(`  - ${t.title}${t.contact ? ' (' + t.contact + ')' : ''} — was due ${t.date}`));
+  overdue.forEach(t => lines.push(`  - ${escapeHtml(t.title)}${t.contact ? ' (' + t.contact + ')' : ''} — was due ${t.date}`));
   lines.push('');
   lines.push(`🟡 Due Today (${today.length})`);
-  today.forEach(t => lines.push(`  - ${t.title}${t.contact ? ' (' + t.contact + ')' : ''}`));
+  today.forEach(t => lines.push(`  - ${escapeHtml(t.title)}${t.contact ? ' (' + t.contact + ')' : ''}`));
   lines.push('');
   lines.push(`📅 Upcoming (next ${upcoming.length})`);
-  upcoming.forEach(t => lines.push(`  - ${t.title}${t.contact ? ' (' + t.contact + ')' : ''} — due ${t.date}`));
+  upcoming.forEach(t => lines.push(`  - ${escapeHtml(t.title)}${t.contact ? ' (' + t.contact + ')' : ''} — due ${t.date}`));
   lines.push('');
   const hotDeals = deals.filter(d => d.stage !== 'Won' && d.stage !== 'Lost' && getStuckStatus(d));
   if (hotDeals.length) {
     lines.push(`⚠️ Stuck Deals (${hotDeals.length})`);
-    hotDeals.forEach(d => lines.push(`  - ${d.name}${d.company ? ' (' + d.company + ')' : ''}`));
+    hotDeals.forEach(d => lines.push(`  - ${escapeHtml(d.name)}${d.company ? ' (' + d.company + ')' : ''}`));
   }
   return lines.join('\n');
 }
@@ -10894,9 +10894,9 @@ function renderCampaignContacts() {
       <input type="checkbox" class="campaign-contact-cb" data-id="${c.id}" onchange="onCampaignContactToggle(${c.id}, this.checked)" ${campaignSelectedIds.has(c.id) ? 'checked' : ''}>
       <span style="flex:1">
         <strong>${c.fname || (c.name||'').split(' ')[0] || c.name || ''} ${c.lname || ''}</strong>
-        <span style="color:var(--text-light)"> — ${c.company || 'No company'} (${c.email})</span>
+        <span style="color:var(--text-light)"> — ${escapeHtml(c.company || 'No company')} (${escapeHtml(c.email)})</span>
       </span>
-      ${c.leadScore ? `<span style="font-size:11px;color:var(--text-light)">${c.leadScore}</span>` : ''}
+      ${c.leadScore ? `<span style="font-size:11px;color:var(--text-light)">${escapeHtml(c.leadScore)}</span>` : ''}
     </label>`).join('');
   updateCampaignSelectedCount();
 }
@@ -11390,7 +11390,7 @@ function renderSeqContactList() {
   box.innerHTML = list.map(c => `
     <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:13px">
       <input type="checkbox" class="seq-contact-cb" data-id="${c.id}" onchange="onSeqContactToggle(${c.id}, this.checked)" ${seqSelectedIds.has(c.id) ? 'checked' : ''}>
-      <span style="flex:1"><strong>${c.name || ''}</strong> <span style="color:var(--text-light)"> — ${c.company || 'No company'} (${c.email})${c.leadScore ? ' · ' + c.leadScore : ''}${c.country ? ' · ' + c.country : ''}</span></span>
+      <span style="flex:1"><strong>${escapeHtml(c.name || '')}</strong> <span style="color:var(--text-light)"> — ${escapeHtml(c.company || 'No company')} (${escapeHtml(c.email)})${c.leadScore ? ' · ' + escapeHtml(c.leadScore) : ''}${c.country ? ' · ' + escapeHtml(c.country) : ''}</span></span>
     </label>`).join('');
 }
 
@@ -11830,10 +11830,10 @@ function renderCampaignTrackingTable() {
       <tbody>
       ${sorted.map(l => `
         <tr style="border-bottom:1px solid #f1f5f9">
-          <td style="padding:8px">${l.name||'-'}</td>
-          <td style="padding:8px">${l.email}</td>
-          <td style="padding:8px">${l.company||'-'}</td>
-          <td style="padding:8px">${l.subject}</td>
+          <td style="padding:8px">${escapeHtml(l.name||'-')}</td>
+          <td style="padding:8px">${escapeHtml(l.email)}</td>
+          <td style="padding:8px">${escapeHtml(l.company||'-')}</td>
+          <td style="padding:8px">${escapeHtml(l.subject)}</td>
           <td style="padding:8px">${badge(l.status)}</td>
           <td style="padding:8px">${l.date}</td>
           <td style="padding:8px">
@@ -11928,7 +11928,7 @@ function renderDashboard() {
   const tbody = document.getElementById('dash-contacts-table');
   const recent = contacts.slice(-5).reverse();
   if (!recent.length) { tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-light);padding:16px">No contacts yet</td></tr>'; }
-  else tbody.innerHTML = recent.map(c => `<tr><td><div style="font-weight:600;font-size:13px">${c.name}</div></td><td style="font-size:12px">${c.company||'-'}</td><td>${badge(c.status)}</td></tr>`).join('');
+  else tbody.innerHTML = recent.map(c => `<tr><td><div style="font-weight:600;font-size:13px">${escapeHtml(c.name)}</div></td><td style="font-size:12px">${escapeHtml(c.company||'-')}</td><td>${badge(c.status)}</td></tr>`).join('');
 
   const tl = document.getElementById('dash-tasks-list');
   const pending = tasks.filter(t=>!t.done).slice(0,5);
@@ -11937,7 +11937,7 @@ function renderDashboard() {
     <div class="task-item">
       <div class="task-check" onclick="toggleTask(${t.id})"></div>
       <div class="task-info">
-        <div class="task-title" style="font-size:12px">${t.title}</div>
+        <div class="task-title" style="font-size:12px">${escapeHtml(t.title)}</div>
         <div class="task-meta">${t.date||''} ${badge(t.priority)}</div>
       </div>
     </div>`).join('');
@@ -12116,10 +12116,10 @@ function renderProducts() {
   }
   grid.innerHTML = list.map(p => `
     <div class="product-card">
-      <span class="product-card-cat">${p.category}</span>
-      <div class="product-card-name">${p.name}</div>
+      <span class="product-card-cat">${escapeHtml(p.category)}</span>
+      <div class="product-card-name">${escapeHtml(p.name)}</div>
       <div class="product-card-price">${p.price ? '$' + parseFloat(p.price).toLocaleString() : '—'}</div>
-      <div class="product-card-desc">${p.description || 'No description.'}</div>
+      <div class="product-card-desc">${escapeHtml(p.description || 'No description.')}</div>
       <div class="product-card-actions">
         <button class="btn btn-outline btn-sm" onclick="editProduct(${p.id})">✏️ Edit</button>
         <button class="btn btn-danger btn-sm" onclick="deleteProduct(${p.id})">Delete</button>
@@ -12737,8 +12737,8 @@ function updateBctTimeDisplay() {
   const lines = [];
   if (contact) {
     lines.push(leadTz
-      ? `📍 <strong>${contact.name}</strong>'s local time now (${contact.country}): ${formatTimeInTimezone(leadTz)}`
-      : `📍 <strong>${contact.name}</strong>: no country on file (or country not recognized) — can't show their local time.`);
+      ? `📍 <strong>${escapeHtml(contact.name)}</strong>'s local time now (${escapeHtml(contact.country)}): ${formatTimeInTimezone(leadTz)}`
+      : `📍 <strong>${escapeHtml(contact.name)}</strong>: no country on file (or country not recognized) — can't show their local time.`);
   }
   lines.push(myTz
     ? `🏠 Your local time now (${myCountry}): ${formatTimeInTimezone(myTz)}`
@@ -12787,7 +12787,7 @@ function populateAIContactSelectors() {
       listEl.innerHTML = scoped.map(c => `
         <label style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:13px;cursor:pointer">
           <input type="checkbox" class="scoring-lead-checkbox" value="${c.id}">
-          <span>${c.name}${c.company ? ' — ' + c.company : ''}</span>
+          <span>${escapeHtml(c.name)}${c.company ? ' — ' + escapeHtml(c.company) : ''}</span>
         </label>
       `).join('');
     }
@@ -12802,13 +12802,13 @@ function populateAIContactSelectors() {
     if (!scoped.length) {
       selectEl.innerHTML = '<option value="">No contacts in this list yet</option>';
     } else {
-      selectEl.innerHTML = scoped.map(c => `<option value="${c.id}">${c.name}${c.company ? ' — ' + c.company : ''}</option>`).join('');
+      selectEl.innerHTML = scoped.map(c => `<option value="${c.id}">${escapeHtml(c.name)}${c.company ? ' — ' + escapeHtml(c.company) : ''}</option>`).join('');
     }
   }
 
   // Product/Service selectors (Email Writer + Follow-up)
   const productOptionsHtml = '<option value="">Let AI choose generically</option>' +
-    products.map(p => `<option value="${p.id}">${p.name}${p.category ? ' (' + p.category + ')' : ''}</option>`).join('');
+    products.map(p => `<option value="${p.id}">${escapeHtml(p.name)}${p.category ? ' (' + escapeHtml(p.category) + ')' : ''}</option>`).join('');
   const emailProductEl = document.getElementById('email-writer-product');
   if (emailProductEl) emailProductEl.innerHTML = productOptionsHtml;
   const followupProductEl = document.getElementById('followup-product');
@@ -12821,7 +12821,7 @@ function populateAIContactSelectors() {
     if (!scoped.length) {
       enrichSelectEl.innerHTML = '<option value="">No contacts in this list yet</option>';
     } else {
-      enrichSelectEl.innerHTML = scoped.map(c => `<option value="${c.id}">${c.name}${c.company ? ' — ' + c.company : ''}</option>`).join('');
+      enrichSelectEl.innerHTML = scoped.map(c => `<option value="${c.id}">${escapeHtml(c.name)}${c.company ? ' — ' + escapeHtml(c.company) : ''}</option>`).join('');
     }
     onEnrichContactChange();
   }
@@ -12836,7 +12836,7 @@ function populateAIContactSelectors() {
       followupListEl.innerHTML = scoped.map(c => `
         <label style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:13px;cursor:pointer">
           <input type="checkbox" class="followup-lead-checkbox" value="${c.id}">
-          <span>${c.name}${c.company ? ' — ' + c.company : ''}</span>
+          <span>${escapeHtml(c.name)}${c.company ? ' — ' + escapeHtml(c.company) : ''}</span>
         </label>
       `).join('');
     }
@@ -13021,7 +13021,7 @@ async function runAI(type) {
 
     if (visitWebsites && hasAnyWebsite) {
       body.innerHTML = `<div style="color:var(--text-light)">🌐 AI visiting company websites and analysing ${selected.length} selected lead(s)… this can take a bit longer.</div>`;
-      const productsSummary = products.length ? products.map(p => `${p.name}${p.category ? ' (' + p.category + ')' : ''}`).join(', ') : '';
+      const productsSummary = products.length ? products.map(p => `${escapeHtml(p.name)}${p.category ? ' (' + p.category + ')' : ''}`).join(', ') : '';
       const leadsPayload = selected.map(c => ({ name: c.name, company: c.company || '', status: c.status, website: c.website || '', ourProducts: productsSummary }));
       try {
         const raw = await callAI('', 'lead-scoring-deep', leadsPayload);
@@ -13044,7 +13044,7 @@ async function runAI(type) {
 
     body.innerHTML = `<div style="color:var(--text-light)">🤖 AI analysing ${selected.length} selected lead(s)…</div>`;
     const scoringProductsContext = products.length
-      ? `\n\nThe business selling to these leads offers these products/services:\n${products.map(p => `- ${p.name}${p.category ? ' (' + p.category + ')' : ''}${p.description ? ': ' + p.description : ''}`).join('\n')}\nScore each lead partly on how good a fit they look for THESE specific offerings, not just generic buying intent.`
+      ? `\n\nThe business selling to these leads offers these products/services:\n${products.map(p => `- ${escapeHtml(p.name)}${p.category ? ' (' + p.category + ')' : ''}${p.description ? ': ' + p.description : ''}`).join('\n')}\nScore each lead partly on how good a fit they look for THESE specific offerings, not just generic buying intent.`
       : '';
     const prompt = `You are a sales AI scoring leads for a CRM. For each contact below, give a score from 0-100 (based on status, company presence, and likely buying intent) and a one-line reason. Respond ONLY as JSON array like [{"name":"...","score":85,"reason":"..."}], nothing else.\n\nContacts:\n${selected.map(c => `- ${c.name}, company: ${c.company || 'unknown'}, status: ${c.status}`).join('\n')}${scoringProductsContext}`;
 
@@ -13290,7 +13290,7 @@ async function runAI(type) {
     const lostDeals = deals.filter(d => d.stage === 'Lost');
     if (!lostDeals.length) { body.innerHTML = '<div style="color:var(--text-light)">No lost deals found yet — nothing to analyze.</div>'; return; }
     body.innerHTML = '<div style="color:var(--text-light)">🤖 AI analyzing lost deals…</div>';
-    const lostSummary = lostDeals.map(d => `${d.name}: $${d.value || 0}, lost at last stage before Lost, company ${d.company || 'unknown'}`).join('; ');
+    const lostSummary = lostDeals.map(d => `${escapeHtml(d.name)}: $${d.value || 0}, lost at last stage before Lost, company ${escapeHtml(d.company || 'unknown')}`).join('; ');
     const prompt = `Analyze these lost deals from a CRM and identify patterns — common company types, deal sizes, or characteristics that tend to lose. Give 3-5 concrete, actionable recommendations to reduce future losses. Lost deals: ${lostSummary}`;
     try {
       const raw = await callAI(prompt, 'lost-deal-analysis');
@@ -13364,7 +13364,7 @@ async function runAI(type) {
             const probMap = {'New Lead':15,'Prospecting':25,'Contacted':35,'Follow-up 1':40,'Follow-up 2':45,'Meeting Booked':60,'Proposal Sent':70,'Negotiation':82};
             const prob = probMap[d.stage] ?? 25;
             return `<div style="margin-bottom:8px;padding:10px;background:var(--bg);border-radius:8px">
-              <strong>${d.name}</strong>${d.value ? ' — $' + parseInt(d.value).toLocaleString() : ''}<br>
+              <strong>${escapeHtml(d.name)}</strong>${d.value ? ' — $' + parseInt(d.value).toLocaleString() : ''}<br>
               <span style="color:var(--text-light);font-size:12px">Win probability: </span>
               <strong style="color:${prob>60?'var(--success)':prob>40?'var(--warning)':'var(--danger)'}">${prob}%</strong>
               <span style="margin-left:8px">${stageBadge(d.stage)}</span>
@@ -13656,7 +13656,7 @@ function renderReports() {
     dealsWithValue.map(d => {
       const val = parseFloat(d.value) || 0;
       const pct = Math.round((val / maxVal) * 100);
-      return `<div class="bar-row"><div class="bar-label" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${d.name}">${d.name.length > 10 ? d.name.substring(0,10)+'…' : d.name}</div><div class="bar-track"><div class="bar-fill green" style="width:${pct}%"></div></div><div class="bar-val" style="font-size:11px">$${val>=1000?(val/1000).toFixed(1)+'k':val}</div></div>`;
+      return `<div class="bar-row"><div class="bar-label" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(d.name)}">${d.name.length > 10 ? d.name.substring(0,10)+'…' : d.name}</div><div class="bar-track"><div class="bar-fill green" style="width:${pct}%"></div></div><div class="bar-val" style="font-size:11px">$${val>=1000?(val/1000).toFixed(1)+'k':val}</div></div>`;
     }).join('') : '<div style="color:var(--text-light);font-size:13px;padding:10px 0">No deals with value. Add deal values to see revenue chart.</div>';
 
   // Funnel chart

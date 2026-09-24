@@ -4457,6 +4457,12 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+function extractSourceLink(notes) {
+  if (!notes) return '';
+  const m = String(notes).match(/Source link:\s*(\S+)/i);
+  return m ? m[1] : '';
+}
+
 function toggleApiKeyVisibility() {
   const input = document.getElementById('ai-api-key');
   const btn = document.getElementById('ai-api-key-toggle');
@@ -4840,7 +4846,7 @@ function renderContacts() {
       <td class="col-leadScore" style="font-size:12px">${escapeHtml(c.leadScore||'-')}</td>
       <td class="col-website" style="font-size:12px">${c.website ? `<a href="https://${escapeHtml(c.website.replace(/^https?:\/\//,''))}" target="_blank" rel="noopener">${escapeHtml(c.website)}</a>` : '-'}</td>
       <td class="col-linkedin" style="font-size:12px">${c.linkedin ? `<a href="https://${escapeHtml(c.linkedin.replace(/^https?:\/\//,''))}" target="_blank" rel="noopener">View</a>` : '-'}</td>
-      <td class="col-painPoint" style="font-size:12px">${escapeHtml(c.painPoint||'-')}</td>
+      <td class="col-painPoint" style="font-size:12px">${escapeHtml(c.painPoint||'-')}${(() => { const sl = extractSourceLink(c.notes); return sl ? ` <a href="${escapeHtml(sl)}" target="_blank" rel="noopener" style="white-space:nowrap">🔗 Open post</a>` : ''; })()}</td>
       <td class="col-lastContacted" style="font-size:12px">${escapeHtml(c.lastContacted||'-')}</td>
       <td class="col-nextFollowup" style="font-size:12px;${followupOverdue?'color:#dc2626;font-weight:700':''}">${escapeHtml(c.nextFollowup||'-')}${followupOverdue?' ⚠️':''}</td>
       <td class="col-decisionMaker" style="font-size:12px">${escapeHtml(c.decisionMaker||'-')}</td>
@@ -4956,6 +4962,7 @@ function renderLeftCol(c) {
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Country</div><div class="cp-keyinfo-val">${c.country || '--'}</div></div>
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Lifecycle Stage</div><div class="cp-keyinfo-val"><select onchange="setLifecycleStageManually(${c.id}, this.value)" style="font-size:11px;font-weight:600;padding:3px 8px;border-radius:10px;border:none;color:#fff;cursor:pointer;background:${LIFECYCLE_STAGE_COLOR[c.lifecycleStage] || '#94A3B8'}">${LIFECYCLE_STAGES.map(s => `<option value="${s}" ${s === (c.lifecycleStage || 'Lead') ? 'selected' : ''} style="background:#fff;color:#0F172A">${s}</option>`).join('')}</select></div></div>
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Lead Score</div><div class="cp-keyinfo-val">${escapeHtml(c.leadScore || '--')}</div></div>
+      ${extractSourceLink(c.notes) ? `<div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Source Post</div><div class="cp-keyinfo-val"><a href="${escapeHtml(extractSourceLink(c.notes))}" target="_blank" rel="noopener">🔗 Open post</a></div></div>` : ''}
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Last Contacted</div><div class="cp-keyinfo-val">${c.lastContacted || '--'}</div></div>
       <div class="cp-keyinfo-row"><div class="cp-keyinfo-label">Next Follow-up</div><div class="cp-keyinfo-val">${c.nextFollowup || '--'}</div></div>
       <button class="btn btn-outline btn-sm" style="width:100%" onclick="closeModal('contactProfileModal');editContact(${c.id})">✏️ Edit Contact</button>

@@ -847,7 +847,7 @@
     <div class="search-bar" style="position:relative">
       <span class="search-icon">🔍</span>
       <form autocomplete="off" onsubmit="return false;" style="display:contents">
-      <input type="text" placeholder="Search contacts, companies, deals, tickets..." id="globalSearch" oninput="globalSearch()" onblur="setTimeout(()=>{const d=document.getElementById('globalSearchResults'); if(d) d.style.display='none';},150)" autocomplete="off" name="crm-global-search-nofill">
+      <input type="text" placeholder="Search contacts, companies, deals, tickets..." id="globalSearch" oninput="globalSearch()" onblur="setTimeout(()=>{const d=document.getElementById('globalSearchResults'); if(d) d.style.display='none';},150)" autocomplete="off" name="crm-global-search-nofill" readonly onfocus="this.removeAttribute('readonly'); if(this.value) globalSearch();">
       </form>
       <div id="globalSearchResults" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);max-height:420px;overflow-y:auto;z-index:200;margin-top:4px"></div>
     </div>
@@ -5808,6 +5808,7 @@ function renderProfileAttachments(c) {
       <div style="border:1.5px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
         <div style="font-size:13px;font-weight:600">📄 ${a.name}</div>
         <div style="display:flex;gap:6px">
+          <button class="btn btn-outline btn-sm" onclick="openAttachment(${c.id},${a.id})">Open</button>
           <a class="btn btn-outline btn-sm" href="${a.data}" download="${a.name}">Download</a>
           <button class="btn btn-outline btn-sm" onclick="deleteAttachment(${c.id},${a.id})">Delete</button>
         </div>
@@ -5829,6 +5830,17 @@ function addAttachment(contactId, event) {
   };
   reader.readAsDataURL(file);
   event.target.value = '';
+}
+
+function openAttachment(contactId, attId) {
+  const c = contacts.find(c => c.id === contactId);
+  const a = c && (c.attachments || []).find(a => a.id === attId);
+  if (!a) return;
+  const win = window.open();
+  if (!win) { alert('Please allow pop-ups to open this file.'); return; }
+  // PDFs/images render inline; other file types (docx, xlsx, etc.) the browser will offer to download instead — that's expected since there's no server to preview them.
+  win.document.write(`<iframe src="${a.data}" style="border:none;width:100%;height:100vh"></iframe>`);
+  win.document.title = a.name;
 }
 
 function deleteAttachment(contactId, attId) {

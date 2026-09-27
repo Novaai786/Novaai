@@ -4572,6 +4572,7 @@ async function loadContactsFromSupabase() {
       .order('created_at', { ascending: false });
     if (error) { console.error('Could not load leads:', error); showErrorBanner('Could not load your contacts.', loadContactsFromSupabase); return; }
     contacts = (data || []).map(mapLeadFromDb);
+    restoreLocalAttachments(contacts);
     renderContacts();
     renderDashboard();
     updateBadges();
@@ -4579,6 +4580,17 @@ async function loadContactsFromSupabase() {
     console.error(err);
     showErrorBanner('Could not load your contacts — check your connection.', loadContactsFromSupabase);
   }
+}
+
+// Attachments are stored only in this browser's localStorage (never sent to Supabase), so a fresh
+// server reload of contacts would otherwise wipe them out. This puts them back by matching contact id.
+function restoreLocalAttachments(contactList) {
+  try {
+    const localData = JSON.parse(localStorage.getItem('crm_contacts') || '[]');
+    const attBysId = {};
+    localData.forEach(c => { if (c && c.id != null && c.attachments && c.attachments.length) attBysId[String(c.id)] = c.attachments; });
+    contactList.forEach(c => { if (attBysId[String(c.id)]) c.attachments = attBysId[String(c.id)]; });
+  } catch (err) { /* ignore — attachments just won't be restored this time */ }
 }
 
 async function saveContact() {

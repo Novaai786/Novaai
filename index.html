@@ -847,7 +847,7 @@
     <div class="search-bar" style="position:relative">
       <span class="search-icon">🔍</span>
       <form autocomplete="off" onsubmit="return false;" style="display:contents">
-      <input type="text" placeholder="Search contacts, companies, deals, tickets..." id="globalSearch" oninput="globalSearch()" onblur="setTimeout(()=>{const d=document.getElementById('globalSearchResults'); if(d) d.style.display='none';},150)" autocomplete="off" name="crm-global-search-nofill" readonly onfocus="this.removeAttribute('readonly'); if(this.value) globalSearch();">
+      <input type="text" placeholder="Search contacts, companies, deals, tickets..." id="globalSearch" oninput="globalSearch()" onblur="setTimeout(()=>{const d=document.getElementById('globalSearchResults'); if(d) d.style.display='none';},150)" autocomplete="off" name="crm-global-search-nofill">
       </form>
       <div id="globalSearchResults" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);max-height:420px;overflow-y:auto;z-index:200;margin-top:4px"></div>
     </div>

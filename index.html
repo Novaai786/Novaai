@@ -9629,7 +9629,7 @@ async function asstSave(c, patch){
   if (error) showToast('Save failed: ' + error.message);
 }
 function asstList(){
-  return contacts.filter(c => asstState(c).draft || (c.source && c.status === 'New' && asstUrl(c))).slice(0, 30);
+  return contacts.filter(c => asstState(c).stage !== 'skipped' && (asstState(c).draft || (c.source && c.status === 'New' && asstUrl(c)))).slice(0, 30);
 }
 function asstHours(t){ return t ? (Date.now() - new Date(t).getTime()) / 36e5 : 0; }
 function asstLang(){ return localStorage.getItem('asstLang') || 'ur'; }
@@ -9678,16 +9678,92 @@ function asstRender(speak){
 const asstFind = id => contacts.find(c => String(c.id) === String(id));
 async function asstAI(prompt){ return (await callAI(prompt, 'assistant')).trim(); }
 const ASST_STYLE = 'Write like a real person typing quickly on Reddit or LinkedIn. 1 to 2 short sentences, casual, specific to what they said, genuinely helpful. No pitch, no links, no emojis, no em dashes, no hashtags, no words like "game-changer", "leverage", "unlock", "I hope this finds you well". Output only the text.';
+const ASST_COMMENT_PROMPT = `You write Reddit comments as a real, experienced RevOps/CRM practitioner helping a stranger.
+
+RULES
+1. Read the post fully. Answer the exact problem the person described, using details from their post.
+2. Start with the solution, not a greeting or praise.
+3. Give ONE clear fix, max 2-3 short steps. Simple English, short sentences, 40-90 words.
+4. Sound like a normal person: polite, calm, slightly casual. Contractions are fine (it's, you'll).
+5. If the post lacks detail, ask ONE short question instead of guessing.
+6. Never mention any product, company, agency, tool I sell, or any link. Never recommend a specific person or consultant.
+7. Never use: "game-changer", "unlock", "streamline", "leverage", "seamless", "robust", "I'd recommend", "consider exploring", "Sounds like you need", "Great question", "Hope this helps", emojis, dashes used as dramatic breaks, or bullet-style marketing language.
+8. Do not start two comments the same way. Vary the opening and structure.
+9. Only share what I can honestly say from experience. No made-up stories or numbers.
+10. If you can't add real value, output SKIP.
+
+STYLE EXAMPLE
+Post: "CRM has subsidiaries mixed into weekly sales batches."
+Good: "Add a 'Parent company' field and make it required at import. Then run a dedupe on domain, since subsidiaries usually share the root domain. Filter anything with a parent set out of the weekly batch. Are you on HubSpot or something else?"`;
+
+const ASST_BANNED = ['game-changer','game changer','unlock','streamline','leverage','seamless','robust',"i'd recommend",'i would recommend','consider exploring','sounds like you need','great question','hope this helps','novaai','nova ai','leadnovaai','leadnova','certified','consultant','agency','dm me','feel free','happy to help','i can help'];
+const ASST_DAILY_MAX = 5;      // max AI drafts per day
+const ASST_POST_WARN = 3;      // warn after this many approved comments per day
+
+function asstDayKey(p){ return p + '_' + new Date().toISOString().slice(0,10); }
+function asstCount(p){ return parseInt(localStorage.getItem(asstDayKey(p)) || '0', 10); }
+function asstBump(p){ localStorage.setItem(asstDayKey(p), String(asstCount(p) + 1)); }
+
+function asstTidy(t){
+  return String(t || '').trim()
+    .replace(/^["'\u201C\u2018]+|["'\u201D\u2019]+$/g, '')
+    .replace(/\s*[\u2014\u2013]\s*/g, ', ')
+    .replace(/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/gu, '')
+    .trim();
+}
+function asstViolations(t){
+  const low = t.toLowerCase(), out = [];
+  ASST_BANNED.forEach(w => { if (low.includes(w)) out.push('contains "' + w + '"'); });
+  if (/https?:\/\/|www\./i.test(t)) out.push('contains a link');
+  const n = t.split(/\s+/).filter(Boolean).length;
+  if (n < 12) out.push('too short');
+  if (n > 110) out.push('too long, keep it under 90 words');
+  return out;
+}
+function asstRecentOpenings(){
+  return contacts.map(c => asstState(c).draft).filter(Boolean).slice(-6)
+    .map(d => d.split(/\s+/).slice(0, 3).join(' '));
+}
+
 async function asstDraft(id){
-  const c = asstFind(id); if (!c) return;
+  const c = asstFind(id); if (!c) return false;
+  if (asstCount('asstDrafts') >= ASST_DAILY_MAX){
+    showToast('Aaj ki limit (' + ASST_DAILY_MAX + ' drafts) poori ho gayi. Kal dobara try karein.');
+    return false;
+  }
   showToast('Draft ban raha hai...');
-  try { const t = await asstAI(`${ASST_STYLE}\nWrite a helpful comment replying to this post/lead.\n${agentLeadContext(c)}`); await asstSave(c, { draft: t }); asstRender(); }
-  catch (e) { showToast(e.message); }
+  const op = asstRecentOpenings();
+  const opNote = op.length ? '\nDo not start the comment with any of these openings: ' + op.join(' | ') : '';
+  const alertNote = /alert/i.test(c.source || '')
+    ? '\nThis person is looking for a tool or consultant. Do NOT recommend any person, company or product. Just help fix their problem.' : '';
+  let problems = [];
+  try {
+    for (let i = 0; i < 3; i++){
+      const retry = problems.length ? '\nYour last attempt was rejected: ' + problems.join(', ') + '. Rewrite it and avoid these.' : '';
+      const raw = await asstAI(`${ASST_COMMENT_PROMPT}\n\nPOST / LEAD DETAILS\n${agentLeadContext(c)}${alertNote}${opNote}${retry}\n\nWrite the comment now. Output only the comment text, or the single word SKIP.`);
+      const t = asstTidy(raw);
+      if (/^skip\b/i.test(t)){
+        await asstSave(c, { stage: 'skipped' }); asstRender();
+        showToast('Is post par value add nahi ho sakti, skip kar diya.');
+        return true;
+      }
+      problems = asstViolations(t);
+      if (!problems.length){
+        await asstSave(c, { draft: t }); asstBump('asstDrafts'); asstRender();
+        return true;
+      }
+    }
+    showToast('3 koshish ke baad bhi draft filter pass nahi hua. Khud likhein ya dobara try karein.');
+    return false;
+  } catch (e) { showToast(e.message); return false; }
 }
 async function asstDraftAll(){
-  const todo = asstPlanItems().toDraft;
-  for (const c of todo) await asstDraft(c.id);
-  showToast('Drafts tayyar hain, review karein.');
+  const todo = asstPlanItems().toDraft; let made = 0;
+  for (const c of todo){
+    if (asstCount('asstDrafts') >= ASST_DAILY_MAX) break;
+    if (await asstDraft(c.id)) made++; else break;
+  }
+  showToast(made ? 'Drafts tayyar hain. Khud thora edit karke post karein.' : 'Koi naya draft nahi bana.');
 }
 function asstEdit(id, v){ const c = asstFind(id); if (c) asstSave(c, { draft: v }); }
 async function asstApprove(id){
@@ -9696,13 +9772,13 @@ async function asstApprove(id){
   try { await navigator.clipboard.writeText(text); } catch (e) {}
   await asstSave(c, { draft: text, stage: 'approved' });
   const u = asstUrl(c); if (u) window.open(u, '_blank', 'noopener');
-  showToast('Copy ho gaya. Wahan paste karke post karein.'); asstRender();
+  asstBump('asstPosts'); showToast(asstCount('asstPosts') > ASST_POST_WARN ? 'Aaj ' + asstCount('asstPosts') + ' comments ho gaye. Reddit spam filter laga sakta hai, baaki kal karein.' : 'Copy ho gaya. Wahan paste karke apne alfaaz mein thora edit karein, phir post karein.'); asstRender();
 }
 async function asstPosted(id){ await asstSave(asstFind(id), { stage: 'posted', postedAt: new Date().toISOString() }); asstRender(); }
 async function asstReplied(id){ await asstSave(asstFind(id), { replied: true }); asstRender(); }
 async function asstDm(id){
   const c = asstFind(id);
-  try { const t = await asstAI(`${ASST_STYLE}\nThey replied to my comment. Write a short friendly DM (max 3 sentences) to continue the conversation and offer to help. No hard pitch.\nMy earlier comment: ${asstState(c).draft}\n${agentLeadContext(c)}`); await asstSave(c, { dm: t }); asstRender(); }
+  try { let t = '', bad = []; for (let i = 0; i < 2; i++) { t = asstTidy(await asstAI(`${ASST_STYLE}\nThey replied to my comment. Write a short friendly DM (max 3 sentences) to continue the conversation. Answer what they asked. No pitch, no product names, no links.${bad.length ? '\nRejected last time: ' + bad.join(', ') : ''}\nMy earlier comment: ${asstState(c).draft}\n${agentLeadContext(c)}`)); bad = asstViolations(t); if (!bad.length) break; } await asstSave(c, { dm: t }); asstRender(); }
   catch (e) { showToast(e.message); }
 }
 async function asstCopy(id, k){ try { await navigator.clipboard.writeText(asstState(asstFind(id))[k] || ''); showToast('Copied'); } catch (e) {} }

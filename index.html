@@ -815,6 +815,9 @@
     <div class="nav-item" onclick="showSection('integrations', this)">
       <span class="icon">🔌</span> Integrations
     </div>
+    <div class="nav-item" onclick="showSection('assistant', this)">
+      <span class="icon">🧑‍💼</span> My Assistant
+    </div>
     <div class="nav-item" onclick="showSection('salesagent', this)">
       <span class="icon">🤖</span> NovaAi Sales Agent
     </div>
@@ -1702,6 +1705,26 @@ Leadnovaai</textarea>
     </div>
 
     <!-- NOVAAI SALES AGENT -->
+    <div class="section" id="section-assistant">
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header"><div class="card-title">🧑‍💼 My Assistant</div>
+          <div><select id="asstLangSel" class="form-control" style="display:inline-block;width:auto;padding:4px 8px;font-size:12px" onchange="asstSetLang(this.value)"><option value="ur">اردو</option><option value="en">English</option></select> <button class="btn btn-primary btn-sm" onclick="asstBriefing(true)">🔊 Briefing</button>
+          <button class="btn btn-outline btn-sm" onclick="asstDraftAll()">✍️ Draft all</button></div></div>
+        <div style="padding:16px">
+          <div style="display:flex;gap:6px;margin-bottom:10px">
+            <input class="form-control" id="asstCmd" placeholder="Urdu ya English mein kaam batayein..." onkeydown="if(event.key==='Enter')asstRunCmd()">
+            <button class="btn btn-outline btn-sm" onclick="asstMic()" title="Bol kar likhein">🎤</button>
+            <button class="btn btn-primary btn-sm" onclick="asstRunCmd()">Go</button>
+          </div>
+          <div id="asstAnswer" style="font-size:13px;white-space:pre-wrap;margin-bottom:12px"></div>
+          <div class="card-title" style="font-size:14px;margin-bottom:6px">📋 Aaj ka plan</div>
+          <div id="asstPlan" style="font-size:13px;margin-bottom:14px"></div>
+          <div class="card-title" style="font-size:14px;margin-bottom:6px">💬 Comment queue</div>
+          <div id="asstQueue"></div>
+        </div>
+      </div>
+    </div>
+
     <div class="section" id="section-salesagent">
       <div class="card" style="margin-bottom:20px">
         <div class="card-header">
@@ -4158,7 +4181,7 @@ function showSection(id, el) {
     dashboard:'Dashboard', contacts:'Contacts', companies:'Companies', lists:'Lists',
     deals:'Deals & Pipeline', categories:'Service Categories & Pipelines', tasks:'Tasks', email:'Email Tracking',
     products:'Products', automation:'AI Automation', reports:'Reports', importexport:'Import / Export',
-    team:'Team & Roles', properties:'Properties', formspages:'Forms & Pages', visitors:'Website Visitors', tracking:'Tracking', marketing:'Marketing', integrations:'Integrations', salesagent:'NovaAi Sales Agent'
+    team:'Team & Roles', properties:'Properties', formspages:'Forms & Pages', visitors:'Website Visitors', tracking:'Tracking', marketing:'Marketing', integrations:'Integrations', salesagent:'NovaAi Sales Agent', assistant:'My Assistant'
   };
   document.getElementById('pageTitle').textContent = titles[id] || id;
   closeSidebar();
@@ -4180,6 +4203,7 @@ function showSection(id, el) {
   if (id === 'tracking') renderCrmHealthTracker();
   if (id === 'marketing') { loadMarketingPostsFromSupabase(); renderLeadsByChannel(); }
   if (id === 'integrations') loadIntegrationSettingsUI();
+  if (id === 'assistant') asstRender(true);
   if (id === 'salesagent') { loadAgentSettingsUI(); renderAgentLeadPicker(); renderAgentActivity(); }
 }
 
@@ -9594,6 +9618,131 @@ async function renderLeadsByChannel() {
 
 // ===================== NOVAAI SALES AGENT =====================
 const AGENT_TERMINAL_STATUSES = ['skipped_low_score', 'positive', 'closed_not_interested', 'needs_human', 'cold'];
+
+// ===== My Assistant =====
+function asstState(c){ return (c.customFields && c.customFields.assistant) || {}; }
+function asstUrl(c){ const m=((c.notes||'')+' '+(c.website||'')).match(/https?:\/\/[^\s"'<>)]+/); return m?m[0]:(c.linkedin||''); }
+async function asstSave(c, patch){
+  c.customFields = c.customFields || {};
+  c.customFields.assistant = Object.assign({}, asstState(c), patch);
+  const { error } = await supabaseClient.from('leads').update({ custom_fields: c.customFields }).eq('id', c.id);
+  if (error) showToast('Save failed: ' + error.message);
+}
+function asstList(){
+  return contacts.filter(c => asstState(c).draft || (c.source && c.status === 'New' && asstUrl(c))).slice(0, 30);
+}
+function asstHours(t){ return t ? (Date.now() - new Date(t).getTime()) / 36e5 : 0; }
+function asstLang(){ return localStorage.getItem('asstLang') || 'ur'; }
+function asstSetLang(v){ localStorage.setItem('asstLang', v); asstRender(false); }
+function asstPlanItems(){
+  const L = asstList(), out = [], ur = asstLang() === 'ur';
+  const replied = L.filter(c => asstState(c).replied && asstState(c).stage !== 'dm_done');
+  const toDraft = L.filter(c => !asstState(c).draft);
+  const review = L.filter(c => asstState(c).draft && !asstState(c).stage);
+  const approved = L.filter(c => asstState(c).stage === 'approved');
+  const waiting = L.filter(c => asstState(c).stage === 'posted' && !asstState(c).replied);
+  const stale = waiting.filter(c => asstHours(asstState(c).postedAt) > 72);
+  if (replied.length) out.push(ur ? `${replied.length} لوگوں نے جواب دیا ہے، انہیں ڈی ایم بھیجیں` : `${replied.length} people replied, send them a DM`);
+  if (approved.length) out.push(ur ? `${approved.length} منظور شدہ کمنٹس پوسٹ کریں` : `Post ${approved.length} approved comments`);
+  if (review.length) out.push(ur ? `${review.length} ڈرافٹس چیک کریں` : `Review ${review.length} drafts`);
+  if (toDraft.length) out.push(ur ? `${toDraft.length} نئی لیڈز کے ڈرافٹ بنوائیں` : `Get drafts for ${toDraft.length} new leads`);
+  if (stale.length) out.push(ur ? `${stale.length} لوگوں کا تین دن سے جواب نہیں آیا، انہیں چھوڑ کر آگے بڑھیں` : `${stale.length} had no reply in 3 days, move on`);
+  return { out, replied, toDraft, review, approved, waiting, stale };
+}
+function asstRender(speak){
+  const P = asstPlanItems();
+  const pe = document.getElementById('asstPlan'); pe.dir = asstLang()==='ur' ? 'rtl' : 'ltr'; pe.innerHTML = P.out.length ? P.out.map((x,k)=>(k+1)+'. '+escapeHtml(x)).join('<br>') : (asstLang()==='ur' ? 'ابھی کوئی کام باقی نہیں ہے۔' : 'Nothing pending.');
+  const sel = document.getElementById('asstLangSel'); if (sel) sel.value = asstLang();
+  const L = asstList();
+  document.getElementById('asstQueue').innerHTML = L.length ? L.map(c => {
+    const st = asstState(c), u = asstUrl(c), id = c.id;
+    const badge = st.replied ? '💬 Replied' : ({approved:'✅ Approved',posted:'📤 Posted',dm_done:'✉️ DM done'}[st.stage] || (st.draft ? '📝 Draft' : '🆕 New'));
+    const hrs = st.stage === 'posted' && !st.replied && asstHours(st.postedAt) > 72 ? ' <b style="color:#B45309">(3 din se reply nahi, move on)</b>' : '';
+    return `<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;font-size:12.5px">
+      <div style="display:flex;justify-content:space-between;gap:8px"><b>${escapeHtml(c.name||c.email||'Lead')}</b><span>${badge}${hrs}</span></div>
+      <div style="color:var(--text-light);margin:2px 0 6px">${escapeHtml(c.source||'')} ${u?`· <a href="${escapeHtml(u)}" target="_blank" rel="noopener">link</a>`:''}</div>
+      ${st.draft ? `<textarea class="form-control" id="asd-${id}" rows="3" onchange="asstEdit('${id}',this.value)">${escapeHtml(st.draft)}</textarea>` : ''}
+      ${st.dm ? `<div style="margin-top:6px"><b>DM draft:</b><br>${escapeHtml(st.dm)}</div>` : ''}
+      <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
+        ${!st.draft ? `<button class="btn btn-primary btn-sm" onclick="asstDraft('${id}')">✍️ Draft</button>` : ''}
+        ${st.draft && !st.stage ? `<button class="btn btn-primary btn-sm" onclick="asstApprove('${id}')">✅ Approve + Copy + Open</button>` : ''}
+        ${st.stage === 'approved' ? `<button class="btn btn-primary btn-sm" onclick="asstPosted('${id}')">📤 Maine post kar diya</button>` : ''}
+        ${st.stage === 'posted' && !st.replied ? `<button class="btn btn-outline btn-sm" onclick="asstReplied('${id}')">💬 Reply aaya</button>` : ''}
+        ${st.replied && !st.dm ? `<button class="btn btn-primary btn-sm" onclick="asstDm('${id}')">✉️ DM draft</button>` : ''}
+        ${st.dm && st.stage !== 'dm_done' ? `<button class="btn btn-outline btn-sm" onclick="asstCopy('${id}','dm')">Copy DM</button><button class="btn btn-outline btn-sm" onclick="asstSave(contacts.find(x=>x.id==='${id}'),{stage:'dm_done'}).then(()=>asstRender())">DM bhej diya</button>` : ''}
+        ${st.stage === 'posted' && asstHours(st.postedAt) > 72 && !st.replied ? `<button class="btn btn-outline btn-sm" onclick="asstSave(contacts.find(x=>x.id==='${id}'),{stage:'dm_done'}).then(()=>asstRender())">Ignore</button>` : ''}
+      </div></div>`;
+  }).join('') : '<div style="color:var(--text-light);font-size:12.5px">Koi lead nahi mili jis par comment karna ho.</div>';
+  if (speak) asstBriefing(false);
+}
+const asstFind = id => contacts.find(c => String(c.id) === String(id));
+async function asstAI(prompt){ return (await callAI(prompt, 'assistant')).trim(); }
+const ASST_STYLE = 'Write like a real person typing quickly on Reddit or LinkedIn. 1 to 2 short sentences, casual, specific to what they said, genuinely helpful. No pitch, no links, no emojis, no em dashes, no hashtags, no words like "game-changer", "leverage", "unlock", "I hope this finds you well". Output only the text.';
+async function asstDraft(id){
+  const c = asstFind(id); if (!c) return;
+  showToast('Draft ban raha hai...');
+  try { const t = await asstAI(`${ASST_STYLE}\nWrite a helpful comment replying to this post/lead.\n${agentLeadContext(c)}`); await asstSave(c, { draft: t }); asstRender(); }
+  catch (e) { showToast(e.message); }
+}
+async function asstDraftAll(){
+  const todo = asstPlanItems().toDraft;
+  for (const c of todo) await asstDraft(c.id);
+  showToast('Drafts tayyar hain, review karein.');
+}
+function asstEdit(id, v){ const c = asstFind(id); if (c) asstSave(c, { draft: v }); }
+async function asstApprove(id){
+  const c = asstFind(id), st = asstState(c), el = document.getElementById('asd-' + id);
+  const text = el ? el.value : st.draft;
+  try { await navigator.clipboard.writeText(text); } catch (e) {}
+  await asstSave(c, { draft: text, stage: 'approved' });
+  const u = asstUrl(c); if (u) window.open(u, '_blank', 'noopener');
+  showToast('Copy ho gaya. Wahan paste karke post karein.'); asstRender();
+}
+async function asstPosted(id){ await asstSave(asstFind(id), { stage: 'posted', postedAt: new Date().toISOString() }); asstRender(); }
+async function asstReplied(id){ await asstSave(asstFind(id), { replied: true }); asstRender(); }
+async function asstDm(id){
+  const c = asstFind(id);
+  try { const t = await asstAI(`${ASST_STYLE}\nThey replied to my comment. Write a short friendly DM (max 3 sentences) to continue the conversation and offer to help. No hard pitch.\nMy earlier comment: ${asstState(c).draft}\n${agentLeadContext(c)}`); await asstSave(c, { dm: t }); asstRender(); }
+  catch (e) { showToast(e.message); }
+}
+async function asstCopy(id, k){ try { await navigator.clipboard.writeText(asstState(asstFind(id))[k] || ''); showToast('Copied'); } catch (e) {} }
+function asstSpeak(txt){
+  if (!window.speechSynthesis || !txt) return;
+  const ur = asstLang() === 'ur', vs = speechSynthesis.getVoices();
+  const v = ur ? (vs.find(x => /^ur/i.test(x.lang)) || vs.find(x => /^hi/i.test(x.lang))) : vs.find(x => /^en/i.test(x.lang));
+  const u = new SpeechSynthesisUtterance(txt);
+  u.lang = v ? v.lang : (ur ? 'ur-PK' : 'en-US'); if (v) u.voice = v;
+  if (ur && !v) showToast('Urdu awaaz is device mein nahi hai. Chrome/Android mein Google Urdu voice install karein.');
+  speechSynthesis.cancel(); speechSynthesis.speak(u);
+}
+function asstBriefing(force){
+  const P = asstPlanItems(), ur = asstLang() === 'ur';
+  const hi = ur ? 'السلام علیکم نادر صاحب۔ آج کا کام یہ ہے۔ ' : 'Good morning Nadir. Today: ';
+  const txt = P.out.length ? hi + P.out.join('۔ ') : (ur ? 'السلام علیکم۔ ابھی کوئی کام باقی نہیں ہے۔' : 'Nothing pending right now.');
+  const a = document.getElementById('asstAnswer'); a.dir = ur ? 'rtl' : 'ltr'; a.textContent = txt;
+  if (!force && sessionStorage.getItem('asstSpoke')) return;
+  sessionStorage.setItem('asstSpoke', '1'); asstSpeak(txt);
+}
+async function asstRunCmd(){
+  const inp = document.getElementById('asstCmd'), q = inp.value.trim(); if (!q) return;
+  const out = document.getElementById('asstAnswer'); out.textContent = '...';
+  try {
+    const r = await asstAI(`You are a sales assistant inside a CRM. The user writes in Urdu/Roman Urdu/English. Decide the action. Reply ONLY JSON: {"action":"briefing"|"draft"|"plan"|"chat","answer":"short reply to the user in ${asstLang()==='ur' ? 'Urdu script (not Roman)' : 'English'}"}.\nUser: ${q}\nPending: ${asstPlanItems().out.join('; ')}`);
+    let j; try { j = JSON.parse(r.replace(/```json|```/g, '').trim()); } catch (e) { j = { action: 'chat', answer: r }; }
+    out.dir = asstLang()==='ur' ? 'rtl' : 'ltr'; out.textContent = j.answer || ''; asstSpeak(j.answer);
+    if (j.action === 'draft') asstDraftAll();
+    if (j.action === 'briefing') asstBriefing(true);
+    if (j.action === 'plan') asstRender();
+    inp.value = '';
+  } catch (e) { out.textContent = e.message; }
+}
+function asstMic(){
+  const R = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!R) return showToast('Is browser mein mic support nahi, Chrome use karein.');
+  const r = new R(); r.lang = asstLang()==='ur' ? 'ur-PK' : 'en-US';
+  r.onresult = e => { document.getElementById('asstCmd').value = e.results[0][0].transcript; asstRunCmd(); };
+  r.start();
+}
 
 async function agentUpdateLead(id, fields) {
   const dbFields = {};
